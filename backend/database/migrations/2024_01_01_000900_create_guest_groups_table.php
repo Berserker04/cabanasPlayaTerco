@@ -1,0 +1,29 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('guest_groups', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('reservation_id')->constrained()->cascadeOnDelete();
+            $table->string('titular_name');
+            $table->string('titular_email')->nullable();
+            $table->string('titular_phone')->nullable();
+            $table->string('titular_document_number')->nullable();
+            $table->string('titular_document_type')->nullable();
+            $table->string('city_of_origin')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('guest_groups');
+    }
+};
