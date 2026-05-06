@@ -58,12 +58,31 @@ export default function HomePage() {
           fill
           priority
           sizes="100vw"
-          className="object-cover"
+          className="z-0 object-cover"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(6,24,20,0.86),rgba(6,24,20,0.48),rgba(6,24,20,0.18))]" />
-        <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-white via-white/55 to-transparent" />
+        <div className="absolute inset-0 z-10 bg-[linear-gradient(90deg,rgba(6,24,20,0.86),rgba(6,24,20,0.48),rgba(6,24,20,0.18))]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-[-1px] z-20" aria-hidden="true">
+          <svg
+            viewBox="0 0 1440 180"
+            preserveAspectRatio="none"
+            className="h-20 w-full sm:h-28 lg:h-36"
+          >
+            <path
+              d="M0 106C150 70 244 70 383 101C528 134 656 142 822 99C1004 52 1148 50 1440 90V180H0Z"
+              className="fill-cyan-400 opacity-80"
+            />
+            <path
+              d="M0 128C158 91 306 88 450 123C621 164 772 164 947 118C1138 68 1268 72 1440 112V180H0Z"
+              className="fill-sky-100 opacity-90"
+            />
+            <path
+              d="M0 142C178 109 342 106 510 137C700 172 872 170 1048 132C1206 98 1320 103 1440 132V180H0Z"
+              className="fill-white"
+            />
+          </svg>
+        </div>
 
-        <div className="container relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] items-center px-4 py-16">
+        <div className="container relative z-30 mx-auto flex min-h-[calc(100vh-4rem)] items-center px-4 py-16">
           <div className="max-w-3xl overflow-hidden">
             <Image
               src={logoImage}
