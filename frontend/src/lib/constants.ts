@@ -1,11 +1,11 @@
 export const SITE_NAME = 'Cabañas Playa Terco';
 export const SITE_DESCRIPTION =
-  'Cabañas frente al mar en Playa Terco, Chocó — Colombia. Naturaleza, descanso y aventura en el Pacífico colombiano.';
+  'Cabañas frente al mar en Playa Terco, Chocó, Colombia. Naturaleza, descanso y aventura en el Pacífico colombiano.';
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-export const WHATSAPP_NUMBER = '+57XXXXXXXXXX'; // TODO: Replace
-export const PHONE_NUMBER = '+57XXXXXXXXXX'; // TODO: Replace
+export const WHATSAPP_NUMBER = '+573147427806';
+export const PHONE_NUMBER = '+573147427806';
 export const EMAIL = 'info@cabanasplayaterco.com'; // TODO: Replace
 
 export const NAV_LINKS = [

@@ -1,8 +1,9 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, X, User, LogOut } from 'lucide-react';
+import { LogOut, Menu, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
-import { SITE_NAME, NAV_LINKS } from '@/lib/constants';
+import { NAV_LINKS, SITE_NAME } from '@/lib/constants';
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -24,12 +25,21 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-          🏖️ {SITE_NAME}
+      <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
+        <Link
+          href="/"
+          className="flex min-w-0 max-w-[calc(100%-3rem)] items-center gap-2 text-base font-bold tracking-tight sm:text-lg"
+        >
+          <Image
+            src="/assets/terco_logo.png"
+            alt=""
+            width={40}
+            height={40}
+            className="h-10 w-10 shrink-0 rounded-full object-contain"
+          />
+          <span className="truncate">{SITE_NAME}</span>
         </Link>
 
-        {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
           {NAV_LINKS.map((link) => (
             <Link
@@ -48,7 +58,7 @@ export function Navbar() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={user?.avatar_url ?? undefined} alt={user?.name} />
+                    <AvatarImage src={user?.avatar ?? undefined} alt={user?.name ?? 'Usuario'} />
                     <AvatarFallback>{user?.name?.charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -90,7 +100,6 @@ export function Navbar() {
             </div>
           )}
 
-          {/* Mobile menu */}
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild className="md:hidden">
               <Button variant="ghost" size="icon">

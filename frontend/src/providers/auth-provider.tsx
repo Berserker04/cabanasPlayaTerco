@@ -21,7 +21,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetchUser();
+    const timeoutId = window.setTimeout(() => {
+      void fetchUser();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchUser]);
 
   const login = async (email: string, password: string) => {
