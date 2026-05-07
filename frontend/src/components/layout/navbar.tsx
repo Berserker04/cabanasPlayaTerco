@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { LogOut, Menu, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -112,6 +112,7 @@ export function Navbar() {
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-72">
+              <SheetTitle className="sr-only">Menu principal</SheetTitle>
               <nav className="mt-8 flex flex-col gap-1">
                 {NAV_LINKS.map((link) => (
                   <Link
