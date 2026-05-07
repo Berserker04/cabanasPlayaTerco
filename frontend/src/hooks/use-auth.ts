@@ -10,6 +10,11 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User>;
   loginWithGoogle: (nextPath?: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (data: {
+    name?: string;
+    email?: string;
+    phone?: string | null;
+  }) => Promise<User>;
   register: (data: {
     name: string;
     email: string;

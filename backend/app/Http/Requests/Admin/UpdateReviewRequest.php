@@ -17,6 +17,7 @@ class UpdateReviewRequest extends FormRequest
     {
         return [
             'status' => ['required', Rule::enum(ReviewStatus::class)],
+            'admin_response' => ['nullable', 'string', 'max:2000'],
         ];
     }
 

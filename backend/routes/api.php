@@ -30,6 +30,7 @@ Route::prefix('auth')->group(function () {
         Route::post('/logout', [Api\AuthController::class, 'logout']);
         Route::get('/user', [Api\AuthController::class, 'user']);
         Route::put('/profile', [Api\AuthController::class, 'updateProfile']);
+        Route::put('/password', [Api\AuthController::class, 'updatePassword']);
     });
 });
 
@@ -48,6 +49,16 @@ Route::get('/reviews', [Api\ReviewController::class, 'index']);
 Route::get('/reviews/latest', [Api\ReviewController::class, 'latest']);
 Route::post('/reviews', [Api\ReviewController::class, 'store'])
     ->middleware('auth:sanctum');
+
+Route::prefix('me')
+    ->middleware('auth:sanctum')
+    ->group(function () {
+        Route::get('/reviews', [Api\MeReviewController::class, 'index']);
+        Route::put('/reviews/{review}', [Api\MeReviewController::class, 'update']);
+        Route::delete('/reviews/{review}', [Api\MeReviewController::class, 'destroy']);
+        Route::post('/reviews/{review}/media', [Api\MeReviewController::class, 'storeMedia']);
+        Route::delete('/reviews/{review}/media/{media}', [Api\MeReviewController::class, 'destroyMedia']);
+    });
 
 // ── Blog ─────────────────────────────────────────────────────
 Route::get('/posts', [Api\PostController::class, 'index']);

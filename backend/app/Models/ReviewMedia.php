@@ -12,11 +12,20 @@ class ReviewMedia extends Model
     protected $fillable = [
         'review_id',
         'url',
+        'path',
         'alt',
+        'mime_type',
+        'size_bytes',
         'sort_order',
     ];
 
-    // ── Relationships ──
+    protected function casts(): array
+    {
+        return [
+            'size_bytes' => 'integer',
+            'sort_order' => 'integer',
+        ];
+    }
 
     public function review(): BelongsTo
     {

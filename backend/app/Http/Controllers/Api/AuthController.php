@@ -7,6 +7,7 @@ use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Requests\Auth\UpdatePasswordRequest;
 use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
 use App\Models\Role;
@@ -89,6 +90,17 @@ class AuthController extends Controller
         return response()->json([
             'data'    => new UserResource($user->fresh()->load('roles')),
             'message' => 'Perfil actualizado.',
+        ]);
+    }
+
+    public function updatePassword(UpdatePasswordRequest $request): JsonResponse
+    {
+        $request->user()->forceFill([
+            'password' => Hash::make($request->password),
+        ])->save();
+
+        return response()->json([
+            'message' => 'Contrasena actualizada exitosamente.',
         ]);
     }
 

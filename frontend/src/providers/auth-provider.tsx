@@ -62,6 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateProfile = async (data: { name?: string; email?: string; phone?: string | null }) => {
+    await fetchCsrfCookie();
+    const response = await api.put<AuthResponse>('/auth/profile', data);
+    setUser(response.data);
+    setIsLoading(false);
+
+    return response.data;
+  };
+
   const register = async (data: {
     name: string;
     email: string;
@@ -85,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         loginWithGoogle,
         logout,
+        updateProfile,
         register,
       }}
     >

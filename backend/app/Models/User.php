@@ -50,7 +50,17 @@ class User extends Authenticatable
 
     public function reviews(): HasMany
     {
+        return $this->hasMany(Review::class);
+    }
+
+    public function approvedReviews(): HasMany
+    {
         return $this->hasMany(Review::class, 'approved_by');
+    }
+
+    public function respondedReviews(): HasMany
+    {
+        return $this->hasMany(Review::class, 'responded_by');
     }
 
     public function comments(): HasMany

@@ -6,7 +6,7 @@ use App\Http\Requests\Concerns\ValidatesMediaUploadSizes;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
-class StoreReviewRequest extends FormRequest
+class StoreReviewMediaRequest extends FormRequest
 {
     use ValidatesMediaUploadSizes;
 
@@ -18,11 +18,7 @@ class StoreReviewRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'reservation_id' => ['nullable', 'exists:reservations,id'],
-            'rating' => ['required', 'integer', 'min:1', 'max:5'],
-            'title' => ['nullable', 'string', 'max:255'],
-            'body' => ['required', 'string', 'min:20', 'max:5000'],
-            'images' => ['nullable', 'array', 'max:3'],
+            'images' => ['required', 'array', 'max:3'],
             'images.*' => $this->mediaFileRule(maxKilobytes: 10240, mimes: 'jpg,jpeg,png,webp'),
         ];
     }
@@ -45,11 +41,7 @@ class StoreReviewRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'rating.required' => 'La calificacion es obligatoria.',
-            'rating.min' => 'La calificacion minima es 1.',
-            'rating.max' => 'La calificacion maxima es 5.',
-            'body.required' => 'El comentario es obligatorio.',
-            'body.min' => 'La resena debe tener al menos 20 caracteres.',
+            'images.required' => 'Selecciona al menos una foto.',
             'images.max' => 'Solo puedes subir hasta 3 fotos por resena.',
             'images.*.mimes' => 'Solo se permiten imagenes JPG, PNG o WebP.',
             'images.*.max' => 'Cada imagen no puede superar los 10 MB.',

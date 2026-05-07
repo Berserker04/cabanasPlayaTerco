@@ -99,10 +99,8 @@ export const contactSchema = z
   });
 
 export const reviewSchema = z.object({
-  author_name: z.string().min(2, 'Nombre requerido'),
-  author_email: z.string().email('Email inválido').optional().or(z.literal('')),
   rating: z.coerce.number().min(1, 'Mínimo 1 estrella').max(5, 'Máximo 5 estrellas'),
-  title: z.string().optional(),
+  title: z.string().max(255, 'El título no puede superar 255 caracteres').optional(),
   body: z.string().min(20, 'La reseña debe tener al menos 20 caracteres'),
 });
 
