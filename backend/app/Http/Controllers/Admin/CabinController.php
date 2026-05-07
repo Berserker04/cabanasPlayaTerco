@@ -8,13 +8,25 @@ use App\Http\Requests\Admin\UpdateCabinRequest;
 use App\Http\Resources\CabinResource;
 use App\Models\Cabin;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class CabinController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $cabins = Cabin::query()
             ->with('type')
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = $request->string('search')->toString();
+
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('notes', 'like', "%{$search}%");
+                });
+            })
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
+            ->when($request->filled('cabin_type_id'), fn ($query) => $query->where('cabin_type_id', $request->integer('cabin_type_id')))
             ->orderBy('name')
             ->paginate(30);
 
@@ -22,6 +34,7 @@ class CabinController extends Controller
             'data' => CabinResource::collection($cabins),
             'meta' => [
                 'current_page' => $cabins->currentPage(),
+                'last_page'    => $cabins->lastPage(),
                 'per_page'     => $cabins->perPage(),
                 'total'        => $cabins->total(),
             ],
@@ -34,7 +47,7 @@ class CabinController extends Controller
 
         return response()->json([
             'data'    => new CabinResource($cabin->load('type')),
-            'message' => 'Cabaña creada.',
+            'message' => 'Cabana creada.',
         ], 201);
     }
 
@@ -44,7 +57,7 @@ class CabinController extends Controller
 
         return response()->json([
             'data'    => new CabinResource($cabin->fresh()->load('type')),
-            'message' => 'Cabaña actualizada.',
+            'message' => 'Cabana actualizada.',
         ]);
     }
 
@@ -53,7 +66,7 @@ class CabinController extends Controller
         $cabin->delete();
 
         return response()->json([
-            'message' => 'Cabaña eliminada.',
+            'message' => 'Cabana eliminada.',
         ]);
     }
 }

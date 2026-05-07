@@ -21,7 +21,7 @@ export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
-  const isAdmin = user?.roles?.some((r) => r.name === 'admin' || r.name === 'super-admin');
+  const isAdmin = Boolean(user?.is_admin);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

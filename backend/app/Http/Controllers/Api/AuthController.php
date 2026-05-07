@@ -9,14 +9,18 @@ use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -29,11 +33,10 @@ class AuthController extends Controller
             'phone'    => $request->phone,
         ]);
 
-        $user->roles()->attach(
-            \App\Models\Role::where('name', 'guest')->first()?->id
-        );
+        $this->assignDefaultRole($user);
 
         Auth::login($user);
+        $request->session()->regenerate();
 
         return response()->json([
             'data'    => new UserResource($user->load('roles')),
@@ -55,7 +58,7 @@ class AuthController extends Controller
 
         return response()->json([
             'data'    => new UserResource($user),
-            'message' => 'Inicio de sesión exitoso.',
+            'message' => 'Inicio de sesion exitoso.',
         ]);
     }
 
@@ -67,7 +70,7 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return response()->json([
-            'message' => 'Sesión cerrada.',
+            'message' => 'Sesion cerrada.',
         ]);
     }
 
@@ -100,7 +103,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => 'Enlace de recuperación enviado al correo.',
+            'message' => 'Enlace de recuperacion enviado al correo.',
         ]);
     }
 
@@ -122,45 +125,123 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => 'Contraseña actualizada exitosamente.',
+            'message' => 'Contrasena actualizada exitosamente.',
         ]);
     }
 
-    public function googleRedirect(): JsonResponse
+    public function googleRedirect(Request $request): JsonResponse
     {
+        if (! config('services.google.client_id') || ! config('services.google.client_secret')) {
+            return response()->json([
+                'message' => 'Inicio de sesion con Google no esta configurado.',
+            ], 503);
+        }
+
+        $request->session()->put(
+            'auth.google_next',
+            $this->sanitizeFrontendPath($request->query('next')),
+        );
+
         $url = Socialite::driver('google')
-            ->stateless()
             ->redirect()
             ->getTargetUrl();
 
         return response()->json(['url' => $url]);
     }
 
-    public function googleCallback(Request $request): JsonResponse
+    public function googleCallback(Request $request): RedirectResponse
     {
-        $googleUser = Socialite::driver('google')->stateless()->user();
+        try {
+            $googleUser = Socialite::driver('google')->user();
+        } catch (Throwable) {
+            return redirect()->away($this->frontendUrl('/login?error=google'));
+        }
 
-        $user = User::updateOrCreate(
-            ['google_id' => $googleUser->getId()],
-            [
+        if (! $googleUser->getEmail()) {
+            return redirect()->away($this->frontendUrl('/login?error=google-email'));
+        }
+
+        $user = User::where('google_id', $googleUser->getId())
+            ->orWhere('email', $googleUser->getEmail())
+            ->first();
+
+        if ($user) {
+            $user->forceFill([
+                'google_id'         => $googleUser->getId(),
                 'name'              => $googleUser->getName(),
                 'email'             => $googleUser->getEmail(),
                 'avatar'            => $googleUser->getAvatar(),
+                'email_verified_at' => $user->email_verified_at ?? now(),
+            ])->save();
+        } else {
+            $user = User::create([
+                'name'              => $googleUser->getName(),
+                'email'             => $googleUser->getEmail(),
+                'google_id'         => $googleUser->getId(),
+                'avatar'            => $googleUser->getAvatar(),
                 'email_verified_at' => now(),
-            ]
-        );
-
-        if ($user->wasRecentlyCreated) {
-            $user->roles()->attach(
-                \App\Models\Role::where('name', 'guest')->first()?->id
-            );
+                'password'          => Hash::make(Str::password(32)),
+            ]);
         }
 
-        Auth::login($user);
+        $this->assignDefaultRole($user);
 
-        return response()->json([
-            'data'    => new UserResource($user->load('roles')),
-            'message' => 'Inicio de sesión con Google exitoso.',
-        ]);
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        $next = $this->sanitizeFrontendPath(
+            $request->session()->pull('auth.google_next'),
+            $user->isAdmin(),
+        );
+
+        if ($next === '/' && $user->isAdmin()) {
+            $next = '/admin';
+        }
+
+        return redirect()->away($this->frontendUrl($next));
+    }
+
+    private function assignDefaultRole(User $user): void
+    {
+        if ($user->roles()->exists()) {
+            return;
+        }
+
+        $role = Role::where('name', 'user')->first();
+
+        if ($role) {
+            $user->roles()->attach($role);
+        }
+    }
+
+    private function sanitizeFrontendPath(mixed $path, bool $allowAdmin = true): string
+    {
+        if (! is_string($path)) {
+            return '/';
+        }
+
+        $path = trim($path);
+
+        if ($path === '' || ! str_starts_with($path, '/') || str_starts_with($path, '//')) {
+            return '/';
+        }
+
+        if (str_contains($path, '\\') || str_contains($path, "\n") || str_contains($path, "\r")) {
+            return '/';
+        }
+
+        if (
+            ! $allowAdmin
+            && ($path === '/admin' || str_starts_with($path, '/admin/') || str_starts_with($path, '/admin?'))
+        ) {
+            return '/';
+        }
+
+        return $path;
+    }
+
+    private function frontendUrl(string $path): string
+    {
+        return rtrim((string) config('services.frontend.url', 'http://localhost:3000'), '/').$path;
     }
 }

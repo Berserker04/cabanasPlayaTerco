@@ -1,6 +1,16 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { EMAIL, NAV_LINKS, SITE_NAME, WHATSAPP_NUMBER } from '@/lib/constants';
+import {
+  CONTACT_PHONE_DISPLAY,
+  EMAIL,
+  FACEBOOK_URL,
+  GOOGLE_MAPS_URL,
+  INSTAGRAM_URL,
+  LOCATION_LABEL,
+  NAV_LINKS,
+  SITE_NAME,
+  WHATSAPP_URL,
+} from '@/lib/constants';
 
 export function Footer() {
   return (
@@ -42,18 +52,43 @@ export function Footer() {
           <div className="space-y-3">
             <h4 className="text-sm font-semibold">Contacto</h4>
             <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-              <a href={`mailto:${EMAIL}`} className="hover:text-foreground">
+              <a href={`mailto:${EMAIL}`} className="break-words hover:text-foreground">
                 {EMAIL}
               </a>
               <a
-                href={`https://wa.me/${WHATSAPP_NUMBER.replace(/\D/g, '')}`}
+                href={WHATSAPP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-foreground"
               >
-                WhatsApp: {WHATSAPP_NUMBER}
+                WhatsApp: {CONTACT_PHONE_DISPLAY}
               </a>
-              <p>Playa Terco, Nuquí, Chocó - Colombia</p>
+              <a
+                href={GOOGLE_MAPS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground"
+              >
+                {LOCATION_LABEL}
+              </a>
+              <div className="flex flex-wrap gap-3 pt-1">
+                <a
+                  href={INSTAGRAM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground"
+                >
+                  Instagram
+                </a>
+                <a
+                  href={FACEBOOK_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground"
+                >
+                  Facebook
+                </a>
+              </div>
             </div>
           </div>
         </div>

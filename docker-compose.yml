@@ -34,7 +34,7 @@ services:
       SESSION_DRIVER: redis
       FRONTEND_URL: http://localhost:3000
       SANCTUM_STATEFUL_DOMAINS: "localhost:3000,localhost"
-      SESSION_DOMAIN: localhost
+      SESSION_DOMAIN: "null"
     networks:
       - cabanas-network
 
@@ -52,10 +52,10 @@ services:
       - /app/node_modules
       - /app/.next
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
-      NEXT_PUBLIC_WHATSAPP_NUMBER: "57XXXXXXXXXX"
-      NEXT_PUBLIC_PHONE_NUMBER: "+57XXXXXXXXXX"
+      NEXT_PUBLIC_WHATSAPP_NUMBER: "+573147427806"
+      NEXT_PUBLIC_PHONE_NUMBER: "+573147427806"
     depends_on:
       - backend
     networks:

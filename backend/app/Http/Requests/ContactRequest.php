@@ -14,28 +14,72 @@ class ContactRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'          => ['required', 'string', 'max:255'],
-            'email'         => ['required', 'email'],
-            'phone'         => ['nullable', 'string', 'max:20'],
-            'message'       => ['required', 'string', 'max:2000'],
-            'check_in'      => ['nullable', 'date', 'after_or_equal:today'],
-            'check_out'     => ['nullable', 'date', 'after:check_in'],
+            'name'          => ['required', 'string', 'min:2', 'max:255'],
+            'email'         => ['required', 'email', 'max:255'],
+            'phone'         => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{7,30}$/'],
+            'message'       => ['required', 'string', 'min:10', 'max:2000'],
+            'check_in'      => ['nullable', 'required_with:check_out', 'date', 'after_or_equal:today'],
+            'check_out'     => ['nullable', 'required_with:check_in', 'date', 'after:check_in'],
             'guests_count'  => ['nullable', 'integer', 'min:1', 'max:20'],
-            'cabin_type_id' => ['nullable', 'exists:cabin_types,id'],
+            'cabin_type_id' => ['nullable', 'integer', 'exists:cabin_types,id'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'name.required'            => 'El nombre es obligatorio.',
-            'email.required'           => 'El correo electrónico es obligatorio.',
-            'email.email'              => 'El correo electrónico no es válido.',
-            'message.required'         => 'El mensaje es obligatorio.',
-            'message.max'              => 'El mensaje no puede superar los 2000 caracteres.',
-            'check_in.after_or_equal'  => 'La fecha de llegada debe ser hoy o posterior.',
-            'check_out.after'          => 'La fecha de salida debe ser posterior a la llegada.',
-            'cabin_type_id.exists'     => 'El tipo de cabaña no es válido.',
+            'name.required'           => 'El nombre es obligatorio.',
+            'name.min'                => 'El nombre debe tener al menos 2 caracteres.',
+            'email.required'          => 'El correo electrónico es obligatorio.',
+            'email.email'             => 'El correo electrónico no es válido.',
+            'message.required'        => 'El mensaje es obligatorio.',
+            'message.min'             => 'El mensaje debe tener al menos 10 caracteres.',
+            'message.max'             => 'El mensaje no puede superar los 2000 caracteres.',
+            'phone.regex'             => 'El teléfono solo puede contener números, espacios y los símbolos + . ( ) -.',
+            'check_in.required_with'  => 'Indica también la fecha de llegada.',
+            'check_in.after_or_equal' => 'La fecha de llegada debe ser hoy o posterior.',
+            'check_out.required_with' => 'Indica también la fecha de salida.',
+            'check_out.after'         => 'La fecha de salida debe ser posterior a la llegada.',
+            'guests_count.integer'    => 'El número de huéspedes debe ser un número entero.',
+            'guests_count.min'        => 'Debe haber al menos 1 huésped.',
+            'guests_count.max'        => 'El máximo permitido es de 20 huéspedes.',
+            'cabin_type_id.exists'    => 'El tipo de cabaña no es válido.',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $fields = [
+            'name',
+            'email',
+            'phone',
+            'message',
+            'check_in',
+            'check_out',
+            'guests_count',
+            'cabin_type_id',
+        ];
+
+        $normalized = [];
+
+        foreach ($fields as $field) {
+            if (! $this->has($field)) {
+                continue;
+            }
+
+            $value = $this->input($field);
+
+            if (is_string($value)) {
+                $value = trim($value);
+            }
+
+            $normalized[$field] = $value === '' ? null : $value;
+        }
+
+        if (isset($normalized['email']) && is_string($normalized['email'])) {
+            $normalized['email'] = mb_strtolower($normalized['email']);
+        }
+
+        $this->merge($normalized);
     }
 }

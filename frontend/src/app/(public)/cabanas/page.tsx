@@ -1,16 +1,28 @@
 import type { Metadata } from 'next';
+import { api } from '@/lib/api';
+import { CabinCatalog } from './cabin-catalog';
+import type { ApiResponse } from '@/types/api';
+import type { CabinType } from '@/types/cabin';
 
 export const metadata: Metadata = {
   title: 'Cabañas',
   description: 'Descubre nuestras cabañas frente al mar en Playa Terco, Chocó.',
 };
 
-export default function CabinsPage() {
-  return (
-    <div className="container mx-auto px-4 py-12">
-      <h1 className="mb-8 text-3xl font-bold">Nuestras Cabañas</h1>
-      <p className="text-muted-foreground">Cargando cabañas...</p>
-      {/* TODO: Fetch cabin types from API and render CabinTypeCard grid */}
-    </div>
-  );
+async function getCabinTypes(): Promise<CabinType[]> {
+  try {
+    const response = await api.get<ApiResponse<CabinType[]>>('/cabins', {
+      next: { revalidate: 60 },
+    });
+
+    return response.data;
+  } catch {
+    return [];
+  }
+}
+
+export default async function CabinsPage() {
+  const cabinTypes = await getCabinTypes();
+
+  return <CabinCatalog cabinTypes={cabinTypes} />;
 }

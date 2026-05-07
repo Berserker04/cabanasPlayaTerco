@@ -5,6 +5,15 @@ import { AuthContext } from '@/hooks/use-auth';
 import { api, fetchCsrfCookie } from '@/lib/api';
 import type { User } from '@/types/user';
 
+type AuthResponse = {
+  data: User;
+  message?: string;
+};
+
+type GoogleRedirectResponse = {
+  url: string;
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,13 +39,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     await fetchCsrfCookie();
-    await api.post('/auth/login', { email, password });
-    await fetchUser();
+    const response = await api.post<AuthResponse>('/auth/login', { email, password });
+    setUser(response.data);
+    setIsLoading(false);
+
+    return response.data;
+  };
+
+  const loginWithGoogle = async (nextPath?: string) => {
+    const query = nextPath ? `?next=${encodeURIComponent(nextPath)}` : '';
+    const response = await api.get<GoogleRedirectResponse>(`/auth/google/redirect${query}`);
+    window.location.assign(response.url);
   };
 
   const logout = async () => {
-    await api.post('/auth/logout');
-    setUser(null);
+    try {
+      await fetchCsrfCookie();
+      await api.post('/auth/logout');
+    } finally {
+      setUser(null);
+      setIsLoading(false);
+    }
   };
 
   const register = async (data: {
@@ -46,12 +69,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password_confirmation: string;
   }) => {
     await fetchCsrfCookie();
-    await api.post('/auth/register', data);
-    await fetchUser();
+    const response = await api.post<AuthResponse>('/auth/register', data);
+    setUser(response.data);
+    setIsLoading(false);
+
+    return response.data;
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout, register }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        login,
+        loginWithGoogle,
+        logout,
+        register,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

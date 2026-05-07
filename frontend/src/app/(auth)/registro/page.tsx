@@ -1,17 +1,25 @@
 import type { Metadata } from 'next';
+import { firstStringParam, sanitizeLocalPath } from '@/lib/auth-redirect';
+import { RegisterForm } from './register-form';
 
 export const metadata: Metadata = {
   title: 'Registrarse',
 };
 
-export default function RegisterPage() {
+type RegisterPageProps = {
+  searchParams?: Promise<{
+    next?: string | string[];
+    error?: string | string[];
+  }>;
+};
+
+export default async function RegisterPage({ searchParams }: RegisterPageProps) {
+  const params = await searchParams;
+
   return (
-    <div className="rounded-lg border bg-card p-6 shadow-sm">
-      <h1 className="mb-6 text-2xl font-bold">Crear cuenta</h1>
-      <p className="text-sm text-muted-foreground">
-        Formulario de registro próximamente.
-      </p>
-      {/* TODO: Register form with name/email/password/confirm + Google OAuth */}
-    </div>
+    <RegisterForm
+      nextPath={sanitizeLocalPath(firstStringParam(params?.next))}
+      oauthError={firstStringParam(params?.error)}
+    />
   );
 }

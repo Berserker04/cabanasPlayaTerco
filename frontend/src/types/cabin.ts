@@ -15,6 +15,9 @@ export interface CabinType {
   amenities?: Amenity[];
   media?: CabinMedia[];
   cabins_count?: number;
+  available_cabins_count?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Cabin {
@@ -23,9 +26,12 @@ export interface Cabin {
   name: string;
   code: string;
   status: 'available' | 'occupied' | 'maintenance' | 'inactive';
+  status_label?: string;
   floor: number | null;
   notes: string | null;
   type?: CabinType;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Amenity {
@@ -43,3 +49,5 @@ export interface CabinMedia {
   type: 'image' | 'video';
   sort_order: number;
 }
+
+export type CabinStatus = Cabin['status'];

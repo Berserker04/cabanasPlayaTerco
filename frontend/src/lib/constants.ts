@@ -4,9 +4,15 @@ export const SITE_DESCRIPTION =
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-export const WHATSAPP_NUMBER = '+573147427806';
-export const PHONE_NUMBER = '+573147427806';
-export const EMAIL = 'info@cabanasplayaterco.com'; // TODO: Replace
+export const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '+573147427806';
+export const PHONE_NUMBER = process.env.NEXT_PUBLIC_PHONE_NUMBER || '+573147427806';
+export const CONTACT_PHONE_DISPLAY = '314 742 7806';
+export const EMAIL = 'cabanasplayaterco@gmail.com';
+export const INSTAGRAM_URL = 'https://www.instagram.com/cabanasplayaterco/';
+export const FACEBOOK_URL = 'https://www.facebook.com/cabanasplayaterco?locale=es_LA';
+export const GOOGLE_MAPS_URL = 'https://maps.app.goo.gl/tE38QwtNw5QEjJCD9';
+export const LOCATION_LABEL = 'Playa Terco, Nuquí, Chocó - Colombia';
+export const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER.replace(/\D/g, '')}`;
 
 export const NAV_LINKS = [
   { href: '/', label: 'Inicio' },

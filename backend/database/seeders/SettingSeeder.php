@@ -21,14 +21,14 @@ class SettingSeeder extends Seeder
             ['key' => 'max_stay_nights',  'value' => '30',    'group' => 'reservations', 'type' => 'integer'],
 
             // Contact
-            ['key' => 'whatsapp_number',  'value' => '', 'group' => 'contact', 'type' => 'string'],
-            ['key' => 'phone_number',     'value' => '', 'group' => 'contact', 'type' => 'string'],
-            ['key' => 'email',            'value' => 'info@cabanasplayaterco.com', 'group' => 'contact', 'type' => 'string'],
-            ['key' => 'google_maps_url',  'value' => '', 'group' => 'contact', 'type' => 'string'],
+            ['key' => 'whatsapp_number',  'value' => '+573147427806', 'group' => 'contact', 'type' => 'string'],
+            ['key' => 'phone_number',     'value' => '+573147427806', 'group' => 'contact', 'type' => 'string'],
+            ['key' => 'email',            'value' => 'cabanasplayaterco@gmail.com', 'group' => 'contact', 'type' => 'string'],
+            ['key' => 'google_maps_url',  'value' => 'https://maps.app.goo.gl/tE38QwtNw5QEjJCD9', 'group' => 'contact', 'type' => 'string'],
 
             // Social
-            ['key' => 'instagram_url',    'value' => '', 'group' => 'social', 'type' => 'string'],
-            ['key' => 'facebook_url',     'value' => '', 'group' => 'social', 'type' => 'string'],
+            ['key' => 'instagram_url',    'value' => 'https://www.instagram.com/cabanasplayaterco/', 'group' => 'social', 'type' => 'string'],
+            ['key' => 'facebook_url',     'value' => 'https://www.facebook.com/cabanasplayaterco?locale=es_LA', 'group' => 'social', 'type' => 'string'],
         ];
 
         foreach ($settings as $setting) {

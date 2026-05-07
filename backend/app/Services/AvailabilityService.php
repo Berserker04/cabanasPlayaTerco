@@ -11,66 +11,66 @@ use Illuminate\Support\Collection;
 
 class AvailabilityService
 {
-    /**
-     * Check available cabins for a date range and guest count.
-     */
     public function checkAvailability(string $checkIn, string $checkOut, ?int $guests = null): Collection
     {
         $checkInDate = Carbon::parse($checkIn);
         $checkOutDate = Carbon::parse($checkOut);
 
         $bookedCabinIds = Reservation::query()
+            ->whereNotNull('cabin_id')
             ->whereNotIn('status', [
                 ReservationStatus::Cancelled,
                 ReservationStatus::NoShow,
             ])
             ->where(function ($query) use ($checkInDate, $checkOutDate) {
                 $query->where('check_in', '<', $checkOutDate)
-                      ->where('check_out', '>', $checkInDate);
+                    ->where('check_out', '>', $checkInDate);
             })
             ->pluck('cabin_id');
 
         $query = Cabin::query()
-            ->with('type.amenities')
-            ->where('status', CabinStatus::Available)
+            ->with([
+                'type.amenities',
+                'type.media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+            ])
+            ->where('status', CabinStatus::Available->value)
             ->whereNotIn('id', $bookedCabinIds);
 
         if ($guests) {
-            $query->whereHas('type', fn ($q) => $q->where('max_guests', '>=', $guests));
+            $query->whereHas('type', fn ($query) => $query->where('max_guests', '>=', $guests));
         }
 
-        return $query->get();
+        return $query->orderBy('name')->get();
     }
 
-    /**
-     * Get calendar availability for a specific month and optional cabin type.
-     */
     public function getCalendar(string $month, ?int $cabinTypeId = null): array
     {
         $start = Carbon::parse($month . '-01')->startOfMonth();
         $end = $start->copy()->endOfMonth();
         $calendar = [];
 
-        $cabinQuery = Cabin::query()->where('status', CabinStatus::Available);
+        $cabinQuery = Cabin::query()->where('status', CabinStatus::Available->value);
         if ($cabinTypeId) {
             $cabinQuery->where('cabin_type_id', $cabinTypeId);
         }
+
         $totalCabins = $cabinQuery->count();
 
         $reservations = Reservation::query()
+            ->whereNotNull('cabin_id')
             ->whereNotIn('status', [
                 ReservationStatus::Cancelled,
                 ReservationStatus::NoShow,
             ])
             ->where('check_in', '<=', $end)
-            ->where('check_out', '>=', $start)
-            ->when($cabinTypeId, fn ($q) => $q->whereHas('cabin', fn ($cq) => $cq->where('cabin_type_id', $cabinTypeId)))
+            ->where('check_out', '>', $start)
+            ->when($cabinTypeId, fn ($query) => $query->whereHas('cabin', fn ($cabinQuery) => $cabinQuery->where('cabin_type_id', $cabinTypeId)))
             ->get(['cabin_id', 'check_in', 'check_out']);
 
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
-            $bookedCount = $reservations->filter(function ($r) use ($date) {
-                return $date->between($r->check_in, $r->check_out->subDay());
-            })->count();
+            $bookedCount = $reservations
+                ->filter(fn ($reservation) => $date->gte($reservation->check_in) && $date->lt($reservation->check_out))
+                ->count();
 
             $available = max(0, $totalCabins - $bookedCount);
 

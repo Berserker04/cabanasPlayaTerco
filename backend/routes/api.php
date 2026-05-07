@@ -21,8 +21,10 @@ Route::prefix('auth')->group(function () {
     Route::post('/forgot-password', [Api\AuthController::class, 'forgotPassword']);
     Route::post('/reset-password', [Api\AuthController::class, 'resetPassword']);
 
-    Route::get('/google/redirect', [Api\AuthController::class, 'googleRedirect']);
-    Route::get('/google/callback', [Api\AuthController::class, 'googleCallback']);
+    Route::get('/google/redirect', [Api\AuthController::class, 'googleRedirect'])
+        ->middleware('web');
+    Route::get('/google/callback', [Api\AuthController::class, 'googleCallback'])
+        ->middleware('web');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [Api\AuthController::class, 'logout']);
@@ -36,6 +38,8 @@ Route::get('/cabins', [Api\CabinController::class, 'index']);
 Route::get('/cabins/{cabinType:slug}', [Api\CabinController::class, 'show']);
 
 // ── Gallery ──────────────────────────────────────────────────
+Route::get('/gallery/albums', [Api\GalleryAlbumController::class, 'index']);
+Route::get('/gallery/albums/{galleryAlbum:slug}', [Api\GalleryAlbumController::class, 'show']);
 Route::get('/gallery', [Api\GalleryController::class, 'index']);
 
 // ── Reviews ──────────────────────────────────────────────────
@@ -80,11 +84,13 @@ Route::prefix('admin')
 
         // ── Cabin Media ──────────────────────────────────────
         Route::post('/cabin-media', [Admin\CabinMediaController::class, 'store']);
+        Route::put('/cabin-media/{cabinMedia}', [Admin\CabinMediaController::class, 'update']);
         Route::delete('/cabin-media/{cabinMedia}', [Admin\CabinMediaController::class, 'destroy']);
 
         // ── Amenities ────────────────────────────────────────
         Route::get('/amenities', [Admin\AmenityController::class, 'index']);
         Route::post('/amenities', [Admin\AmenityController::class, 'store']);
+        Route::put('/amenities/{amenity}', [Admin\AmenityController::class, 'update']);
         Route::delete('/amenities/{amenity}', [Admin\AmenityController::class, 'destroy']);
 
         // ── Reservations ─────────────────────────────────────
@@ -133,6 +139,9 @@ Route::prefix('admin')
         Route::put('/users/{user}', [Admin\UserController::class, 'update']);
 
         // ── Gallery ──────────────────────────────────────────
+        Route::apiResource('gallery-albums', Admin\GalleryAlbumController::class)
+            ->parameter('gallery-albums', 'gallery_album');
+
         Route::apiResource('gallery', Admin\GalleryController::class)
             ->parameter('gallery', 'galleryItem');
     });

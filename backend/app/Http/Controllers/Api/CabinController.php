@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\CabinStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CabinTypeResource;
 use App\Models\CabinType;
@@ -13,9 +14,16 @@ class CabinController extends Controller
     {
         $cabinTypes = CabinType::query()
             ->active()
-            ->with(['amenities', 'media'])
-            ->withCount('cabins')
+            ->with([
+                'amenities',
+                'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+            ])
+            ->withCount([
+                'cabins',
+                'cabins as available_cabins_count' => fn ($query) => $query->where('status', CabinStatus::Available->value),
+            ])
             ->orderBy('sort_order')
+            ->orderBy('name')
             ->get();
 
         return response()->json([
@@ -28,8 +36,14 @@ class CabinController extends Controller
         $cabinType = CabinType::query()
             ->where('slug', $slug)
             ->active()
-            ->with(['amenities', 'media'])
-            ->withCount('cabins')
+            ->with([
+                'amenities',
+                'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+            ])
+            ->withCount([
+                'cabins',
+                'cabins as available_cabins_count' => fn ($query) => $query->where('status', CabinStatus::Available->value),
+            ])
             ->firstOrFail();
 
         return response()->json([

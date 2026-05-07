@@ -12,15 +12,38 @@ class GalleryController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $perPage = min($request->integer('per_page', 24), 60);
+        $album = $request->input('album', $request->input('album_slug'));
+
         $items = GalleryItem::query()
-            ->when($request->category, fn ($q, $cat) => $q->where('category', $cat))
+            ->with(['album'])
+            ->active()
+            ->where(function ($query) {
+                $query->whereNull('gallery_album_id')
+                    ->orWhereHas('album', fn ($albumQuery) => $albumQuery->active());
+            })
+            ->when($request->filled('category'), fn ($query) => $query->where('category', $request->category))
+            ->when($request->filled('type'), fn ($query) => $query->where('type', $request->type))
+            ->when($request->filled('featured'), fn ($query) => $query->where('is_featured', $request->boolean('featured')))
+            ->when($album, function ($query, $album) {
+                if (is_numeric($album)) {
+                    $query->where('gallery_album_id', (int) $album);
+
+                    return;
+                }
+
+                $query->whereHas('album', fn ($albumQuery) => $albumQuery->where('slug', $album));
+            })
             ->orderBy('sort_order')
-            ->paginate(24);
+            ->orderByDesc('is_featured')
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
 
         return response()->json([
             'data' => GalleryItemResource::collection($items),
             'meta' => [
                 'current_page' => $items->currentPage(),
+                'last_page'    => $items->lastPage(),
                 'per_page'     => $items->perPage(),
                 'total'        => $items->total(),
             ],

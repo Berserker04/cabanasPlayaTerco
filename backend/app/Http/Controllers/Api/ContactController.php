@@ -4,9 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ContactRequest;
+use App\Mail\ContactLeadAutoresponse;
+use App\Mail\ContactLeadNotification;
 use App\Http\Resources\LeadResource;
+use App\Enums\LeadSource;
+use App\Enums\LeadStatus;
 use App\Models\Lead;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 class ContactController extends Controller
 {
@@ -16,8 +23,8 @@ class ContactController extends Controller
             'name'          => $request->name,
             'email'         => $request->email,
             'phone'         => $request->phone,
-            'source'        => \App\Enums\LeadSource::Website,
-            'status'        => \App\Enums\LeadStatus::New,
+            'source'        => LeadSource::Website,
+            'status'        => LeadStatus::New,
             'message'       => $request->message,
             'check_in'      => $request->check_in,
             'check_out'     => $request->check_out,
@@ -25,9 +32,33 @@ class ContactController extends Controller
             'cabin_type_id' => $request->cabin_type_id,
         ]);
 
+        $lead->load('cabinType');
+
+        $emailSent = true;
+        $message = 'Tu mensaje ha sido enviado. Te contactaremos pronto.';
+
+        try {
+            Mail::to(config('mail.contact.to'))
+                ->send(new ContactLeadNotification($lead));
+
+            Mail::to($lead->email)
+                ->send(new ContactLeadAutoresponse($lead));
+        } catch (Throwable $exception) {
+            $emailSent = false;
+            $message = 'Recibimos tu solicitud y la guardamos. Tuvimos un problema enviando la confirmación por correo; si necesitas respuesta inmediata, escríbenos por WhatsApp.';
+
+            Log::error('Contact email delivery failed.', [
+                'lead_id' => $lead->id,
+                'error'   => $exception->getMessage(),
+            ]);
+        }
+
         return response()->json([
             'data'    => new LeadResource($lead),
-            'message' => 'Tu mensaje ha sido enviado. Te contactaremos pronto.',
+            'message' => $message,
+            'meta'    => [
+                'email_sent' => $emailSent,
+            ],
         ], 201);
     }
 }

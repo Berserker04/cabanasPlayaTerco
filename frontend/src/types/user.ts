@@ -4,14 +4,9 @@ export interface User {
   email: string;
   phone: string | null;
   avatar: string | null;
-  google_id: string | null;
   email_verified_at: string | null;
+  roles?: string[];
+  is_admin: boolean;
+  is_staff: boolean;
   created_at: string;
-  roles?: Role[];
-}
-
-export interface Role {
-  id: number;
-  name: string;
-  display_name: string;
 }

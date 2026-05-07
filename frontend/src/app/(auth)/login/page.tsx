@@ -1,17 +1,25 @@
 import type { Metadata } from 'next';
+import { firstStringParam, sanitizeLocalPath } from '@/lib/auth-redirect';
+import { LoginForm } from './login-form';
 
 export const metadata: Metadata = {
-  title: 'Iniciar sesión',
+  title: 'Iniciar sesion',
 };
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{
+    next?: string | string[];
+    error?: string | string[];
+  }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+
   return (
-    <div className="rounded-lg border bg-card p-6 shadow-sm">
-      <h1 className="mb-6 text-2xl font-bold">Iniciar sesión</h1>
-      <p className="text-sm text-muted-foreground">
-        Formulario de login próximamente.
-      </p>
-      {/* TODO: Login form with email/password + Google OAuth button */}
-    </div>
+    <LoginForm
+      nextPath={sanitizeLocalPath(firstStringParam(params?.next))}
+      oauthError={firstStringParam(params?.error)}
+    />
   );
 }

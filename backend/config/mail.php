@@ -115,4 +115,8 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    'contact' => [
+        'to' => env('CONTACT_TO_ADDRESS', 'cabanasplayaterco@gmail.com'),
+    ],
+
 ];

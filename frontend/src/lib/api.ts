@@ -11,23 +11,56 @@ type RequestOptions = {
   next?: NextFetchRequestConfig;
 };
 
+const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+function getCookie(name: string): string | undefined {
+  if (typeof document === 'undefined') {
+    return undefined;
+  }
+
+  const cookies = document.cookie
+    .split('; ')
+    .filter((item) => item.startsWith(`${name}=`));
+
+  if (cookies.length === 0) {
+    return undefined;
+  }
+
+  const cookie = cookies[cookies.length - 1];
+
+  return decodeURIComponent(cookie.slice(name.length + 1));
+}
+
 async function fetchApi<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {}, cache, next } = options;
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  const requestHeaders: Record<string, string> = isFormData
+    ? {
+        Accept: 'application/json',
+        ...headers,
+      }
+    : {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...headers,
+      };
+
+  const xsrfToken = CSRF_METHODS.has(method.toUpperCase()) ? getCookie('XSRF-TOKEN') : undefined;
+
+  if (xsrfToken) {
+    requestHeaders['X-XSRF-TOKEN'] = xsrfToken;
+  }
 
   const config: RequestInit = {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...headers,
-    },
+    headers: requestHeaders,
     credentials: 'include',
     cache,
     next,
   };
 
   if (body) {
-    config.body = JSON.stringify(body);
+    config.body = isFormData ? body : JSON.stringify(body);
   }
 
   const response = await fetch(`${API_URL}${endpoint}`, config);
@@ -53,10 +86,14 @@ export class ApiError extends Error {
 
 /** Fetch the Sanctum CSRF cookie (hits base URL, not /api). */
 export async function fetchCsrfCookie(): Promise<void> {
-  await fetch(`${BASE_URL}/sanctum/csrf-cookie`, {
+  const response = await fetch(`${BASE_URL}/sanctum/csrf-cookie`, {
     method: 'GET',
     credentials: 'include',
   });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, 'No se pudo preparar la sesion.');
+  }
 }
 
 export const api = {

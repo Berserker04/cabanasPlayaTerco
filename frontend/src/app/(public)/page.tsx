@@ -58,7 +58,7 @@ export default function HomePage() {
           fill
           priority
           sizes="100vw"
-          className="z-0 object-cover"
+          className="z-0 -translate-y-4 scale-[1.04] object-cover object-center sm:-translate-y-12"
         />
         <div className="absolute inset-0 z-10 bg-[linear-gradient(90deg,rgba(6,24,20,0.86),rgba(6,24,20,0.48),rgba(6,24,20,0.18))]" />
         <div className="pointer-events-none absolute inset-x-0 bottom-[-1px] z-20" aria-hidden="true">

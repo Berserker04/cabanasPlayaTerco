@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCabinMediaRequest;
+use App\Http\Requests\Admin\UpdateCabinMediaRequest;
 use App\Http\Resources\CabinMediaResource;
 use App\Models\CabinMedia;
 use App\Services\FileUploadService;
@@ -31,6 +32,16 @@ class CabinMediaController extends Controller
             'data'    => new CabinMediaResource($media),
             'message' => 'Imagen subida.',
         ], 201);
+    }
+
+    public function update(UpdateCabinMediaRequest $request, CabinMedia $cabinMedia): JsonResponse
+    {
+        $cabinMedia->update($request->validated());
+
+        return response()->json([
+            'data'    => new CabinMediaResource($cabinMedia->fresh()),
+            'message' => 'Imagen actualizada.',
+        ]);
     }
 
     public function destroy(CabinMedia $cabinMedia): JsonResponse

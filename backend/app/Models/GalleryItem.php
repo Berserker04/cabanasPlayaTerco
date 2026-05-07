@@ -10,14 +10,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class GalleryItem extends Model
 {
     protected $fillable = [
+        'gallery_album_id',
         'url',
+        'path',
         'thumbnail_url',
+        'thumbnail_path',
         'alt',
         'caption',
         'category',
         'type',
+        'mime_type',
+        'size_bytes',
         'sort_order',
         'is_featured',
+        'is_active',
         'uploaded_by',
     ];
 
@@ -25,18 +31,26 @@ class GalleryItem extends Model
     {
         return [
             'category'    => GalleryCategory::class,
+            'size_bytes'  => 'integer',
             'is_featured' => 'boolean',
+            'is_active'   => 'boolean',
         ];
     }
 
-    // ── Relationships ──
+    public function album(): BelongsTo
+    {
+        return $this->belongsTo(GalleryAlbum::class, 'gallery_album_id');
+    }
 
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    // ── Scopes ──
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
 
     public function scopeFeatured(Builder $query): Builder
     {

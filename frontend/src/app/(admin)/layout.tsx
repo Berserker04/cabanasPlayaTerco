@@ -10,7 +10,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  const isAdmin = user?.roles?.some((r) => r.name === 'admin' || r.name === 'super-admin');
+  const isAdmin = Boolean(user?.is_admin);
 
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !isAdmin)) {

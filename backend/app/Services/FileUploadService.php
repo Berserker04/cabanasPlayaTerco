@@ -11,9 +11,9 @@ class FileUploadService
     /**
      * Upload a file to the configured disk.
      */
-    public function upload(UploadedFile $file, string $directory = 'uploads'): array
+    public function upload(UploadedFile $file, string $directory = 'uploads', ?string $disk = null): array
     {
-        $disk = config('filesystems.default', 'local');
+        $disk ??= config('filesystems.default', 'local');
         $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
         $path = $file->storeAs($directory, $filename, $disk);
 
@@ -27,14 +27,15 @@ class FileUploadService
     }
 
     /**
-     * Upload with thumbnail generation for images.
+     * Upload with thumbnail metadata for images.
      */
-    public function uploadWithThumbnail(UploadedFile $file, string $directory = 'gallery'): array
+    public function uploadWithThumbnail(UploadedFile $file, string $directory = 'gallery', ?string $disk = null): array
     {
-        $result = $this->upload($file, $directory);
+        $result = $this->upload($file, $directory, $disk);
+        $isImage = str_starts_with((string) $result['mime_type'], 'image/');
 
-        // Thumbnail URL is the same for now — can integrate Intervention Image later
-        $result['thumbnail_url'] = $result['url'];
+        $result['thumbnail_url'] = $isImage ? $result['url'] : null;
+        $result['thumbnail_path'] = $isImage ? $result['path'] : null;
 
         return $result;
     }
@@ -42,9 +43,9 @@ class FileUploadService
     /**
      * Delete a file from storage.
      */
-    public function delete(string $path): bool
+    public function delete(string $path, ?string $disk = null): bool
     {
-        $disk = config('filesystems.default', 'local');
+        $disk ??= config('filesystems.default', 'local');
 
         return Storage::disk($disk)->delete($path);
     }
