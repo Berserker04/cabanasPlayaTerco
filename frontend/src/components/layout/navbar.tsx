@@ -40,7 +40,7 @@ export function Navbar() {
           <span className="truncate">{SITE_NAME}</span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
@@ -90,7 +90,7 @@ export function Navbar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="hidden gap-2 md:flex">
+            <div className="hidden gap-2 lg:flex">
               <Button variant="ghost" asChild>
                 <Link href="/login">Iniciar sesión</Link>
               </Button>
@@ -101,7 +101,7 @@ export function Navbar() {
           )}
 
           <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild className="md:hidden">
+            <SheetTrigger asChild className="lg:hidden">
               <Button variant="ghost" size="icon">
                 <Menu className="h-5 w-5" />
                 <span className="sr-only">Abrir menú</span>

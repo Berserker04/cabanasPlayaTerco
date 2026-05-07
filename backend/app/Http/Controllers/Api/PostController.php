@@ -9,31 +9,44 @@ use App\Http\Resources\CommentResource;
 use App\Http\Resources\PostResource;
 use App\Http\Resources\TagResource;
 use App\Models\Category;
+use App\Models\Comment;
 use App\Models\Post;
 use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class PostController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $perPage = min($request->integer('per_page', 12), 48);
+
         $posts = Post::query()
             ->published()
-            ->with(['author', 'categories', 'tags'])
-            ->withCount('comments')
-            ->when($request->category, fn ($q, $cat) => $q->whereHas('categories', fn ($cq) => $cq->where('slug', $cat)))
-            ->when($request->tag, fn ($q, $tag) => $q->whereHas('tags', fn ($tq) => $tq->where('slug', $tag)))
-            ->when($request->search, fn ($q, $s) => $q->where('title', 'like', "%{$s}%"))
+            ->with(['author', 'categories', 'tags', 'media'])
+            ->withCount(['comments' => fn ($query) => $query->approved()])
+            ->when($request->type, fn ($query, $type) => $query->where('type', $type))
+            ->when($request->category, fn ($query, $category) => $query->whereHas('categories', fn ($categoryQuery) => $categoryQuery->where('slug', $category)))
+            ->when($request->tag, fn ($query, $tag) => $query->whereHas('tags', fn ($tagQuery) => $tagQuery->where('slug', $tag)))
+            ->when($request->search, function ($query, string $search): void {
+                $query->where(function ($query) use ($search): void {
+                    $query->where('title', 'like', "%{$search}%")
+                        ->orWhere('excerpt', 'like', "%{$search}%")
+                        ->orWhere('summary', 'like', "%{$search}%")
+                        ->orWhere('body', 'like', "%{$search}%");
+                });
+            })
             ->latest('published_at')
-            ->paginate(12);
+            ->paginate($perPage);
 
         return response()->json([
             'data' => PostResource::collection($posts),
             'meta' => [
                 'current_page' => $posts->currentPage(),
-                'per_page'     => $posts->perPage(),
-                'total'        => $posts->total(),
+                'last_page' => $posts->lastPage(),
+                'per_page' => $posts->perPage(),
+                'total' => $posts->total(),
             ],
         ]);
     }
@@ -43,7 +56,17 @@ class PostController extends Controller
         $post = Post::query()
             ->where('slug', $slug)
             ->published()
-            ->with(['author', 'categories', 'tags', 'comments' => fn ($q) => $q->approved()->with('user', 'replies')])
+            ->with([
+                'author',
+                'categories',
+                'tags',
+                'media',
+                'comments' => fn ($query) => $query
+                    ->approved()
+                    ->whereNull('parent_id')
+                    ->with(['user', 'replies' => fn ($reply) => $reply->approved()->with('user')])
+                    ->oldest(),
+            ])
             ->firstOrFail();
 
         return response()->json([
@@ -54,7 +77,7 @@ class PostController extends Controller
     public function categories(): JsonResponse
     {
         $categories = Category::query()
-            ->withCount('posts')
+            ->withCount(['posts' => fn ($query) => $query->published()])
             ->orderBy('sort_order')
             ->get();
 
@@ -66,7 +89,7 @@ class PostController extends Controller
     public function tags(): JsonResponse
     {
         $tags = Tag::query()
-            ->withCount('posts')
+            ->withCount(['posts' => fn ($query) => $query->published()])
             ->orderBy('name')
             ->get();
 
@@ -77,17 +100,33 @@ class PostController extends Controller
 
     public function storeComment(Post $post, StoreCommentRequest $request): JsonResponse
     {
+        abort_unless($post->status->value === 'published', 404);
+
+        if ($request->parent_id) {
+            $parentExists = Comment::query()
+                ->whereKey($request->parent_id)
+                ->where('commentable_type', Post::class)
+                ->where('commentable_id', $post->id)
+                ->exists();
+
+            if (! $parentExists) {
+                throw ValidationException::withMessages([
+                    'parent_id' => ['El comentario padre no pertenece a este blog.'],
+                ]);
+            }
+        }
+
         $comment = $post->comments()->create([
-            'user_id'     => $request->user()->id,
+            'user_id' => $request->user()->id,
             'author_name' => $request->user()->name,
-            'body'        => $request->body,
-            'parent_id'   => $request->parent_id,
-            'status'      => 'pending',
+            'body' => $request->body,
+            'parent_id' => $request->parent_id,
+            'status' => 'approved',
         ]);
 
         return response()->json([
-            'data'    => new CommentResource($comment->load('user')),
-            'message' => 'Comentario enviado. Será revisado antes de publicarse.',
+            'data' => new CommentResource($comment->load('user')),
+            'message' => 'Comentario publicado.',
         ], 201);
     }
 }

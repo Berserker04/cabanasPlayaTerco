@@ -58,6 +58,11 @@ Route::prefix('me')
         Route::delete('/reviews/{review}', [Api\MeReviewController::class, 'destroy']);
         Route::post('/reviews/{review}/media', [Api\MeReviewController::class, 'storeMedia']);
         Route::delete('/reviews/{review}/media/{media}', [Api\MeReviewController::class, 'destroyMedia']);
+        Route::get('/posts', [Api\MePostController::class, 'index']);
+        Route::post('/posts/media', [Api\MePostController::class, 'storeMedia']);
+        Route::post('/posts', [Api\MePostController::class, 'store']);
+        Route::put('/posts/{post}', [Api\MePostController::class, 'update']);
+        Route::delete('/posts/{post}', [Api\MePostController::class, 'destroy']);
     });
 
 // ── Blog ─────────────────────────────────────────────────────

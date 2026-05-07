@@ -124,3 +124,68 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .blog-content {
+    @apply text-neutral-800;
+  }
+
+  .blog-content h2 {
+    @apply mt-8 mb-3 text-2xl font-bold tracking-normal text-neutral-950;
+  }
+
+  .blog-content h3 {
+    @apply mt-7 mb-3 text-xl font-semibold tracking-normal text-neutral-950;
+  }
+
+  .blog-content h4 {
+    @apply mt-6 mb-2 text-lg font-semibold tracking-normal text-neutral-950;
+  }
+
+  .blog-content p {
+    @apply my-4 leading-8;
+  }
+
+  .blog-content ul,
+  .blog-content ol {
+    @apply my-4 space-y-2 pl-6;
+  }
+
+  .blog-content ul {
+    @apply list-disc;
+  }
+
+  .blog-content ol {
+    @apply list-decimal;
+  }
+
+  .blog-content blockquote {
+    @apply my-5 border-l-4 border-cyan-600 bg-cyan-50 px-4 py-3 text-cyan-950;
+  }
+
+  .blog-content a {
+    @apply font-medium text-cyan-700 underline underline-offset-4;
+  }
+
+  .blog-content img,
+  .blog-content video {
+    @apply my-5 max-h-[620px] w-full rounded-lg object-cover;
+  }
+
+  .blog-content pre {
+    @apply my-5 overflow-x-auto rounded-lg bg-neutral-950 p-4 text-sm text-white;
+  }
+
+  .blog-content code {
+    @apply rounded bg-neutral-100 px-1.5 py-0.5 text-sm text-neutral-900;
+  }
+
+  .blog-content pre code {
+    @apply bg-transparent p-0 text-white;
+  }
+
+  .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none float-left h-0 text-muted-foreground;
+  }
+}

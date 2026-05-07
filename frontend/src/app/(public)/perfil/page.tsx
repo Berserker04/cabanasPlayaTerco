@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { ProfileBlogPanel } from '@/components/blog/profile-blog-panel';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -463,13 +464,7 @@ export default function ProfilePage() {
           </TabsContent>
 
           <TabsContent value="blog">
-            <div className="rounded-lg border bg-white p-8">
-              <FileText className="h-9 w-9 text-cyan-700" aria-hidden="true" />
-              <h2 className="mt-4 text-xl font-semibold text-neutral-950">Blogs en proxima fase</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
-                Tu cuenta ya queda lista para administrar publicaciones cuando implementemos el modulo de blog.
-              </p>
-            </div>
+            <ProfileBlogPanel />
           </TabsContent>
         </Tabs>
       </div>

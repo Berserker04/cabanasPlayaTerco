@@ -1,10 +1,14 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers\Api;
 
+use App\Enums\PostStatus;
+use App\Enums\PostType;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\StorePostRequest;
-use App\Http\Requests\Admin\UpdatePostRequest;
+use App\Http\Requests\StoreMePostRequest;
+use App\Http\Requests\StorePostMediaRequest;
+use App\Http\Requests\UpdateMePostRequest;
+use App\Http\Resources\PostMediaResource;
 use App\Http\Resources\PostResource;
 use App\Models\Post;
 use App\Models\PostMedia;
@@ -13,13 +17,14 @@ use App\Services\FileUploadService;
 use App\Services\HtmlSanitizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class PostController extends Controller
+class MePostController extends Controller
 {
     public function __construct(
         private readonly FileUploadService $uploadService,
@@ -28,23 +33,12 @@ class PostController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $perPage = min($request->integer('per_page', 20), 100);
-
         $posts = Post::query()
+            ->where('user_id', $request->user()->id)
             ->with(['author', 'categories', 'tags', 'media'])
             ->withCount('comments')
-            ->when($request->status, fn ($query, $status) => $query->where('status', $status))
-            ->when($request->type, fn ($query, $type) => $query->where('type', $type))
-            ->when($request->search, function ($query, string $search): void {
-                $query->where(function ($query) use ($search): void {
-                    $query->where('title', 'like', "%{$search}%")
-                        ->orWhere('excerpt', 'like', "%{$search}%")
-                        ->orWhere('summary', 'like', "%{$search}%")
-                        ->orWhere('body', 'like', "%{$search}%");
-                });
-            })
             ->latest()
-            ->paginate($perPage);
+            ->paginate(20);
 
         return response()->json([
             'data' => PostResource::collection($posts),
@@ -57,84 +51,130 @@ class PostController extends Controller
         ]);
     }
 
-    public function show(Post $post): JsonResponse
+    public function storeMedia(StorePostMediaRequest $request): JsonResponse
     {
-        return response()->json([
-            'data' => new PostResource($post->load(['author', 'categories', 'tags', 'media', 'comments.user'])),
+        $file = $request->file('file');
+        abort_unless($file instanceof UploadedFile, 422, 'Archivo invalido.');
+
+        $upload = $this->uploadService->upload($file, 'posts/media');
+        $type = str_starts_with((string) $upload['mime_type'], 'video/') ? 'video' : 'image';
+
+        $media = PostMedia::create([
+            'user_id' => $request->user()->id,
+            'url' => $upload['url'],
+            'path' => $upload['path'],
+            'mime_type' => $upload['mime_type'],
+            'size_bytes' => $upload['size_bytes'],
+            'type' => $type,
+            'alt' => $request->string('alt')->toString() ?: null,
         ]);
+
+        return response()->json([
+            'data' => new PostMediaResource($media),
+            'message' => 'Archivo subido.',
+        ], 201);
     }
 
-    public function store(StorePostRequest $request): JsonResponse
+    public function store(StoreMePostRequest $request): JsonResponse
     {
         $data = $request->validated();
 
         $post = DB::transaction(function () use ($data, $request): Post {
-            $payload = Arr::except($data, [
-                'category_ids',
-                'tag_ids',
-                'tag_names',
-                'media_ids',
-                'cover_media_id',
-            ]);
-            $payload['user_id'] = $request->user()->id;
-            $payload['body'] = $this->sanitizeBody($data['body']);
+            $body = $this->sanitizeBody($data['body']);
 
-            $post = Post::create($payload);
+            $post = Post::create([
+                'user_id' => $request->user()->id,
+                'type' => PostType::Experience,
+                'title' => $data['title'],
+                'slug' => $this->uniqueSlug($data['title']),
+                'excerpt' => $data['excerpt'] ?? $this->sanitizer->plainText($body, 180),
+                'summary' => $data['summary'] ?? $this->sanitizer->plainText($body, 360),
+                'body' => $body,
+                'featured_image' => $data['featured_image'] ?? null,
+                'status' => PostStatus::Published,
+                'published_at' => now(),
+                'visit_date' => $data['visit_date'] ?? null,
+                'travel_style' => $data['travel_style'] ?? null,
+                'meta_title' => $data['title'],
+                'meta_description' => $data['summary'] ?? $data['excerpt'] ?? $this->sanitizer->plainText($body, 155),
+            ]);
+
             $this->syncTaxonomy($post, $data);
-            $media = $this->syncMedia($post, $data);
+            $media = $this->syncMedia($post, $data, $request->user()->id);
             $this->applyCover($post, $data, $media);
 
             return $post;
         });
 
         return response()->json([
-            'data' => new PostResource($post->load('author', 'categories', 'tags', 'media')),
-            'message' => 'Articulo creado.',
+            'data' => new PostResource($post->fresh()->load(['author', 'categories', 'tags', 'media'])),
+            'message' => 'Blog publicado.',
         ], 201);
     }
 
-    public function update(UpdatePostRequest $request, Post $post): JsonResponse
+    public function update(UpdateMePostRequest $request, Post $post): JsonResponse
     {
+        $this->ensureOwnsPost($request, $post);
         $data = $request->validated();
 
-        DB::transaction(function () use ($data, $post): void {
-            $payload = Arr::except($data, [
-                'category_ids',
-                'tag_ids',
-                'tag_names',
-                'media_ids',
-                'cover_media_id',
+        $post = DB::transaction(function () use ($data, $post, $request): Post {
+            $payload = Arr::only($data, [
+                'title',
+                'excerpt',
+                'summary',
+                'featured_image',
+                'visit_date',
+                'travel_style',
             ]);
 
-            if (array_key_exists('body', $payload)) {
-                $payload['body'] = $this->sanitizeBody($payload['body']);
+            if (array_key_exists('body', $data)) {
+                $payload['body'] = $this->sanitizeBody($data['body']);
+                $payload['meta_description'] = $data['summary']
+                    ?? $data['excerpt']
+                    ?? $this->sanitizer->plainText($payload['body'], 155);
             }
+
+            if (array_key_exists('title', $data)) {
+                $payload['meta_title'] = $data['title'];
+            }
+
+            $payload['status'] = PostStatus::Published;
+            $payload['published_at'] = $post->published_at ?? now();
 
             $post->update($payload);
             $this->syncTaxonomy($post, $data);
 
             $media = array_key_exists('media_ids', $data) || array_key_exists('cover_media_id', $data)
-                ? $this->syncMedia($post, $data)
+                ? $this->syncMedia($post, $data, $request->user()->id)
                 : $post->media;
 
             $this->applyCover($post, $data, $media);
+
+            return $post;
         });
 
         return response()->json([
-            'data' => new PostResource($post->fresh()->load('author', 'categories', 'tags', 'media')),
-            'message' => 'Articulo actualizado.',
+            'data' => new PostResource($post->fresh()->load(['author', 'categories', 'tags', 'media'])),
+            'message' => 'Blog actualizado.',
         ]);
     }
 
-    public function destroy(Post $post): JsonResponse
+    public function destroy(Request $request, Post $post): JsonResponse
     {
+        $this->ensureOwnsPost($request, $post);
+
         $post->load('media');
         $post->media->each(fn (PostMedia $media) => $this->deleteMediaFile($media));
         $post->delete();
 
         return response()->json([
-            'message' => 'Articulo eliminado.',
+            'message' => 'Blog eliminado.',
         ]);
+    }
+
+    private function ensureOwnsPost(Request $request, Post $post): void
+    {
+        abort_unless((int) $post->user_id === (int) $request->user()->id, 403, 'No puedes administrar este blog.');
     }
 
     private function sanitizeBody(string $body): string
@@ -148,6 +188,23 @@ class PostController extends Controller
         }
 
         return $sanitized;
+    }
+
+    private function uniqueSlug(string $title, ?Post $ignore = null): string
+    {
+        $base = Str::slug($title) ?: 'experiencia';
+        $slug = $base;
+        $counter = 2;
+
+        while (Post::query()
+            ->where('slug', $slug)
+            ->when($ignore, fn ($query) => $query->whereKeyNot($ignore->id))
+            ->exists()) {
+            $slug = "{$base}-{$counter}";
+            $counter++;
+        }
+
+        return $slug;
     }
 
     private function syncTaxonomy(Post $post, array $data): void
@@ -183,7 +240,7 @@ class PostController extends Controller
         $post->tags()->sync($tagIds->merge($nameIds)->unique()->values()->all());
     }
 
-    private function syncMedia(Post $post, array $data): Collection
+    private function syncMedia(Post $post, array $data, int $userId): Collection
     {
         $mediaIds = collect($data['media_ids'] ?? []);
 
@@ -200,8 +257,9 @@ class PostController extends Controller
         }
 
         $media = PostMedia::query()
+            ->where('user_id', $userId)
             ->whereIn('id', $mediaIds)
-            ->where(function ($query) use ($post): void {
+            ->where(function ($query) use ($post) {
                 $query->whereNull('post_id')
                     ->orWhere('post_id', $post->id);
             })
@@ -209,12 +267,13 @@ class PostController extends Controller
 
         if ($media->count() !== $mediaIds->count()) {
             throw ValidationException::withMessages([
-                'media_ids' => ['Uno o mas archivos no estan disponibles.'],
+                'media_ids' => ['Uno o mas archivos no pertenecen a tu cuenta.'],
             ]);
         }
 
         PostMedia::query()
             ->where('post_id', $post->id)
+            ->where('user_id', $userId)
             ->when($mediaIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $mediaIds))
             ->update(['post_id' => null, 'sort_order' => 0]);
 
@@ -237,7 +296,7 @@ class PostController extends Controller
 
     private function applyCover(Post $post, array $data, Collection $media): void
     {
-        if (! array_key_exists('cover_media_id', $data) && ! empty($data['featured_image'])) {
+        if (! array_key_exists('cover_media_id', $data) && $post->featured_image) {
             return;
         }
 
