@@ -6,6 +6,7 @@ use App\Enums\CabinStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cabin extends Model
@@ -53,9 +54,21 @@ class Cabin extends Model
         return $this->belongsTo(CabinType::class, 'cabin_type_id');
     }
 
-    public function reservations(): HasMany
+    public function reservations(): BelongsToMany
+    {
+        return $this->belongsToMany(Reservation::class, 'reservation_cabin')
+            ->withTimestamps();
+    }
+
+    public function primaryReservations(): HasMany
     {
         return $this->hasMany(Reservation::class);
+    }
+
+    public function availabilityBlocks(): BelongsToMany
+    {
+        return $this->belongsToMany(AvailabilityBlock::class, 'availability_block_cabin')
+            ->withTimestamps();
     }
 
     public function media(): HasMany

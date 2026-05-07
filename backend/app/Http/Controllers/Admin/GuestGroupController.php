@@ -24,7 +24,7 @@ class GuestGroupController extends Controller
     public function index(Request $request): JsonResponse
     {
         $groups = GuestGroup::query()
-            ->with(['reservation.cabin.type', 'members'])
+            ->with(['reservation.cabin.type', 'reservation.cabins.type', 'members'])
             ->withCount('members')
             ->when($request->search, fn ($q, $s) => $q->where('titular_name', 'like', "%{$s}%"))
             ->latest()
@@ -52,7 +52,7 @@ class GuestGroupController extends Controller
 
     public function show(GuestGroup $guestGroup): JsonResponse
     {
-        $guestGroup->load(['reservation.cabin.type', 'members', 'documents', 'payments']);
+        $guestGroup->load(['reservation.cabin.type', 'reservation.cabins.type', 'members', 'documents', 'payments']);
 
         return response()->json([
             'data' => new GuestGroupResource($guestGroup),

@@ -15,7 +15,7 @@ class PaymentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $payments = PaymentIncome::query()
-            ->with(['reservation.cabin', 'guestGroup', 'recorder'])
+            ->with(['reservation.cabin', 'reservation.cabins', 'guestGroup', 'recorder'])
             ->when($request->reservation_id, fn ($q, $id) => $q->where('reservation_id', $id))
             ->when($request->from, fn ($q, $d) => $q->where('payment_date', '>=', $d))
             ->when($request->to, fn ($q, $d) => $q->where('payment_date', '<=', $d))

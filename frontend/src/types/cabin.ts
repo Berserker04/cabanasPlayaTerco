@@ -95,3 +95,68 @@ export interface LodgingTariff {
 }
 
 export type CabinStatus = Cabin['status'];
+
+export type AvailabilityState = 'available' | 'reserved' | 'blocked' | 'maintenance' | 'inactive';
+export type AvailabilityTone = 'green' | 'red' | 'orange' | 'gray';
+
+export interface CabinAvailabilityEntry {
+  cabin_id: number;
+  map_slot: MapSlot | null;
+  state: AvailabilityState;
+  tone: AvailabilityTone;
+  label: string;
+  is_available: boolean;
+  fits_guests: boolean;
+  leader_name: string | null;
+  display_color: string | null;
+  reservation: {
+    id: number;
+    status: import('./reservation').ReservationStatus;
+    status_label: string;
+    leader_name: string | null;
+    display_color: string | null;
+    check_in: string;
+    check_out: string;
+    guests_count: number;
+  } | null;
+  block: {
+    id: number;
+    reason: string;
+    notes: string | null;
+    applies_to_all: boolean;
+  } | null;
+  cabin: Cabin;
+}
+
+export interface AvailabilitySummary {
+  total_cabins: number;
+  available_count: number;
+  reserved_count: number;
+  blocked_count: number;
+  inactive_count: number;
+  available_capacity: number;
+  can_host_guests: boolean;
+}
+
+export interface AvailabilityResult {
+  check_in: string;
+  check_out: string;
+  guests: number | null;
+  cabins: CabinAvailabilityEntry[];
+  available_cabins: CabinAvailabilityEntry[];
+  summary: AvailabilitySummary;
+  message: string;
+}
+
+export interface AvailabilityBlock {
+  id: number;
+  check_in: string;
+  check_out: string;
+  reason: string;
+  notes: string | null;
+  applies_to_all: boolean;
+  cabin_ids?: number[];
+  cabins?: Cabin[];
+  created_at?: string;
+  updated_at?: string;
+}

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CabinAvailabilityResource;
@@ -14,10 +14,10 @@ class AvailabilityController extends Controller
         private readonly AvailabilityService $availabilityService
     ) {}
 
-    public function check(Request $request): JsonResponse
+    public function __invoke(Request $request): JsonResponse
     {
         $request->validate([
-            'check_in'  => ['required', 'date', 'after_or_equal:today'],
+            'check_in'  => ['required', 'date'],
             'check_out' => ['required', 'date', 'after:check_in'],
             'guests'    => ['nullable', 'integer', 'min:1'],
         ]);
@@ -26,6 +26,7 @@ class AvailabilityController extends Controller
             $request->check_in,
             $request->check_out,
             $request->integer('guests'),
+            admin: true,
         );
 
         return response()->json([
@@ -38,23 +39,6 @@ class AvailabilityController extends Controller
                 'summary'          => $availability['summary'],
                 'message'          => $availability['message'],
             ],
-        ]);
-    }
-
-    public function calendar(Request $request): JsonResponse
-    {
-        $request->validate([
-            'month'         => ['required', 'date_format:Y-m'],
-            'cabin_type_id' => ['nullable', 'exists:cabin_types,id'],
-        ]);
-
-        $calendar = $this->availabilityService->getCalendar(
-            $request->month,
-            $request->integer('cabin_type_id') ?: null,
-        );
-
-        return response()->json([
-            'data' => $calendar,
         ]);
     }
 }

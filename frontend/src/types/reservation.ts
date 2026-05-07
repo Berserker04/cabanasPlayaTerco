@@ -13,12 +13,15 @@ export interface Reservation {
   check_in: string;
   check_out: string;
   guests_count: number;
+  leader_name: string | null;
+  display_color: string | null;
   status: ReservationStatus;
   source: string | null;
   notes: string | null;
   total_price: number | null;
   created_at: string;
   cabin?: import('./cabin').Cabin;
+  cabins?: import('./cabin').Cabin[];
   guest_group?: GuestGroup;
 }
 

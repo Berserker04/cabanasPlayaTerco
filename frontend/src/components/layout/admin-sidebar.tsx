@@ -37,6 +37,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 
 const ADMIN_LINKS = [
   { href: '/admin', label: 'Dashboard', icon: 'LayoutDashboard' },
+  { href: '/admin/disponibilidad', label: 'Disponibilidad', icon: 'CalendarDays' },
   { href: '/admin/reservas', label: 'Reservas', icon: 'CalendarDays' },
   { href: '/admin/cabanas', label: 'Cabañas', icon: 'Home' },
   { href: '/admin/huespedes', label: 'Huéspedes', icon: 'Users' },

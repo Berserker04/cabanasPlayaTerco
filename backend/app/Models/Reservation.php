@@ -6,6 +6,7 @@ use App\Enums\ReservationStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -21,6 +22,8 @@ class Reservation extends Model
         'check_in',
         'check_out',
         'guests_count',
+        'leader_name',
+        'display_color',
         'status',
         'source',
         'notes',
@@ -43,6 +46,12 @@ class Reservation extends Model
     public function cabin(): BelongsTo
     {
         return $this->belongsTo(Cabin::class);
+    }
+
+    public function cabins(): BelongsToMany
+    {
+        return $this->belongsToMany(Cabin::class, 'reservation_cabin')
+            ->withTimestamps();
     }
 
     public function user(): BelongsTo
@@ -75,8 +84,8 @@ class Reservation extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->whereNotIn('status', [
-            ReservationStatus::Cancelled,
-            ReservationStatus::NoShow,
+            ReservationStatus::Cancelled->value,
+            ReservationStatus::NoShow->value,
         ]);
     }
 

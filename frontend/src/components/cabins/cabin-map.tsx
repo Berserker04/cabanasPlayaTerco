@@ -1,11 +1,20 @@
 'use client';
 
 import Image from 'next/image';
+import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import { MAP_SLOT_LABELS } from '@/lib/cabin-utils';
-import type { Cabin, MapSlot } from '@/types/cabin';
+import type { AvailabilityTone, Cabin, MapSlot } from '@/types/cabin';
 
 type CabinMapCabin = Pick<Cabin, 'id' | 'name' | 'slug' | 'map_slot' | 'status' | 'is_active'>;
+
+export type CabinMapSlotState = {
+  tone: AvailabilityTone;
+  label: string;
+  isAvailable?: boolean;
+  leaderName?: string | null;
+  displayColor?: string | null;
+};
 
 type SlotPoint = {
   id: MapSlot;
@@ -43,10 +52,32 @@ function tagTone(cabin?: CabinMapCabin) {
   return 'border-neutral-300/90';
 }
 
+function stateBadgeTone(tone?: AvailabilityTone) {
+  if (tone === 'green') {
+    return 'bg-emerald-500';
+  }
+
+  if (tone === 'red') {
+    return 'bg-red-500';
+  }
+
+  if (tone === 'orange') {
+    return 'bg-amber-500';
+  }
+
+  if (tone === 'gray') {
+    return 'bg-neutral-400';
+  }
+
+  return 'bg-white/70';
+}
+
 export function CabinMap({
   cabins = [],
   activeSlot,
   selectedSlot,
+  selectedSlots,
+  slotStates,
   onSelectSlot,
   className,
   linkMarkers = false,
@@ -54,6 +85,8 @@ export function CabinMap({
   cabins?: CabinMapCabin[];
   activeSlot?: MapSlot | null;
   selectedSlot?: MapSlot | null;
+  selectedSlots?: MapSlot[];
+  slotStates?: Partial<Record<MapSlot, CabinMapSlotState>>;
   onSelectSlot?: (slot: MapSlot) => void;
   className?: string;
   linkMarkers?: boolean;
@@ -83,13 +116,20 @@ export function CabinMap({
           <div className="absolute inset-0" aria-label="Puntos interactivos del mapa">
             {SLOT_POINTS.map((slot) => {
               const cabin = slotCabin(cabins, slot.id);
+              const slotState = slotStates?.[slot.id];
               const label = cabin?.name ?? MAP_SLOT_LABELS[slot.id];
-              const isActive = highlighted === slot.id;
-              const style = {
+              const isActive = highlighted === slot.id || selectedSlots?.includes(slot.id) === true;
+              const style: CSSProperties = {
                 left: `${slot.left}%`,
                 top: `${slot.top}%`,
                 width: `${slot.width}%`,
                 height: `${slot.height}%`,
+              };
+              const markerStyle: CSSProperties = {
+                ...style,
+                ...(slotState?.displayColor
+                  ? { boxShadow: `0 0 0 3px ${slotState.displayColor}` }
+                  : {}),
               };
               const targetClassName = cn(
                 'absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center overflow-hidden rounded-[7px] border bg-white/95 px-1 text-center text-[clamp(6.5px,1.8vw,12px)] font-semibold leading-[1.05] text-neutral-950 shadow-sm outline-none transition sm:text-[clamp(7px,0.78vw,13px)]',
@@ -103,6 +143,16 @@ export function CabinMap({
               );
               const content = (
                 <span className="flex h-full w-full flex-col items-center justify-center overflow-hidden">
+                  {slotState ? (
+                    <span
+                      className={cn(
+                        'absolute right-0.5 top-0.5 h-3 w-3 rounded-full border-2 border-white shadow-sm sm:h-3.5 sm:w-3.5',
+                        stateBadgeTone(slotState.tone),
+                      )}
+                      title={slotState.label}
+                      aria-hidden="true"
+                    />
+                  ) : null}
                   {slot.lines.map((line) => (
                     <span key={line} className="block max-w-full whitespace-normal [text-wrap:balance]">
                       {line}
@@ -120,7 +170,7 @@ export function CabinMap({
                     aria-current={isActive ? 'location' : undefined}
                     className={targetClassName}
                     data-map-slot={slot.id}
-                    style={style}
+                    style={markerStyle}
                   >
                     {content}
                   </a>
@@ -136,7 +186,7 @@ export function CabinMap({
                     aria-pressed={isActive}
                     className={targetClassName}
                     data-map-slot={slot.id}
-                    style={style}
+                    style={markerStyle}
                     onClick={() => onSelectSlot(slot.id)}
                   >
                     {content}
@@ -144,7 +194,7 @@ export function CabinMap({
                 );
               }
 
-              if (!isActive) {
+              if (!isActive && !slotState) {
                 return null;
               }
 
@@ -154,7 +204,7 @@ export function CabinMap({
                   aria-label={label}
                   className={targetClassName}
                   data-map-slot={slot.id}
-                  style={style}
+                  style={markerStyle}
                   role="img"
                 >
                   {content}

@@ -100,7 +100,10 @@ Route::prefix('admin')
         Route::put('/amenities/{amenity}', [Admin\AmenityController::class, 'update']);
         Route::delete('/amenities/{amenity}', [Admin\AmenityController::class, 'destroy']);
 
-        // ── Reservations ─────────────────────────────────────
+        // ── Availability & Reservations ──────────────────────
+        Route::get('/availability', Admin\AvailabilityController::class);
+        Route::apiResource('availability-blocks', Admin\AvailabilityBlockController::class)
+            ->parameter('availability-blocks', 'availability_block');
         Route::get('/reservations/occupancy', [Admin\ReservationController::class, 'occupancy']);
         Route::apiResource('reservations', Admin\ReservationController::class)->except(['show']);
 

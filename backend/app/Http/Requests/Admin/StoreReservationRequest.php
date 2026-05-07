@@ -13,30 +13,43 @@ class StoreReservationRequest extends FormRequest
         return $this->user()?->isStaff();
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->has('cabin_ids') && $this->filled('cabin_id')) {
+            $this->merge([
+                'cabin_ids' => [$this->input('cabin_id')],
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'cabin_id'     => ['required', 'exists:cabins,id'],
-            'user_id'      => ['nullable', 'exists:users,id'],
-            'check_in'     => ['required', 'date'],
-            'check_out'    => ['required', 'date', 'after:check_in'],
-            'guests_count' => ['required', 'integer', 'min:1'],
-            'status'       => ['sometimes', Rule::enum(ReservationStatus::class)],
-            'source'       => ['nullable', 'string', 'max:100'],
-            'notes'        => ['nullable', 'string'],
-            'total_price'  => ['required', 'numeric', 'min:0'],
+            'cabin_id'      => ['nullable', 'exists:cabins,id'],
+            'cabin_ids'     => ['required', 'array', 'min:1'],
+            'cabin_ids.*'   => ['integer', 'distinct', 'exists:cabins,id'],
+            'user_id'       => ['nullable', 'exists:users,id'],
+            'check_in'      => ['required', 'date'],
+            'check_out'     => ['required', 'date', 'after:check_in'],
+            'guests_count'  => ['required', 'integer', 'min:1'],
+            'leader_name'   => ['nullable', 'string', 'max:255'],
+            'display_color' => ['nullable', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'status'        => ['sometimes', Rule::enum(ReservationStatus::class)],
+            'source'        => ['nullable', 'string', 'max:100'],
+            'notes'         => ['nullable', 'string'],
+            'total_price'   => ['nullable', 'numeric', 'min:0'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'cabin_id.required'     => 'La cabaña es obligatoria.',
+            'cabin_ids.required'    => 'Selecciona al menos una cabana.',
             'check_in.required'     => 'La fecha de llegada es obligatoria.',
             'check_out.required'    => 'La fecha de salida es obligatoria.',
             'check_out.after'       => 'La fecha de salida debe ser posterior a la llegada.',
-            'guests_count.required' => 'El número de huéspedes es obligatorio.',
-            'total_price.required'  => 'El precio total es obligatorio.',
+            'guests_count.required' => 'El numero de huespedes es obligatorio.',
+            'display_color.regex'   => 'El color debe estar en formato hexadecimal, por ejemplo #0ea5e9.',
         ];
     }
 }

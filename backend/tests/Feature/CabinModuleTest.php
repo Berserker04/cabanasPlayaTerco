@@ -238,12 +238,190 @@ class CabinModuleTest extends TestCase
             'total_price'   => 600000,
         ]);
 
-        $this->getJson('/api/v1/availability?check_in=2030-06-10&check_out=2030-06-12&guests=6')
+        $response = $this->getJson('/api/v1/availability?check_in=2030-06-10&check_out=2030-06-12&guests=6')
             ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $large->id);
+            ->assertJsonCount(2, 'data.cabins')
+            ->assertJsonPath('data.summary.available_count', 2)
+            ->assertJsonPath('data.summary.can_host_guests', true);
+
+        $entries = collect($response->json('data.cabins'));
+
+        $this->assertFalse($entries->firstWhere('cabin_id', $small->id)['fits_guests']);
+        $this->assertTrue($entries->firstWhere('cabin_id', $large->id)['fits_guests']);
 
         $this->assertNotEquals($small->id, $large->id);
+    }
+
+    public function test_admin_can_create_multi_cabin_quoted_reservation(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $cabinType = $this->createCabinType();
+        $first = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'name'          => 'Cabana 1',
+            'slug'          => 'cabana-1',
+            'code'          => 'CAB-01',
+            'map_slot'      => 'cabana_1',
+        ]);
+        $second = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'name'          => 'Cabana 2',
+            'slug'          => 'cabana-2',
+            'code'          => 'CAB-02',
+            'map_slot'      => 'cabana_2',
+        ]);
+
+        $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'     => [$first->id, $second->id],
+            'check_in'      => '2030-07-10',
+            'check_out'     => '2030-07-12',
+            'guests_count'  => 10,
+            'leader_name'   => 'Familia Rivas',
+            'display_color' => '#0ea5e9',
+            'status'        => ReservationStatus::Pending->value,
+            'source'        => 'whatsapp',
+        ])
+            ->assertCreated()
+            ->assertJsonCount(2, 'data.cabins')
+            ->assertJsonPath('data.cabin_id', $first->id)
+            ->assertJsonPath('data.leader_name', 'Familia Rivas')
+            ->assertJsonPath('data.display_color', '#0ea5e9');
+
+        $reservation = Reservation::firstOrFail();
+
+        $this->assertDatabaseHas('reservation_cabin', [
+            'reservation_id' => $reservation->id,
+            'cabin_id'       => $first->id,
+        ]);
+        $this->assertDatabaseHas('reservation_cabin', [
+            'reservation_id' => $reservation->id,
+            'cabin_id'       => $second->id,
+        ]);
+
+        $response = $this->getJson('/api/v1/admin/availability?check_in=2030-07-10&check_out=2030-07-12&guests=10')
+            ->assertOk();
+
+        $entries = collect($response->json('data.cabins'));
+
+        $this->assertSame('reserved', $entries->firstWhere('cabin_id', $first->id)['state']);
+        $this->assertSame('reserved', $entries->firstWhere('cabin_id', $second->id)['state']);
+        $this->assertSame('Familia Rivas', $entries->firstWhere('cabin_id', $first->id)['leader_name']);
+    }
+
+    public function test_admin_cannot_overlap_active_reservations(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $cabinType = $this->createCabinType();
+        $first = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+        $second = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'name'          => 'Cabana 2',
+            'slug'          => 'cabana-2',
+            'code'          => 'CAB-02',
+            'map_slot'      => 'cabana_2',
+        ]);
+
+        $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'    => [$first->id],
+            'check_in'     => '2030-08-01',
+            'check_out'    => '2030-08-05',
+            'guests_count' => 4,
+            'status'       => ReservationStatus::Pending->value,
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'    => [$first->id],
+            'check_in'     => '2030-08-03',
+            'check_out'    => '2030-08-06',
+            'guests_count' => 2,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['cabin_ids']);
+
+        $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'    => [$second->id],
+            'check_in'     => '2030-08-03',
+            'check_out'    => '2030-08-06',
+            'guests_count' => 2,
+        ])->assertCreated();
+    }
+
+    public function test_cancelled_reservations_do_not_block_public_availability(): void
+    {
+        $cabinType = $this->createCabinType();
+        $cabin = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+
+        $reservation = Reservation::create([
+            'cabin_id'      => $cabin->id,
+            'check_in'      => '2030-09-10',
+            'check_out'     => '2030-09-12',
+            'guests_count'  => 2,
+            'status'        => ReservationStatus::Cancelled,
+            'total_price'   => 100000,
+        ]);
+        $reservation->cabins()->sync([$cabin->id]);
+
+        $response = $this->getJson('/api/v1/availability?check_in=2030-09-10&check_out=2030-09-12')
+            ->assertOk();
+
+        $entry = collect($response->json('data.cabins'))->firstWhere('cabin_id', $cabin->id);
+
+        $this->assertSame('available', $entry['state']);
+        $this->assertTrue($entry['is_available']);
+    }
+
+    public function test_manual_blocks_return_orange_state_and_can_be_global(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $cabinType = $this->createCabinType();
+        $first = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+        $second = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'name'          => 'Cabana 2',
+            'slug'          => 'cabana-2',
+            'code'          => 'CAB-02',
+            'map_slot'      => 'cabana_2',
+        ]);
+
+        $this->postJson('/api/v1/admin/availability-blocks', [
+            'check_in'       => '2030-10-01',
+            'check_out'      => '2030-10-03',
+            'reason'         => 'Mantenimiento cubierta',
+            'applies_to_all' => false,
+            'cabin_ids'      => [$first->id],
+        ])->assertCreated();
+
+        $response = $this->getJson('/api/v1/availability?check_in=2030-10-01&check_out=2030-10-03')
+            ->assertOk();
+        $entries = collect($response->json('data.cabins'));
+
+        $this->assertSame('blocked', $entries->firstWhere('cabin_id', $first->id)['state']);
+        $this->assertSame('orange', $entries->firstWhere('cabin_id', $first->id)['tone']);
+        $this->assertSame('available', $entries->firstWhere('cabin_id', $second->id)['state']);
+
+        $this->postJson('/api/v1/admin/availability-blocks', [
+            'check_in'       => '2030-11-01',
+            'check_out'      => '2030-11-02',
+            'reason'         => 'Evento privado',
+            'applies_to_all' => true,
+        ])->assertCreated();
+
+        $this->getJson('/api/v1/availability?check_in=2030-11-01&check_out=2030-11-02')
+            ->assertOk()
+            ->assertJsonPath('data.summary.available_count', 0)
+            ->assertJsonPath('data.summary.can_host_guests', false);
     }
 
     public function test_admin_endpoints_require_admin_role(): void
