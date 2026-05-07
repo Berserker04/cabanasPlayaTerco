@@ -31,10 +31,8 @@ export const ADMIN_NAV_LINKS = [
   { href: '/admin/cabanas', label: 'Cabañas', icon: 'Home' },
   { href: '/admin/huespedes', label: 'Huéspedes', icon: 'Users' },
   { href: '/admin/ingresos', label: 'Ingresos', icon: 'DollarSign' },
-  { href: '/admin/personal', label: 'Personal', icon: 'UserCog' },
   { href: '/admin/resenas', label: 'Reseñas', icon: 'Star' },
   { href: '/admin/blog', label: 'Blog', icon: 'FileText' },
   { href: '/admin/galeria', label: 'Galería', icon: 'Image' },
-  { href: '/admin/leads', label: 'Leads', icon: 'Mail' },
   { href: '/admin/usuarios', label: 'Usuarios', icon: 'Shield' },
 ] as const;

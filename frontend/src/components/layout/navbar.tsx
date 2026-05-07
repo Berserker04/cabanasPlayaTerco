@@ -33,9 +33,13 @@ export function Navbar() {
           <Image
             src="/assets/terco_logo.png"
             alt=""
-            width={40}
-            height={40}
-            className="h-10 w-10 shrink-0 rounded-full object-contain"
+            width={96}
+            height={96}
+            quality={100}
+            priority
+            unoptimized
+            sizes="48px"
+            className="h-12 w-12 shrink-0 object-contain"
           />
           <span className="truncate">{SITE_NAME}</span>
         </Link>

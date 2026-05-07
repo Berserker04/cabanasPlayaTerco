@@ -1,5 +1,6 @@
 'use client';
 
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -8,18 +9,16 @@ import {
   Home,
   Users,
   DollarSign,
-  UserCog,
   Star,
   FileText,
-  Image,
-  Mail,
+  Image as ImageIcon,
   Shield,
   LogOut,
   ChevronLeft,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
+import { cn } from '@/lib/utils';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
@@ -27,11 +26,9 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Home,
   Users,
   DollarSign,
-  UserCog,
   Star,
   FileText,
-  Image,
-  Mail,
+  Image: ImageIcon,
   Shield,
 };
 
@@ -42,11 +39,9 @@ const ADMIN_LINKS = [
   { href: '/admin/cabanas', label: 'Cabañas', icon: 'Home' },
   { href: '/admin/huespedes', label: 'Huéspedes', icon: 'Users' },
   { href: '/admin/ingresos', label: 'Ingresos', icon: 'DollarSign' },
-  { href: '/admin/personal', label: 'Personal', icon: 'UserCog' },
   { href: '/admin/resenas', label: 'Reseñas', icon: 'Star' },
   { href: '/admin/blog', label: 'Blog', icon: 'FileText' },
   { href: '/admin/galeria', label: 'Galería', icon: 'Image' },
-  { href: '/admin/leads', label: 'Leads', icon: 'Mail' },
   { href: '/admin/usuarios', label: 'Usuarios', icon: 'Shield' },
 ] as const;
 
@@ -56,10 +51,23 @@ export function AdminSidebar() {
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
-      {/* Header */}
       <div className="flex h-16 items-center gap-2 border-b px-4">
-        <Link href="/admin" className="text-base font-bold">
-          🏖️ Admin
+        <Link href="/admin" className="flex min-w-0 items-center gap-2 font-bold">
+          <NextImage
+            src="/assets/terco_logo.png"
+            alt=""
+            width={72}
+            height={72}
+            quality={100}
+            priority
+            unoptimized
+            sizes="36px"
+            className="h-9 w-9 shrink-0 object-contain"
+          />
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate text-sm">Cabañas Playa Terco</span>
+            <span className="block text-xs font-medium text-muted-foreground">Admin</span>
+          </span>
         </Link>
         <span className="ml-auto">
           <Button variant="ghost" size="icon" asChild>
@@ -71,7 +79,6 @@ export function AdminSidebar() {
         </span>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
           {ADMIN_LINKS.map((link) => {
@@ -101,7 +108,6 @@ export function AdminSidebar() {
         </ul>
       </nav>
 
-      {/* Footer */}
       <div className="border-t p-4">
         <div className="mb-2 truncate text-sm font-medium">{user?.name}</div>
         <Button
