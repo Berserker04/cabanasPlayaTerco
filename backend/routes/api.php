@@ -35,7 +35,8 @@ Route::prefix('auth')->group(function () {
 
 // ── Cabins ───────────────────────────────────────────────────
 Route::get('/cabins', [Api\CabinController::class, 'index']);
-Route::get('/cabins/{cabinType:slug}', [Api\CabinController::class, 'show']);
+Route::get('/cabins/{cabin:slug}', [Api\CabinController::class, 'show']);
+Route::get('/lodging-tariffs', [Api\LodgingTariffController::class, 'index']);
 
 // ── Gallery ──────────────────────────────────────────────────
 Route::get('/gallery/albums', [Api\GalleryAlbumController::class, 'index']);
@@ -81,6 +82,12 @@ Route::prefix('admin')
 
         // ── Cabins ───────────────────────────────────────────
         Route::apiResource('cabins', Admin\CabinController::class);
+        Route::post('/cabins/{cabin}/cover', [Admin\CabinController::class, 'uploadCover']);
+
+        // ── Lodging Tariffs ──────────────────────────────────
+        Route::apiResource('lodging-tariffs', Admin\LodgingTariffController::class)
+            ->except(['show'])
+            ->parameter('lodging-tariffs', 'lodgingTariff');
 
         // ── Cabin Media ──────────────────────────────────────
         Route::post('/cabin-media', [Admin\CabinMediaController::class, 'store']);

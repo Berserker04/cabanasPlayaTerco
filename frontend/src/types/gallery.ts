@@ -57,7 +57,7 @@ export type GalleryItem = {
 };
 
 export const GALLERY_CATEGORIES: Array<{ value: GalleryCategory; label: string }> = [
-  { value: 'cabins', label: 'Cabanas' },
+  { value: 'cabins', label: 'Cabañas' },
   { value: 'beach', label: 'Playa' },
   { value: 'nature', label: 'Naturaleza' },
   { value: 'food', label: 'Gastronomia' },

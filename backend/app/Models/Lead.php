@@ -20,6 +20,7 @@ class Lead extends Model
         'check_in',
         'check_out',
         'guests_count',
+        'cabin_id',
         'cabin_type_id',
         'assigned_to',
         'notes',
@@ -42,6 +43,11 @@ class Lead extends Model
     public function cabinType(): BelongsTo
     {
         return $this->belongsTo(CabinType::class);
+    }
+
+    public function cabin(): BelongsTo
+    {
+        return $this->belongsTo(Cabin::class);
     }
 
     public function assignee(): BelongsTo

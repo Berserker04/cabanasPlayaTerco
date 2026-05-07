@@ -22,6 +22,7 @@ class LeadResource extends JsonResource
             'check_in'     => $this->check_in?->format('Y-m-d'),
             'check_out'    => $this->check_out?->format('Y-m-d'),
             'guests_count' => $this->guests_count,
+            'cabin'        => new CabinResource($this->whenLoaded('cabin')),
             'cabin_type'   => new CabinTypeResource($this->whenLoaded('cabinType')),
             'assignee'     => new UserResource($this->whenLoaded('assignee')),
             'notes'        => $this->notes,

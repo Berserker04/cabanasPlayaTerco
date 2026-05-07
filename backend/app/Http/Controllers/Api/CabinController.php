@@ -2,52 +2,41 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Enums\CabinStatus;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\CabinTypeResource;
-use App\Models\CabinType;
+use App\Http\Resources\CabinResource;
+use App\Models\Cabin;
 use Illuminate\Http\JsonResponse;
 
 class CabinController extends Controller
 {
     public function index(): JsonResponse
     {
-        $cabinTypes = CabinType::query()
-            ->active()
+        $cabins = Cabin::query()
+            ->visible()
             ->with([
-                'amenities',
+                'type.amenities',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
-            ])
-            ->withCount([
-                'cabins',
-                'cabins as available_cabins_count' => fn ($query) => $query->where('status', CabinStatus::Available->value),
             ])
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
 
         return response()->json([
-            'data' => CabinTypeResource::collection($cabinTypes),
+            'data' => CabinResource::collection($cabins),
         ]);
     }
 
-    public function show(string $slug): JsonResponse
+    public function show(Cabin $cabin): JsonResponse
     {
-        $cabinType = CabinType::query()
-            ->where('slug', $slug)
-            ->active()
-            ->with([
-                'amenities',
-                'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
-            ])
-            ->withCount([
-                'cabins',
-                'cabins as available_cabins_count' => fn ($query) => $query->where('status', CabinStatus::Available->value),
-            ])
-            ->firstOrFail();
+        abort_if(! $cabin->is_active || $cabin->status->value === 'inactive', 404);
+
+        $cabin->load([
+            'type.amenities',
+            'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+        ]);
 
         return response()->json([
-            'data' => new CabinTypeResource($cabinType),
+            'data' => new CabinResource($cabin),
         ]);
     }
 }

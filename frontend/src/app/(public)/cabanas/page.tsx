@@ -2,16 +2,28 @@ import type { Metadata } from 'next';
 import { api } from '@/lib/api';
 import { CabinCatalog } from './cabin-catalog';
 import type { ApiResponse } from '@/types/api';
-import type { CabinType } from '@/types/cabin';
+import type { Cabin, LodgingTariff } from '@/types/cabin';
 
 export const metadata: Metadata = {
   title: 'Cabañas',
-  description: 'Descubre nuestras cabañas frente al mar en Playa Terco, Chocó.',
+  description: 'Descubre las cabañas reales de Cabañas Playa Terco frente al mar en Choco.',
 };
 
-async function getCabinTypes(): Promise<CabinType[]> {
+async function getCabins(): Promise<Cabin[]> {
   try {
-    const response = await api.get<ApiResponse<CabinType[]>>('/cabins', {
+    const response = await api.get<ApiResponse<Cabin[]>>('/cabins', {
+      next: { revalidate: 60 },
+    });
+
+    return response.data;
+  } catch {
+    return [];
+  }
+}
+
+async function getTariffs(): Promise<LodgingTariff[]> {
+  try {
+    const response = await api.get<ApiResponse<LodgingTariff[]>>('/lodging-tariffs', {
       next: { revalidate: 60 },
     });
 
@@ -22,7 +34,7 @@ async function getCabinTypes(): Promise<CabinType[]> {
 }
 
 export default async function CabinsPage() {
-  const cabinTypes = await getCabinTypes();
+  const [cabins, tariffs] = await Promise.all([getCabins(), getTariffs()]);
 
-  return <CabinCatalog cabinTypes={cabinTypes} />;
+  return <CabinCatalog cabins={cabins} tariffs={tariffs} />;
 }

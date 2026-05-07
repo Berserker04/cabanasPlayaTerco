@@ -61,6 +61,7 @@ export const contactSchema = z
         .min(1, 'Debe haber al menos 1 huésped')
         .max(20, 'El máximo permitido es de 20 huéspedes'),
     ),
+    cabin_id: optionalNumber(z.number().int().positive()),
     cabin_type_id: optionalNumber(z.number().int().positive()),
   })
   .superRefine((data, ctx) => {

@@ -9,6 +9,7 @@ use App\Mail\ContactLeadNotification;
 use App\Http\Resources\LeadResource;
 use App\Enums\LeadSource;
 use App\Enums\LeadStatus;
+use App\Models\Cabin;
 use App\Models\Lead;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -19,6 +20,10 @@ class ContactController extends Controller
 {
     public function store(ContactRequest $request): JsonResponse
     {
+        $cabin = $request->filled('cabin_id')
+            ? Cabin::find($request->integer('cabin_id'))
+            : null;
+
         $lead = Lead::create([
             'name'          => $request->name,
             'email'         => $request->email,
@@ -29,10 +34,11 @@ class ContactController extends Controller
             'check_in'      => $request->check_in,
             'check_out'     => $request->check_out,
             'guests_count'  => $request->guests_count,
-            'cabin_type_id' => $request->cabin_type_id,
+            'cabin_id'      => $cabin?->id,
+            'cabin_type_id' => $cabin?->cabin_type_id ?? $request->cabin_type_id,
         ]);
 
-        $lead->load('cabinType');
+        $lead->load(['cabin', 'cabinType']);
 
         $emailSent = true;
         $message = 'Tu mensaje ha sido enviado. Te contactaremos pronto.';

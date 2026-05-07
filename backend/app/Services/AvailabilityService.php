@@ -31,13 +31,15 @@ class AvailabilityService
         $query = Cabin::query()
             ->with([
                 'type.amenities',
-                'type.media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+                'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
             ->where('status', CabinStatus::Available->value)
+            ->where('is_active', true)
+            ->whereNotNull('slug')
             ->whereNotIn('id', $bookedCabinIds);
 
         if ($guests) {
-            $query->whereHas('type', fn ($query) => $query->where('max_guests', '>=', $guests));
+            $query->where('max_guests', '>=', $guests);
         }
 
         return $query->orderBy('name')->get();
@@ -49,7 +51,10 @@ class AvailabilityService
         $end = $start->copy()->endOfMonth();
         $calendar = [];
 
-        $cabinQuery = Cabin::query()->where('status', CabinStatus::Available->value);
+        $cabinQuery = Cabin::query()
+            ->where('status', CabinStatus::Available->value)
+            ->where('is_active', true)
+            ->whereNotNull('slug');
         if ($cabinTypeId) {
             $cabinQuery->where('cabin_type_id', $cabinTypeId);
         }

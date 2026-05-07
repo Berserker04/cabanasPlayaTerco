@@ -16,7 +16,7 @@
     <ul>
         <li><strong>Fechas:</strong> {{ $lead->check_in?->format('Y-m-d') ?? 'Por definir' }} - {{ $lead->check_out?->format('Y-m-d') ?? 'Por definir' }}</li>
         <li><strong>Huéspedes:</strong> {{ $lead->guests_count ?? 'Por definir' }}</li>
-        <li><strong>Cabaña:</strong> {{ $lead->cabinType?->name ?? 'Por definir' }}</li>
+        <li><strong>Cabaña:</strong> {{ $lead->cabin?->name ?? $lead->cabinType?->name ?? 'Por definir' }}</li>
     </ul>
 
     <p style="white-space: pre-line;">{{ $lead->message }}</p>

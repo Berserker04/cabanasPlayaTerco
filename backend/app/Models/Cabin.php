@@ -13,16 +13,35 @@ class Cabin extends Model
     protected $fillable = [
         'cabin_type_id',
         'name',
+        'slug',
         'code',
         'status',
         'floor',
         'notes',
+        'cover_image',
+        'short_description',
+        'description',
+        'guest_capacity',
+        'min_guests',
+        'max_guests',
+        'beds_count',
+        'bathrooms_count',
+        'map_slot',
+        'is_active',
+        'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
-            'status' => CabinStatus::class,
+            'status'          => CabinStatus::class,
+            'is_active'       => 'boolean',
+            'guest_capacity'  => 'integer',
+            'min_guests'      => 'integer',
+            'max_guests'      => 'integer',
+            'beds_count'      => 'integer',
+            'bathrooms_count' => 'integer',
+            'sort_order'      => 'integer',
         ];
     }
 
@@ -38,10 +57,23 @@ class Cabin extends Model
         return $this->hasMany(Reservation::class);
     }
 
+    public function media(): HasMany
+    {
+        return $this->hasMany(CabinMedia::class);
+    }
+
     // ── Scopes ──
 
     public function scopeAvailable(Builder $query): Builder
     {
         return $query->where('status', CabinStatus::Available);
+    }
+
+    public function scopeVisible(Builder $query): Builder
+    {
+        return $query
+            ->where('is_active', true)
+            ->whereNotNull('slug')
+            ->where('status', '!=', CabinStatus::Inactive->value);
     }
 }

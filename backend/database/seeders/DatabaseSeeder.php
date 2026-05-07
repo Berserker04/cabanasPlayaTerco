@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
             AmenitySeeder::class,
             CabinTypeSeeder::class,
             CabinSeeder::class,
+            LodgingTariffSeeder::class,
             GallerySeeder::class,
             SettingSeeder::class,
         ]);

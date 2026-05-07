@@ -121,7 +121,7 @@ export function GalleryExperience({
               Fotos y videos para imaginar tu viaje antes de llegar
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-8 text-cyan-50 sm:text-lg">
-              Explora albumes de cabanas, playa, naturaleza y momentos del Pacifico. Todo esta
+              Explora albumes de cabañas, playa, naturaleza y momentos del Pacifico. Todo esta
               organizado para que encuentres rapido el ambiente que quieres vivir.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -284,7 +284,7 @@ export function GalleryExperience({
                 ) : (
                   <img
                     src={activeItem.url}
-                    alt={activeItem.alt ?? activeItem.caption ?? 'Imagen de Cabanas Playa Terco'}
+                    alt={activeItem.alt ?? activeItem.caption ?? 'Imagen de Cabañas Playa Terco'}
                     className="max-h-[72vh] w-full object-contain"
                   />
                 )}
@@ -371,7 +371,7 @@ function GalleryTile({
       ) : (
         <img
           src={mediaUrl}
-          alt={item.alt ?? item.caption ?? 'Imagen de Cabanas Playa Terco'}
+          alt={item.alt ?? item.caption ?? 'Imagen de Cabañas Playa Terco'}
           className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
           loading="lazy"
         />

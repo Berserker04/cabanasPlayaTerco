@@ -21,6 +21,7 @@ class ContactRequest extends FormRequest
             'check_in'      => ['nullable', 'required_with:check_out', 'date', 'after_or_equal:today'],
             'check_out'     => ['nullable', 'required_with:check_in', 'date', 'after:check_in'],
             'guests_count'  => ['nullable', 'integer', 'min:1', 'max:20'],
+            'cabin_id'      => ['nullable', 'integer', 'exists:cabins,id'],
             'cabin_type_id' => ['nullable', 'integer', 'exists:cabin_types,id'],
         ];
     }
@@ -30,20 +31,21 @@ class ContactRequest extends FormRequest
         return [
             'name.required'           => 'El nombre es obligatorio.',
             'name.min'                => 'El nombre debe tener al menos 2 caracteres.',
-            'email.required'          => 'El correo electrónico es obligatorio.',
-            'email.email'             => 'El correo electrónico no es válido.',
+            'email.required'          => 'El correo electronico es obligatorio.',
+            'email.email'             => 'El correo electronico no es valido.',
             'message.required'        => 'El mensaje es obligatorio.',
             'message.min'             => 'El mensaje debe tener al menos 10 caracteres.',
             'message.max'             => 'El mensaje no puede superar los 2000 caracteres.',
-            'phone.regex'             => 'El teléfono solo puede contener números, espacios y los símbolos + . ( ) -.',
-            'check_in.required_with'  => 'Indica también la fecha de llegada.',
+            'phone.regex'             => 'El telefono solo puede contener numeros, espacios y los simbolos + . ( ) -.',
+            'check_in.required_with'  => 'Indica tambien la fecha de llegada.',
             'check_in.after_or_equal' => 'La fecha de llegada debe ser hoy o posterior.',
-            'check_out.required_with' => 'Indica también la fecha de salida.',
+            'check_out.required_with' => 'Indica tambien la fecha de salida.',
             'check_out.after'         => 'La fecha de salida debe ser posterior a la llegada.',
-            'guests_count.integer'    => 'El número de huéspedes debe ser un número entero.',
-            'guests_count.min'        => 'Debe haber al menos 1 huésped.',
-            'guests_count.max'        => 'El máximo permitido es de 20 huéspedes.',
-            'cabin_type_id.exists'    => 'El tipo de cabaña no es válido.',
+            'guests_count.integer'    => 'El numero de huespedes debe ser un numero entero.',
+            'guests_count.min'        => 'Debe haber al menos 1 huesped.',
+            'guests_count.max'        => 'El maximo permitido es de 20 huespedes.',
+            'cabin_id.exists'         => 'La cabaña no es valida.',
+            'cabin_type_id.exists'    => 'El tipo de cabaña no es valido.',
         ];
     }
 
@@ -57,6 +59,7 @@ class ContactRequest extends FormRequest
             'check_in',
             'check_out',
             'guests_count',
+            'cabin_id',
             'cabin_type_id',
         ];
 

@@ -37,7 +37,7 @@
         </tr>
         <tr>
             <td style="font-weight: bold; border-bottom: 1px solid #e5e7eb;">Cabaña</td>
-            <td style="border-bottom: 1px solid #e5e7eb;">{{ $lead->cabinType?->name ?? 'Por definir' }}</td>
+            <td style="border-bottom: 1px solid #e5e7eb;">{{ $lead->cabin?->name ?? $lead->cabinType?->name ?? 'Por definir' }}</td>
         </tr>
     </table>
 

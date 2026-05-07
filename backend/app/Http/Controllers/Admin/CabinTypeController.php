@@ -60,7 +60,7 @@ class CabinTypeController extends Controller
 
         return response()->json([
             'data'    => new CabinTypeResource($cabinType),
-            'message' => 'Tipo de cabana creado.',
+            'message' => 'Tipo de cabaña creado.',
         ], 201);
     }
 
@@ -76,7 +76,7 @@ class CabinTypeController extends Controller
 
         return response()->json([
             'data'    => new CabinTypeResource($cabinType),
-            'message' => 'Tipo de cabana actualizado.',
+            'message' => 'Tipo de cabaña actualizado.',
         ]);
     }
 
@@ -85,7 +85,7 @@ class CabinTypeController extends Controller
         $cabinType->delete();
 
         return response()->json([
-            'message' => 'Tipo de cabana eliminado.',
+            'message' => 'Tipo de cabaña eliminado.',
         ]);
     }
 

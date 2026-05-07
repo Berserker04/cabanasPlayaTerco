@@ -11,11 +11,13 @@ class CabinMediaResource extends JsonResource
     {
         return [
             'id'           => $this->id,
+            'cabin_id'     => $this->cabin_id,
             'cabin_type_id'=> $this->cabin_type_id,
             'url'          => $this->url,
             'alt'          => $this->alt,
             'type'         => $this->type,
             'sort_order'   => $this->sort_order,
+            'cabin'        => new CabinResource($this->whenLoaded('cabin')),
         ];
     }
 }

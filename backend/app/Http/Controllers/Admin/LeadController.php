@@ -14,7 +14,7 @@ class LeadController extends Controller
     public function index(Request $request): JsonResponse
     {
         $leads = Lead::query()
-            ->with(['cabinType', 'assignee'])
+            ->with(['cabin', 'cabinType', 'assignee'])
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
             ->when($request->source, fn ($q, $s) => $q->where('source', $s))
             ->latest()
@@ -41,7 +41,7 @@ class LeadController extends Controller
         $lead->update($data);
 
         return response()->json([
-            'data'    => new LeadResource($lead->fresh()->load('cabinType', 'assignee')),
+            'data'    => new LeadResource($lead->fresh()->load('cabin', 'cabinType', 'assignee')),
             'message' => 'Lead actualizado.',
         ]);
     }

@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCabinMediaRequest;
 use App\Http\Requests\Admin\UpdateCabinMediaRequest;
 use App\Http\Resources\CabinMediaResource;
+use App\Models\Cabin;
 use App\Models\CabinMedia;
 use App\Services\FileUploadService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\UploadedFile;
 
 class CabinMediaController extends Controller
 {
@@ -18,19 +20,40 @@ class CabinMediaController extends Controller
 
     public function store(StoreCabinMediaRequest $request): JsonResponse
     {
-        $upload = $this->uploadService->upload($request->file('file'), 'cabins');
+        $cabin = Cabin::findOrFail($request->integer('cabin_id'));
+        $files = $request->file('files');
+        $files = is_array($files) ? $files : [$request->file('file')];
+        $baseSortOrder = $request->integer('sort_order', 0);
 
-        $media = CabinMedia::create([
-            'cabin_type_id' => $request->cabin_type_id,
-            'url'           => $upload['url'],
-            'alt'           => $request->alt,
-            'type'          => $request->type ?? 'image',
-            'sort_order'    => $request->sort_order ?? 0,
-        ]);
+        $mediaItems = collect($files)
+            ->filter(fn ($file) => $file instanceof UploadedFile)
+            ->values()
+            ->map(function (UploadedFile $file, int $index) use ($request, $cabin, $baseSortOrder): CabinMedia {
+                $upload = $this->uploadService->upload($file, 'cabins/media');
+                $type = $request->type ?: (str_starts_with((string) $upload['mime_type'], 'video/') ? 'video' : 'image');
+
+                return CabinMedia::create([
+                    'cabin_id'      => $cabin->id,
+                    'cabin_type_id' => $cabin->cabin_type_id,
+                    'url'           => $upload['url'],
+                    'alt'           => $request->alt,
+                    'type'          => $type,
+                    'sort_order'    => $baseSortOrder + $index,
+                ]);
+            });
+
+        if ($mediaItems->count() === 1 && ! $request->hasFile('files')) {
+            return response()->json([
+                'data'    => new CabinMediaResource($mediaItems->first()->load('cabin')),
+                'message' => 'Archivo subido.',
+            ], 201);
+        }
+
+        $mediaItems->each->load('cabin');
 
         return response()->json([
-            'data'    => new CabinMediaResource($media),
-            'message' => 'Imagen subida.',
+            'data'    => CabinMediaResource::collection($mediaItems)->resolve(),
+            'message' => 'Archivos subidos.',
         ], 201);
     }
 
@@ -39,8 +62,8 @@ class CabinMediaController extends Controller
         $cabinMedia->update($request->validated());
 
         return response()->json([
-            'data'    => new CabinMediaResource($cabinMedia->fresh()),
-            'message' => 'Imagen actualizada.',
+            'data'    => new CabinMediaResource($cabinMedia->fresh()->load('cabin')),
+            'message' => 'Archivo actualizado.',
         ]);
     }
 
@@ -49,7 +72,7 @@ class CabinMediaController extends Controller
         $cabinMedia->delete();
 
         return response()->json([
-            'message' => 'Imagen eliminada.',
+            'message' => 'Archivo eliminado.',
         ]);
     }
 }

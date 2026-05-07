@@ -21,7 +21,7 @@ import { ApiError, api } from '@/lib/api';
 import { SITE_NAME, WHATSAPP_URL } from '@/lib/constants';
 import { contactSchema, type ContactFormInput, type ContactInput } from '@/lib/validations';
 import type { ApiResponse } from '@/types/api';
-import type { CabinType } from '@/types/cabin';
+import type { Cabin } from '@/types/cabin';
 
 type ContactResponse = {
   data: {
@@ -43,6 +43,7 @@ const defaultValues: ContactFormInput = {
   check_in: '',
   check_out: '',
   guests_count: '',
+  cabin_id: '',
   cabin_type_id: '',
 };
 
@@ -93,19 +94,19 @@ export function ContactForm() {
     mode: 'onBlur',
   });
 
-  const cabinTypesQuery = useQuery({
-    queryKey: ['contact-cabin-types'],
-    queryFn: () => api.get<ApiResponse<CabinType[]>>('/cabins'),
+  const cabinsQuery = useQuery({
+    queryKey: ['contact-cabins'],
+    queryFn: () => api.get<ApiResponse<Cabin[]>>('/cabins'),
     retry: 1,
   });
 
-  const cabinTypes = useMemo(() => cabinTypesQuery.data?.data ?? [], [cabinTypesQuery.data?.data]);
+  const cabins = useMemo(() => cabinsQuery.data?.data ?? [], [cabinsQuery.data?.data]);
   const watchedValues = useWatch({ control: form.control });
   const values: ContactFormInput = { ...defaultValues, ...watchedValues };
 
   const selectedCabinName = useMemo(() => {
-    return cabinTypes.find((cabinType) => cabinType.id === Number(values.cabin_type_id))?.name;
-  }, [cabinTypes, values.cabin_type_id]);
+    return cabins.find((cabin) => cabin.id === Number(values.cabin_id))?.name;
+  }, [cabins, values.cabin_id]);
 
   const whatsappHref = buildWhatsappHref(values, selectedCabinName);
 
@@ -231,9 +232,9 @@ export function ContactForm() {
         <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="contact-cabin">Cabaña preferida</Label>
           <Select
-            value={values.cabin_type_id ? String(values.cabin_type_id) : 'any'}
+            value={values.cabin_id ? String(values.cabin_id) : 'any'}
             onValueChange={(value) => {
-              form.setValue('cabin_type_id', value === 'any' ? '' : value, {
+              form.setValue('cabin_id', value === 'any' ? '' : value, {
                 shouldDirty: true,
                 shouldValidate: true,
               });
@@ -244,19 +245,19 @@ export function ContactForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="any">Cabaña por definir</SelectItem>
-              {cabinTypes.map((cabinType) => (
-                <SelectItem key={cabinType.id} value={String(cabinType.id)}>
-                  {cabinType.name}
+              {cabins.map((cabin) => (
+                <SelectItem key={cabin.id} value={String(cabin.id)}>
+                  {cabin.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {cabinTypesQuery.isError ? (
+          {cabinsQuery.isError ? (
             <p className="text-xs leading-5 text-muted-foreground">
               No pudimos cargar las cabañas ahora; puedes enviar la solicitud sin escoger una.
             </p>
           ) : null}
-          <ErrorMessage error={form.formState.errors.cabin_type_id} />
+          <ErrorMessage error={form.formState.errors.cabin_id} />
         </div>
 
         <div className="space-y-2 sm:col-span-2">

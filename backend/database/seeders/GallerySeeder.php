@@ -13,7 +13,7 @@ class GallerySeeder extends Seeder
     {
         $albums = [
             [
-                'title'       => 'Cabanas entre selva y mar',
+                'title'       => 'Cabañas entre selva y mar',
                 'slug'        => 'cabanas-entre-selva-y-mar',
                 'description' => 'Rincones de descanso rodeados de vegetacion tropical, madera y brisa del Pacifico.',
                 'category'    => GalleryCategory::Cabins,
@@ -22,12 +22,12 @@ class GallerySeeder extends Seeder
                 'items'       => [
                     [
                         'url'     => '/assets/imagenes/511133422_9990219471027675_1591650365955070210_n.jpg',
-                        'alt'     => 'Cabanas nativas rodeadas de jardin tropical',
+                        'alt'     => 'Cabañas nativas rodeadas de jardin tropical',
                         'caption' => 'Alojamiento tranquilo a pasos del mar.',
                     ],
                     [
                         'url'     => '/assets/imagenes/54516895_2086105884772446_8521564931760324608_n.jpg',
-                        'alt'     => 'Entrada a las cabanas con vegetacion tropical',
+                        'alt'     => 'Entrada a las cabañas con vegetacion tropical',
                         'caption' => 'Senderos sencillos para bajar el ritmo.',
                     ],
                 ],
@@ -47,7 +47,7 @@ class GallerySeeder extends Seeder
                     ],
                     [
                         'url'     => '/assets/imagenes/240518846_4193049004078113_944283279498408299_n.jpg',
-                        'alt'     => 'Vista de Playa Terco y cabanas frente al mar',
+                        'alt'     => 'Vista de Playa Terco y cabañas frente al mar',
                         'caption' => 'La playa como parte de la estadia.',
                     ],
                 ],

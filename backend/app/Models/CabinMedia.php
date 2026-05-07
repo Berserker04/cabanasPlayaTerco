@@ -10,6 +10,7 @@ class CabinMedia extends Model
     protected $table = 'cabin_media';
 
     protected $fillable = [
+        'cabin_id',
         'cabin_type_id',
         'url',
         'alt',
@@ -22,5 +23,10 @@ class CabinMedia extends Model
     public function cabinType(): BelongsTo
     {
         return $this->belongsTo(CabinType::class);
+    }
+
+    public function cabin(): BelongsTo
+    {
+        return $this->belongsTo(Cabin::class);
     }
 }
