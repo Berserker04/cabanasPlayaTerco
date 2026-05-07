@@ -56,10 +56,10 @@ class GalleryController extends Controller
 
     public function store(StoreGalleryItemRequest $request): JsonResponse
     {
-        $upload = $this->uploadService->uploadWithThumbnail($request->file('file'), 'gallery', 'public');
+        $upload = $this->uploadService->uploadWithThumbnail($request->file('file'), 'gallery');
 
         $item = GalleryItem::create([
-            'gallery_album_id' => $request->integer('gallery_album_id'),
+            'gallery_album_id' => $request->filled('gallery_album_id') ? $request->integer('gallery_album_id') : null,
             'url'              => $upload['url'],
             'path'             => $upload['path'],
             'thumbnail_url'    => $upload['thumbnail_url'],
@@ -124,11 +124,11 @@ class GalleryController extends Controller
     private function deleteStoredFiles(GalleryItem $galleryItem): void
     {
         if ($galleryItem->path) {
-            $this->uploadService->delete($galleryItem->path, 'public');
+            $this->uploadService->delete($galleryItem->path);
         }
 
         if ($galleryItem->thumbnail_path && $galleryItem->thumbnail_path !== $galleryItem->path) {
-            $this->uploadService->delete($galleryItem->thumbnail_path, 'public');
+            $this->uploadService->delete($galleryItem->thumbnail_path);
         }
     }
 }

@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class FileUploadService
 {
@@ -13,9 +16,26 @@ class FileUploadService
      */
     public function upload(UploadedFile $file, string $directory = 'uploads', ?string $disk = null): array
     {
-        $disk ??= config('filesystems.default', 'local');
+        $disk ??= config('filesystems.uploads_disk', config('filesystems.default', 's3'));
         $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
-        $path = $file->storeAs($directory, $filename, $disk);
+        $this->ensureDiskIsConfigured($disk);
+
+        try {
+            $path = $file->storeAs($directory, $filename, [
+                'disk' => $disk,
+                'visibility' => 'public',
+            ]);
+        } catch (Throwable $exception) {
+            throw ValidationException::withMessages([
+                'file' => 'No pudimos subir el archivo a DigitalOcean Spaces. Revisa las credenciales, bucket y endpoint.',
+            ]);
+        }
+
+        if (! is_string($path) || $path === '') {
+            throw ValidationException::withMessages([
+                'file' => 'No pudimos subir el archivo a DigitalOcean Spaces. Revisa las credenciales, bucket y endpoint.',
+            ]);
+        }
 
         return [
             'url'           => Storage::disk($disk)->url($path),
@@ -45,8 +65,43 @@ class FileUploadService
      */
     public function delete(string $path, ?string $disk = null): bool
     {
-        $disk ??= config('filesystems.default', 'local');
+        $disk ??= config('filesystems.uploads_disk', config('filesystems.default', 's3'));
 
         return Storage::disk($disk)->delete($path);
+    }
+
+    private function ensureDiskIsConfigured(string $disk): void
+    {
+        if (Config::get("filesystems.disks.{$disk}.driver") !== 's3') {
+            return;
+        }
+
+        $required = [
+            'key' => 'DO_SPACES_KEY',
+            'secret' => 'DO_SPACES_SECRET',
+            'region' => 'DO_SPACES_REGION',
+            'bucket' => 'DO_SPACES_BUCKET',
+            'endpoint' => 'DO_SPACES_ENDPOINT',
+        ];
+
+        foreach ($required as $configKey => $envName) {
+            $value = Config::get("filesystems.disks.{$disk}.{$configKey}");
+
+            if (is_string($value) && trim($value) !== '') {
+                continue;
+            }
+
+            throw ValidationException::withMessages([
+                'file' => "Falta configurar {$envName} para subir archivos a DigitalOcean Spaces.",
+            ]);
+        }
+
+        $bucket = (string) Config::get("filesystems.disks.{$disk}.bucket");
+
+        if (! preg_match('/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/', $bucket)) {
+            throw ValidationException::withMessages([
+                'file' => 'El bucket de DigitalOcean Spaces debe usar solo minusculas, numeros, puntos o guiones.',
+            ]);
+        }
     }
 }

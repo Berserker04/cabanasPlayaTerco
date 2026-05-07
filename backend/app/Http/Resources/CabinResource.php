@@ -20,6 +20,7 @@ class CabinResource extends JsonResource
             'floor'           => $this->floor,
             'notes'           => $this->notes,
             'cover_image'     => $this->cover_image,
+            'cover_image_path'=> $this->cover_image_path,
             'short_description' => $this->short_description,
             'description'     => $this->description,
             'guest_capacity'  => $this->guest_capacity,

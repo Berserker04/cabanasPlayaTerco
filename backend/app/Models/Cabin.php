@@ -19,6 +19,7 @@ class Cabin extends Model
         'floor',
         'notes',
         'cover_image',
+        'cover_image_path',
         'short_description',
         'description',
         'guest_capacity',

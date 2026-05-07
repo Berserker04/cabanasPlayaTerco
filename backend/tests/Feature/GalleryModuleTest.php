@@ -17,7 +17,7 @@ class GalleryModuleTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_public_gallery_only_returns_active_items_from_active_albums(): void
+    public function test_public_gallery_defaults_to_standalone_items_and_filters_album_items_by_album(): void
     {
         $activeAlbum = GalleryAlbum::create([
             'title'       => 'Playa viva',
@@ -46,6 +46,17 @@ class GalleryModuleTest extends TestCase
         ]);
 
         GalleryItem::create([
+            'gallery_album_id' => null,
+            'url'              => 'https://example.test/suelta.jpg',
+            'thumbnail_url'    => 'https://example.test/suelta-thumb.jpg',
+            'caption'          => 'Foto suelta de playa',
+            'category'         => GalleryCategory::Beach,
+            'type'             => 'image',
+            'is_active'        => true,
+            'is_featured'      => false,
+        ]);
+
+        GalleryItem::create([
             'gallery_album_id' => $activeAlbum->id,
             'url'              => 'https://example.test/oculta.jpg',
             'category'         => GalleryCategory::Beach,
@@ -62,6 +73,12 @@ class GalleryModuleTest extends TestCase
         ]);
 
         $this->getJson('/api/v1/gallery?category=beach')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.url', 'https://example.test/suelta.jpg')
+            ->assertJsonPath('data.0.gallery_album_id', null);
+
+        $this->getJson('/api/v1/gallery?album=playa-viva')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.url', 'https://example.test/playa.jpg')
@@ -116,7 +133,7 @@ class GalleryModuleTest extends TestCase
 
     public function test_admin_can_create_album_upload_media_and_set_cover(): void
     {
-        Storage::fake('public');
+        Storage::fake('s3');
         Sanctum::actingAs($this->createAdmin());
 
         $albumResponse = $this->postJson('/api/v1/admin/gallery-albums', [
@@ -149,7 +166,7 @@ class GalleryModuleTest extends TestCase
             ->assertJsonPath('data.album.slug', 'naturaleza');
 
         $path = $uploadResponse->json('data.path');
-        Storage::disk('public')->assertExists($path);
+        Storage::disk('s3')->assertExists($path);
 
         $itemId = $uploadResponse->json('data.id');
 
@@ -158,6 +175,52 @@ class GalleryModuleTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('data.cover_gallery_item_id', $itemId);
+    }
+
+    public function test_admin_can_upload_standalone_media_and_create_album_with_multiple_files(): void
+    {
+        Storage::fake('s3');
+        Sanctum::actingAs($this->createAdmin());
+
+        $this
+            ->withHeader('Accept', 'application/json')
+            ->post('/api/v1/admin/gallery', [
+                'category'    => 'beach',
+                'caption'     => 'Foto suelta',
+                'file'        => UploadedFile::fake()->create('suelta.jpg', 512, 'image/jpeg'),
+                'is_active'   => '1',
+                'is_featured' => '0',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.gallery_album_id', null)
+            ->assertJsonPath('data.type', 'image');
+
+        $albumResponse = $this
+            ->withHeader('Accept', 'application/json')
+            ->post('/api/v1/admin/gallery-albums', [
+                'title'         => 'Album mixto',
+                'slug'          => 'album-mixto',
+                'description'   => 'Fotos y videos.',
+                'category'      => 'beach',
+                'is_active'     => '1',
+                'is_featured'   => '1',
+                'cover_index'   => '1',
+                'files'         => [
+                    UploadedFile::fake()->create('playa.jpg', 512, 'image/jpeg'),
+                    UploadedFile::fake()->create('recorrido.mp4', 2048, 'video/mp4'),
+                ],
+                'file_captions' => ['Playa', 'Recorrido'],
+                'file_alts'     => ['Playa', 'Video de recorrido'],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.slug', 'album-mixto')
+            ->assertJsonPath('data.items_count', 2)
+            ->assertJsonPath('data.images_count', 1)
+            ->assertJsonPath('data.videos_count', 1);
+
+        $album = GalleryAlbum::where('slug', 'album-mixto')->firstOrFail();
+        $this->assertNotNull($album->cover_gallery_item_id);
+        $this->assertSame('video', $album->coverItem->type);
     }
 
     public function test_gallery_admin_endpoints_require_admin_role(): void

@@ -14,6 +14,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -131,6 +132,7 @@ class CabinModuleTest extends TestCase
 
     public function test_admin_can_upload_video_media_for_cabin(): void
     {
+        Storage::fake('s3');
         Sanctum::actingAs($this->createAdmin());
 
         $cabinType = $this->createCabinType();
@@ -147,10 +149,13 @@ class CabinModuleTest extends TestCase
             ->assertJsonPath('data.cabin_id', $cabin->id)
             ->assertJsonPath('data.type', 'video')
             ->assertJsonPath('data.sort_order', 2);
+
+        Storage::disk('s3')->assertExists(CabinMedia::firstOrFail()->path);
     }
 
     public function test_admin_can_upload_multiple_media_files_for_cabin(): void
     {
+        Storage::fake('s3');
         Sanctum::actingAs($this->createAdmin());
 
         $cabinType = $this->createCabinType();

@@ -13,10 +13,20 @@ class CabinMedia extends Model
         'cabin_id',
         'cabin_type_id',
         'url',
+        'path',
         'alt',
         'type',
+        'mime_type',
+        'size_bytes',
         'sort_order',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'size_bytes' => 'integer',
+        ];
+    }
 
     // ── Relationships ──
 

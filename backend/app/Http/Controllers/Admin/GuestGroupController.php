@@ -91,6 +91,7 @@ class GuestGroupController extends Controller
         $document = $guestGroup->documents()->create([
             'type'          => $request->type,
             'url'           => $upload['url'],
+            'path'          => $upload['path'],
             'original_name' => $upload['original_name'],
             'mime_type'     => $upload['mime_type'],
             'size_bytes'    => $upload['size_bytes'],

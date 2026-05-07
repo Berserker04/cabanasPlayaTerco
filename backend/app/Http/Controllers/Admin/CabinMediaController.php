@@ -36,8 +36,11 @@ class CabinMediaController extends Controller
                     'cabin_id'      => $cabin->id,
                     'cabin_type_id' => $cabin->cabin_type_id,
                     'url'           => $upload['url'],
+                    'path'          => $upload['path'],
                     'alt'           => $request->alt,
                     'type'          => $type,
+                    'mime_type'     => $upload['mime_type'],
+                    'size_bytes'    => $upload['size_bytes'],
                     'sort_order'    => $baseSortOrder + $index,
                 ]);
             });
@@ -69,6 +72,10 @@ class CabinMediaController extends Controller
 
     public function destroy(CabinMedia $cabinMedia): JsonResponse
     {
+        if ($cabinMedia->path) {
+            $this->uploadService->delete($cabinMedia->path);
+        }
+
         $cabinMedia->delete();
 
         return response()->json([

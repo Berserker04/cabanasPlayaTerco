@@ -140,15 +140,22 @@ async function getGalleryData(): Promise<{
     ]);
 
     return {
-      albums: albumsResponse.data.length > 0 ? albumsResponse.data : fallbackAlbums,
+      albums: albumsResponse.data.length > 0 ? albumsResponse.data : fallbackAlbumsWithItems(),
       items: itemsResponse.data.length > 0 ? itemsResponse.data : fallbackItems,
     };
   } catch {
     return {
-      albums: fallbackAlbums,
+      albums: fallbackAlbumsWithItems(),
       items: fallbackItems,
     };
   }
+}
+
+function fallbackAlbumsWithItems(): GalleryAlbum[] {
+  return fallbackAlbums.map((album) => ({
+    ...album,
+    items: fallbackItems.filter((item) => item.gallery_album_id === album.id),
+  }));
 }
 
 export default async function GalleryPage() {

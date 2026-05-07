@@ -41,6 +41,7 @@ export interface Cabin {
   floor: number | null;
   notes: string | null;
   cover_image: string | null;
+  cover_image_path: string | null;
   short_description: string | null;
   description: string | null;
   guest_capacity: number;
@@ -70,8 +71,11 @@ export interface CabinMedia {
   cabin_id: number | null;
   cabin_type_id: number;
   url: string;
+  path: string | null;
   alt: string | null;
   type: 'image' | 'video';
+  mime_type: string | null;
+  size_bytes: number | null;
   sort_order: number;
 }
 

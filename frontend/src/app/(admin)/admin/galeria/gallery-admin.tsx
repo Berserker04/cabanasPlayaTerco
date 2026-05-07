@@ -4,7 +4,9 @@ import {
   Edit,
   Eye,
   EyeOff,
+  Film,
   ImagePlus,
+  ImageIcon,
   Images,
   LoaderCircle,
   Plus,
@@ -13,7 +15,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +48,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import type { ApiListResponse, ApiResponse } from '@/types/api';
 import {
   GALLERY_CATEGORIES,
@@ -67,14 +70,19 @@ type AlbumFormState = {
 };
 
 type UploadFormState = {
+  mode: UploadMode;
   gallery_album_id: string;
+  album_title: string;
+  album_slug: string;
+  album_description: string;
   category: GalleryCategory;
   caption: string;
   alt: string;
   sort_order: string;
   is_active: boolean;
   is_featured: boolean;
-  file: File | null;
+  files: File[];
+  cover_index: string;
 };
 
 type ItemFormState = {
@@ -86,6 +94,8 @@ type ItemFormState = {
   is_active: boolean;
   is_featured: boolean;
 };
+
+type UploadMode = 'image' | 'video' | 'album';
 
 const emptyAlbumForm: AlbumFormState = {
   title: '',
@@ -99,15 +109,23 @@ const emptyAlbumForm: AlbumFormState = {
 };
 
 const emptyUploadForm: UploadFormState = {
-  gallery_album_id: '',
+  mode: 'image',
+  gallery_album_id: 'none',
+  album_title: '',
+  album_slug: '',
+  album_description: '',
   category: 'general',
   caption: '',
   alt: '',
   sort_order: '0',
   is_active: true,
   is_featured: false,
-  file: null,
+  files: [],
+  cover_index: '0',
 };
+
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const VIDEO_MAX_BYTES = 150 * 1024 * 1024;
 
 function slugify(value: string) {
   return value
@@ -146,6 +164,23 @@ function apiErrorMessage(error: unknown) {
   return 'No pudimos completar la accion.';
 }
 
+function validateSelectedFiles(files: File[]) {
+  const invalidImage = files.find((file) => file.type.startsWith('image/') && file.size > IMAGE_MAX_BYTES);
+  const invalidVideo = files.find((file) => file.type.startsWith('video/') && file.size > VIDEO_MAX_BYTES);
+
+  if (invalidImage) {
+    toast.error('Cada imagen puede pesar maximo 10 MB.');
+    return false;
+  }
+
+  if (invalidVideo) {
+    toast.error('Cada video puede pesar maximo 150 MB.');
+    return false;
+  }
+
+  return true;
+}
+
 export function GalleryAdmin() {
   const queryClient = useQueryClient();
   const [albumSearch, setAlbumSearch] = useState('');
@@ -161,7 +196,7 @@ export function GalleryAdmin() {
   const [albumForm, setAlbumForm] = useState<AlbumFormState>(emptyAlbumForm);
   const [uploadForm, setUploadForm] = useState<UploadFormState>(emptyUploadForm);
   const [itemForm, setItemForm] = useState<ItemFormState>({
-    gallery_album_id: '',
+    gallery_album_id: 'none',
     category: 'general',
     caption: '',
     alt: '',
@@ -170,18 +205,23 @@ export function GalleryAdmin() {
     is_featured: false,
   });
 
-  const uploadPreviewUrl = useMemo(
-    () => (uploadForm.file ? URL.createObjectURL(uploadForm.file) : null),
-    [uploadForm.file],
+  const uploadPreviewItems = useMemo(
+    () =>
+      uploadForm.files.map((file, index) => ({
+        file,
+        index,
+        url: URL.createObjectURL(file),
+      })),
+    [uploadForm.files],
   );
 
   useEffect(() => {
-    if (!uploadPreviewUrl) {
+    if (uploadPreviewItems.length === 0) {
       return;
     }
 
-    return () => URL.revokeObjectURL(uploadPreviewUrl);
-  }, [uploadPreviewUrl]);
+    return () => uploadPreviewItems.forEach((item) => URL.revokeObjectURL(item.url));
+  }, [uploadPreviewItems]);
 
   const albumsQuery = useQuery({
     queryKey: ['admin-gallery-albums', albumSearch, albumCategory],
@@ -258,6 +298,18 @@ export function GalleryAdmin() {
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
+  const createAlbumWithFilesMutation = useMutation({
+    mutationFn: (formData: FormData) => api.post<ApiResponse<GalleryAlbum>>('/admin/gallery-albums', formData),
+    onSuccess: () => {
+      toast.success('Album creado');
+      setUploadDialogOpen(false);
+      setUploadForm(emptyUploadForm);
+      void queryClient.invalidateQueries({ queryKey: ['admin-gallery-albums'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-gallery-items'] });
+    },
+    onError: (error) => toast.error(apiErrorMessage(error)),
+  });
+
   const updateItemMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Record<string, unknown> }) =>
       api.put<ApiResponse<GalleryItem>>(`/admin/gallery/${id}`, payload),
@@ -294,8 +346,11 @@ export function GalleryAdmin() {
 
   function openCreateAlbum() {
     setEditingAlbum(null);
-    setAlbumForm(emptyAlbumForm);
-    setAlbumDialogOpen(true);
+    setUploadForm({
+      ...emptyUploadForm,
+      mode: 'album',
+    });
+    setUploadDialogOpen(true);
   }
 
   function openEditAlbum(album: GalleryAlbum) {
@@ -313,13 +368,12 @@ export function GalleryAdmin() {
     setAlbumDialogOpen(true);
   }
 
-  function openUpload(album?: GalleryAlbum) {
-    const targetAlbum = album ?? albums[0];
-
+  function openUpload(mode: UploadMode = 'image', album?: GalleryAlbum) {
     setUploadForm({
       ...emptyUploadForm,
-      gallery_album_id: targetAlbum ? String(targetAlbum.id) : '',
-      category: targetAlbum?.category ?? 'general',
+      mode,
+      gallery_album_id: album ? String(album.id) : 'none',
+      category: album?.category ?? 'general',
     });
     setUploadDialogOpen(true);
   }
@@ -327,7 +381,7 @@ export function GalleryAdmin() {
   function openEditItem(item: GalleryItem) {
     setEditingItem(item);
     setItemForm({
-      gallery_album_id: item.gallery_album_id ? String(item.gallery_album_id) : '',
+      gallery_album_id: item.gallery_album_id ? String(item.gallery_album_id) : 'none',
       category: item.category,
       caption: item.caption ?? '',
       alt: item.alt ?? '',
@@ -363,15 +417,63 @@ export function GalleryAdmin() {
   function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!uploadForm.gallery_album_id || !uploadForm.file) {
-      toast.error('Selecciona un album y un archivo.');
+    if (uploadForm.mode === 'album') {
+      if (!uploadForm.album_title || !uploadForm.album_slug || uploadForm.files.length === 0) {
+        toast.error('Completa titulo, slug y al menos un archivo.');
+        return;
+      }
+
+      if (!validateSelectedFiles(uploadForm.files)) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('title', uploadForm.album_title);
+      formData.append('slug', uploadForm.album_slug);
+      formData.append('category', uploadForm.category);
+      formData.append('description', uploadForm.album_description);
+      formData.append('sort_order', uploadForm.sort_order || '0');
+      formData.append('is_active', uploadForm.is_active ? '1' : '0');
+      formData.append('is_featured', uploadForm.is_featured ? '1' : '0');
+      formData.append('cover_index', uploadForm.cover_index || '0');
+
+      uploadForm.files.forEach((file) => {
+        formData.append('files[]', file);
+        formData.append('file_captions[]', uploadForm.caption);
+        formData.append('file_alts[]', uploadForm.alt);
+      });
+
+      createAlbumWithFilesMutation.mutate(formData);
+      return;
+    }
+
+    const file = uploadForm.files[0];
+
+    if (!file) {
+      toast.error('Selecciona un archivo.');
+      return;
+    }
+
+    if (!validateSelectedFiles([file])) {
+      return;
+    }
+
+    if (uploadForm.mode === 'image' && !file.type.startsWith('image/')) {
+      toast.error('Selecciona una imagen para este modo.');
+      return;
+    }
+
+    if (uploadForm.mode === 'video' && !file.type.startsWith('video/')) {
+      toast.error('Selecciona un video para este modo.');
       return;
     }
 
     const formData = new FormData();
-    formData.append('gallery_album_id', uploadForm.gallery_album_id);
+    if (uploadForm.gallery_album_id !== 'none') {
+      formData.append('gallery_album_id', uploadForm.gallery_album_id);
+    }
     formData.append('category', uploadForm.category);
-    formData.append('file', uploadForm.file);
+    formData.append('file', file);
     formData.append('sort_order', uploadForm.sort_order || '0');
     formData.append('is_active', uploadForm.is_active ? '1' : '0');
     formData.append('is_featured', uploadForm.is_featured ? '1' : '0');
@@ -397,7 +499,7 @@ export function GalleryAdmin() {
     updateItemMutation.mutate({
       id: editingItem.id,
       payload: cleanPayload({
-        gallery_album_id: itemForm.gallery_album_id ? Number(itemForm.gallery_album_id) : null,
+        gallery_album_id: itemForm.gallery_album_id === 'none' ? null : Number(itemForm.gallery_album_id),
         category: itemForm.category,
         caption: itemForm.caption,
         alt: itemForm.alt,
@@ -419,6 +521,7 @@ export function GalleryAdmin() {
   const isBusy =
     saveAlbumMutation.isPending ||
     uploadItemMutation.isPending ||
+    createAlbumWithFilesMutation.isPending ||
     updateItemMutation.isPending ||
     setCoverMutation.isPending;
 
@@ -435,13 +538,17 @@ export function GalleryAdmin() {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button onClick={() => openUpload()} variant="outline" disabled={albums.length === 0}>
-            <Upload className="h-4 w-4" />
-            Subir medio
+          <Button onClick={() => openUpload('image')} variant="outline">
+            <ImageIcon className="h-4 w-4" />
+            Imagen
+          </Button>
+          <Button onClick={() => openUpload('video')} variant="outline">
+            <Film className="h-4 w-4" />
+            Video
           </Button>
           <Button onClick={openCreateAlbum}>
-            <Plus className="h-4 w-4" />
-            Nuevo album
+            <Images className="h-4 w-4" />
+            Album
           </Button>
         </div>
       </div>
@@ -502,7 +609,7 @@ export function GalleryAdmin() {
                       {album.is_featured ? <Badge className="bg-cyan-100 text-cyan-800">Destacado</Badge> : null}
                     </div>
                     <div className="mt-5 flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openUpload(album)}>
+                      <Button size="sm" variant="outline" onClick={() => openUpload('image', album)}>
                         <ImagePlus className="h-4 w-4" />
                         Subir
                       </Button>
@@ -535,7 +642,7 @@ export function GalleryAdmin() {
             <AlbumSelect value={itemAlbumId} onValueChange={setItemAlbumId} albums={albums} includeAll />
             <CategorySelect value={itemCategory} onValueChange={setItemCategory} includeAll />
             <TypeSelect value={itemType} onValueChange={setItemType} includeAll />
-            <Button onClick={() => openUpload()} disabled={albums.length === 0}>
+            <Button onClick={() => openUpload('image')}>
               <Upload className="h-4 w-4" />
               Subir
             </Button>
@@ -743,27 +850,99 @@ export function GalleryAdmin() {
       </Dialog>
 
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
           <form onSubmit={handleUploadSubmit}>
             <DialogHeader>
-              <DialogTitle>Subir foto o video</DialogTitle>
-              <DialogDescription>Archivos JPG, PNG, WebP, MP4 o MOV hasta 20 MB.</DialogDescription>
+              <DialogTitle>
+                {uploadForm.mode === 'album'
+                  ? 'Crear album'
+                  : uploadForm.mode === 'video'
+                    ? 'Subir video'
+                    : 'Subir imagen'}
+              </DialogTitle>
+              <DialogDescription>Imagenes hasta 10 MB y videos MP4 o MOV hasta 150 MB.</DialogDescription>
             </DialogHeader>
             <div className="mt-5 grid gap-4">
-              <Field label="Album">
-                <AlbumSelect
-                  value={uploadForm.gallery_album_id}
-                  onValueChange={(value) => {
-                    const album = albums.find((album) => String(album.id) === value);
-                    setUploadForm((current) => ({
-                      ...current,
-                      gallery_album_id: value,
-                      category: album?.category ?? current.category,
-                    }));
-                  }}
-                  albums={albums}
+              <div className="grid gap-2 sm:grid-cols-3">
+                <UploadModeButton
+                  active={uploadForm.mode === 'image'}
+                  icon={ImageIcon}
+                  label="Imagen"
+                  onClick={() =>
+                    setUploadForm((current) => ({ ...emptyUploadForm, mode: 'image', category: current.category }))
+                  }
                 />
-              </Field>
+                <UploadModeButton
+                  active={uploadForm.mode === 'video'}
+                  icon={Film}
+                  label="Video"
+                  onClick={() =>
+                    setUploadForm((current) => ({ ...emptyUploadForm, mode: 'video', category: current.category }))
+                  }
+                />
+                <UploadModeButton
+                  active={uploadForm.mode === 'album'}
+                  icon={Images}
+                  label="Album"
+                  onClick={() =>
+                    setUploadForm((current) => ({ ...emptyUploadForm, mode: 'album', category: current.category }))
+                  }
+                />
+              </div>
+
+              {uploadForm.mode === 'album' ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Titulo">
+                    <Input
+                      value={uploadForm.album_title}
+                      onChange={(event) => {
+                        const title = event.target.value;
+                        setUploadForm((current) => ({
+                          ...current,
+                          album_title: title,
+                          album_slug: current.album_slug ? current.album_slug : slugify(title),
+                        }));
+                      }}
+                      required
+                    />
+                  </Field>
+                  <Field label="Slug">
+                    <Input
+                      value={uploadForm.album_slug}
+                      onChange={(event) =>
+                        setUploadForm((current) => ({ ...current, album_slug: slugify(event.target.value) }))
+                      }
+                      required
+                    />
+                  </Field>
+                  <Field label="Descripcion" className="sm:col-span-2">
+                    <Textarea
+                      value={uploadForm.album_description}
+                      onChange={(event) =>
+                        setUploadForm((current) => ({ ...current, album_description: event.target.value }))
+                      }
+                      rows={3}
+                    />
+                  </Field>
+                </div>
+              ) : (
+                <Field label="Album">
+                  <AlbumSelect
+                    value={uploadForm.gallery_album_id}
+                    onValueChange={(value) => {
+                      const album = albums.find((album) => String(album.id) === value);
+                      setUploadForm((current) => ({
+                        ...current,
+                        gallery_album_id: value,
+                        category: album?.category ?? current.category,
+                      }));
+                    }}
+                    albums={albums}
+                    includeNone
+                  />
+                </Field>
+              )}
+
               <Field label="Categoria">
                 <CategorySelect
                   value={uploadForm.category}
@@ -775,21 +954,49 @@ export function GalleryAdmin() {
               <Field label="Archivo">
                 <Input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                  multiple={uploadForm.mode === 'album'}
+                  accept={
+                    uploadForm.mode === 'image'
+                      ? 'image/jpeg,image/png,image/webp'
+                      : uploadForm.mode === 'video'
+                        ? 'video/mp4,video/quicktime'
+                        : 'image/jpeg,image/png,image/webp,video/mp4,video/quicktime'
+                  }
                   onChange={(event) =>
-                    setUploadForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))
+                    setUploadForm((current) => ({
+                      ...current,
+                      files: Array.from(event.target.files ?? []),
+                      cover_index: '0',
+                    }))
                   }
                 />
-                {uploadForm.file ? (
-                  <p className="mt-2 text-xs text-muted-foreground">{uploadForm.file.name}</p>
-                ) : null}
-                {uploadPreviewUrl ? (
-                  <div className="mt-3 overflow-hidden rounded-lg border bg-neutral-100">
-                    {uploadForm.file?.type.startsWith('video/') ? (
-                      <video src={uploadPreviewUrl} className="max-h-64 w-full object-contain" controls />
-                    ) : (
-                      <img src={uploadPreviewUrl} alt="Preview" className="max-h-64 w-full object-contain" />
-                    )}
+                {uploadPreviewItems.length > 0 ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {uploadPreviewItems.map((preview) => (
+                      <label
+                        key={`${preview.file.name}-${preview.index}`}
+                        className="overflow-hidden rounded-lg border bg-neutral-100"
+                      >
+                        {preview.file.type.startsWith('video/') ? (
+                          <video src={preview.url} className="max-h-56 w-full object-contain" controls />
+                        ) : (
+                          <img src={preview.url} alt="Preview" className="max-h-56 w-full object-contain" />
+                        )}
+                        <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+                          {uploadForm.mode === 'album' ? (
+                            <input
+                              type="radio"
+                              name="cover_index"
+                              checked={uploadForm.cover_index === String(preview.index)}
+                              onChange={() =>
+                                setUploadForm((current) => ({ ...current, cover_index: String(preview.index) }))
+                              }
+                            />
+                          ) : null}
+                          <span className="truncate">{preview.file.name}</span>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 ) : null}
               </Field>
@@ -820,7 +1027,7 @@ export function GalleryAdmin() {
                 onChange={(value) => setUploadForm((current) => ({ ...current, is_active: value }))}
               />
               <BooleanField
-                label="Medio destacado"
+                label={uploadForm.mode === 'album' ? 'Album destacado' : 'Medio destacado'}
                 checked={uploadForm.is_featured}
                 onChange={(value) => setUploadForm((current) => ({ ...current, is_featured: value }))}
               />
@@ -830,8 +1037,10 @@ export function GalleryAdmin() {
                 Cancelar
               </Button>
               <Button type="submit" disabled={isBusy}>
-                {uploadItemMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                Subir
+                {uploadItemMutation.isPending || createAlbumWithFilesMutation.isPending ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : null}
+                {uploadForm.mode === 'album' ? 'Crear' : 'Subir'}
               </Button>
             </DialogFooter>
           </form>
@@ -851,6 +1060,7 @@ export function GalleryAdmin() {
                   value={itemForm.gallery_album_id}
                   onValueChange={(value) => setItemForm((current) => ({ ...current, gallery_album_id: value }))}
                   albums={albums}
+                  includeNone
                 />
               </Field>
               <Field label="Categoria">
@@ -1002,6 +1212,34 @@ function BooleanField({
   );
 }
 
+function UploadModeButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition',
+        active
+          ? 'border-cyan-700 bg-cyan-700 text-white'
+          : 'border-neutral-200 bg-white text-neutral-700 hover:border-cyan-300 hover:text-cyan-800',
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
 function SearchInput({
   value,
   onChange,
@@ -1076,11 +1314,13 @@ function AlbumSelect({
   onValueChange,
   albums,
   includeAll = false,
+  includeNone = false,
 }: {
   value: string;
   onValueChange: (value: string) => void;
   albums: GalleryAlbum[];
   includeAll?: boolean;
+  includeNone?: boolean;
 }) {
   return (
     <Select value={value} onValueChange={onValueChange}>
@@ -1089,6 +1329,7 @@ function AlbumSelect({
       </SelectTrigger>
       <SelectContent>
         {includeAll ? <SelectItem value="all">Todos</SelectItem> : null}
+        {includeNone ? <SelectItem value="none">Sin album</SelectItem> : null}
         {albums.map((album) => (
           <SelectItem key={album.id} value={String(album.id)}>
             {album.title}

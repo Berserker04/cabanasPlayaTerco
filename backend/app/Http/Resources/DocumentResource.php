@@ -15,6 +15,7 @@ class DocumentResource extends JsonResource
             'type'          => $this->type->value,
             'type_label'    => $this->type->label(),
             'url'           => $this->url,
+            'path'          => $this->path,
             'original_name' => $this->original_name,
             'mime_type'     => $this->mime_type,
             'size_bytes'    => $this->size_bytes,

@@ -33,6 +33,8 @@ class GalleryController extends Controller
                 }
 
                 $query->whereHas('album', fn ($albumQuery) => $albumQuery->where('slug', $album));
+            }, function ($query) {
+                $query->whereNull('gallery_album_id');
             })
             ->orderBy('sort_order')
             ->orderByDesc('is_featured')

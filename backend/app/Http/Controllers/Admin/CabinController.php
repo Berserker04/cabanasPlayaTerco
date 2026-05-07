@@ -89,7 +89,15 @@ class CabinController extends Controller
         ]);
 
         $upload = $this->uploadService->upload($request->file('file'), 'cabins/covers');
-        $cabin->update(['cover_image' => $upload['url']]);
+
+        if ($cabin->cover_image_path) {
+            $this->uploadService->delete($cabin->cover_image_path);
+        }
+
+        $cabin->update([
+            'cover_image'      => $upload['url'],
+            'cover_image_path' => $upload['path'],
+        ]);
 
         return response()->json([
             'data'    => new CabinResource($this->loadForResponse($cabin->fresh())),
