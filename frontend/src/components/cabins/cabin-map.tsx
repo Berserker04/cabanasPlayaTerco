@@ -25,15 +25,24 @@ type SlotPoint = {
   lines: string[];
 };
 
+type StaticLabelPoint = Omit<SlotPoint, 'id'> & {
+  id: string;
+};
+
 const SLOT_POINTS: SlotPoint[] = [
-  { id: 'cabana_6', left: 47.2, top: 11.2, width: 8.8, height: 4.8, lines: ['Cabaña 6 piso 2'] },
-  { id: 'cabana_5', left: 47.2, top: 18.2, width: 8.8, height: 4.8, lines: ['Cabaña 5 piso 1'] },
-  { id: 'cabana_8', left: 23.8, top: 27.5, width: 5.6, height: 4.3, lines: ['Cabaña 8'] },
-  { id: 'cabana_4', left: 51.6, top: 31.8, width: 6.5, height: 4.3, lines: ['Cabaña 4'] },
-  { id: 'cabana_7', left: 23.8, top: 38.0, width: 5.6, height: 4.3, lines: ['Cabaña 7'] },
-  { id: 'cabana_3', left: 51.6, top: 43.9, width: 6.5, height: 4.3, lines: ['Cabaña 3'] },
-  { id: 'cabana_2', left: 25.2, top: 53.9, width: 8.8, height: 4.8, lines: ['Cabaña 2 piso 2'] },
-  { id: 'cabana_1', left: 25.2, top: 60.7, width: 8.8, height: 4.8, lines: ['Cabaña 1 piso 1'] },
+  { id: 'cabana_6', left: 48.6, top: 11.0, width: 9.6, height: 5.2, lines: ['Cabaña 6', 'Piso 2'] },
+  { id: 'cabana_5', left: 48.6, top: 19.4, width: 9.6, height: 5.2, lines: ['Cabaña 5', 'Piso 1'] },
+  { id: 'cabana_8', left: 22.8, top: 27.5, width: 8.2, height: 4.8, lines: ['Cabaña 8'] },
+  { id: 'cabana_4', left: 51.6, top: 31.8, width: 8.4, height: 4.8, lines: ['Cabaña 4'] },
+  { id: 'cabana_7', left: 22.8, top: 38.0, width: 8.2, height: 4.8, lines: ['Cabaña 7'] },
+  { id: 'cabana_3', left: 51.6, top: 43.9, width: 8.4, height: 4.8, lines: ['Cabaña 3'] },
+  { id: 'cabana_2', left: 27.2, top: 53.0, width: 9.6, height: 5.2, lines: ['Cabaña 2', 'Piso 2'] },
+  { id: 'cabana_1', left: 27.2, top: 61.4, width: 9.6, height: 5.2, lines: ['Cabaña 1', 'Piso 1'] },
+];
+
+const STATIC_LABEL_POINTS: StaticLabelPoint[] = [
+  { id: 'kiosco', left: 22.0, top: 69.5, width: 7.2, height: 4.8, lines: ['Kiosco'] },
+  { id: 'cocina_comedor', left: 52.0, top: 57.6, width: 12.2, height: 5.4, lines: ['Cocina', 'Comedor'] },
 ];
 
 function slotCabin(cabins: CabinMapCabin[], slot: MapSlot) {
@@ -80,6 +89,7 @@ export function CabinMap({
   slotStates,
   onSelectSlot,
   className,
+  compactLabels = false,
   linkMarkers = false,
 }: {
   cabins?: CabinMapCabin[];
@@ -89,6 +99,7 @@ export function CabinMap({
   slotStates?: Partial<Record<MapSlot, CabinMapSlotState>>;
   onSelectSlot?: (slot: MapSlot) => void;
   className?: string;
+  compactLabels?: boolean;
   linkMarkers?: boolean;
 }) {
   const highlighted = activeSlot ?? selectedSlot ?? null;
@@ -97,7 +108,7 @@ export function CabinMap({
   return (
     <figure
       className={cn(
-        'relative overflow-hidden rounded-lg border bg-[#eef0c8] shadow-sm',
+        'relative min-w-[320px] overflow-hidden rounded-lg border bg-[#eef0c8] shadow-sm',
         className,
       )}
     >
@@ -114,16 +125,70 @@ export function CabinMap({
           />
 
           <div className="absolute inset-0" aria-label="Puntos interactivos del mapa">
+            {STATIC_LABEL_POINTS.map((labelPoint) => {
+              const minWidth = labelPoint.lines.length > 1 ? (compactLabels ? '64px' : '76px') : '52px';
+              const maxWidth = labelPoint.lines.length > 1 ? '96px' : '62px';
+              const minHeight = labelPoint.lines.length > 1 ? (compactLabels ? '26px' : '30px') : '22px';
+              const maxHeight = labelPoint.lines.length > 1 ? '30px' : '24px';
+              const style: CSSProperties = {
+                left: `${labelPoint.left}%`,
+                top: `${labelPoint.top}%`,
+                minHeight: compactLabels
+                  ? `clamp(${minHeight}, ${labelPoint.height * 0.64}%, ${maxHeight})`
+                  : `max(${labelPoint.height}%, ${minHeight})`,
+                width: compactLabels
+                  ? `clamp(${minWidth}, ${labelPoint.width * 0.64}%, ${maxWidth})`
+                  : `max(${labelPoint.width}%, ${minWidth})`,
+              };
+
+              return (
+                <div
+                  key={labelPoint.id}
+                  aria-label={labelPoint.lines.join(' ')}
+                  className={cn(
+                    'pointer-events-none absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center overflow-hidden rounded-[7px] border border-stone-500/50 bg-amber-50/95 text-center font-semibold leading-[1.05] text-stone-950 shadow-sm',
+                    compactLabels
+                      ? 'px-0.5 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]'
+                      : 'px-1 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]',
+                  )}
+                  role="img"
+                  style={style}
+                >
+                  <span className="flex w-full flex-col items-center justify-center overflow-hidden px-0.5">
+                    {labelPoint.lines.map((line, index) => (
+                      <span
+                        key={line}
+                        className={cn(
+                          'block max-w-full truncate whitespace-nowrap leading-[1.05]',
+                          index > 0 ? 'text-[0.82em] font-medium' : '',
+                        )}
+                      >
+                        {line}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              );
+            })}
+
             {SLOT_POINTS.map((slot) => {
               const cabin = slotCabin(cabins, slot.id);
               const slotState = slotStates?.[slot.id];
               const label = cabin?.name ?? MAP_SLOT_LABELS[slot.id];
               const isActive = highlighted === slot.id || selectedSlots?.includes(slot.id) === true;
+              const minWidth = slot.lines.length > 1 ? (compactLabels ? '52px' : '58px') : '54px';
+              const maxWidth = slot.lines.length > 1 ? '78px' : '72px';
+              const minHeight = slot.lines.length > 1 ? (compactLabels ? '24px' : '28px') : '22px';
+              const maxHeight = slot.lines.length > 1 ? '28px' : '24px';
               const style: CSSProperties = {
                 left: `${slot.left}%`,
                 top: `${slot.top}%`,
-                width: `${slot.width}%`,
-                height: `${slot.height}%`,
+                minHeight: compactLabels
+                  ? `clamp(${minHeight}, ${slot.height * 0.66}%, ${maxHeight})`
+                  : `max(${slot.height}%, ${minHeight})`,
+                width: compactLabels
+                  ? `clamp(${minWidth}, ${slot.width * 0.58}%, ${maxWidth})`
+                  : `max(${slot.width}%, ${minWidth})`,
               };
               const markerStyle: CSSProperties = {
                 ...style,
@@ -132,7 +197,10 @@ export function CabinMap({
                   : {}),
               };
               const targetClassName = cn(
-                'absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center overflow-hidden rounded-[7px] border bg-white/95 px-1 text-center text-[clamp(6.5px,1.8vw,12px)] font-semibold leading-[1.05] text-neutral-950 shadow-sm outline-none transition sm:text-[clamp(7px,0.78vw,13px)]',
+                'absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center overflow-hidden rounded-[7px] border bg-white/95 text-center font-semibold leading-[1.05] text-neutral-950 shadow-sm outline-none transition',
+                compactLabels
+                  ? 'px-0.5 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]'
+                  : 'px-1 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]',
                 tagTone(cabin),
                 hasActions
                   ? 'cursor-pointer hover:border-cyan-700 hover:bg-white hover:shadow-md focus-visible:border-cyan-700 focus-visible:ring-4 focus-visible:ring-cyan-200 focus-visible:ring-offset-2'
@@ -142,19 +210,26 @@ export function CabinMap({
                   : '',
               );
               const content = (
-                <span className="flex h-full w-full flex-col items-center justify-center overflow-hidden">
+                <span className="flex w-full flex-col items-center justify-center overflow-hidden px-0.5">
                   {slotState ? (
                     <span
                       className={cn(
-                        'absolute right-0.5 top-0.5 h-3 w-3 rounded-full border-2 border-white shadow-sm sm:h-3.5 sm:w-3.5',
+                        'absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm sm:h-3 sm:w-3',
                         stateBadgeTone(slotState.tone),
                       )}
                       title={slotState.label}
                       aria-hidden="true"
                     />
                   ) : null}
-                  {slot.lines.map((line) => (
-                    <span key={line} className="block max-w-full whitespace-normal [text-wrap:balance]">
+                  {slot.lines.map((line, index) => (
+                    <span
+                      key={line}
+                      className={cn(
+                        'block max-w-full truncate whitespace-nowrap',
+                        index > 0 ? 'text-[0.82em] font-medium leading-[1.05]' : 'leading-[1.05]',
+                        slotState ? 'max-w-[calc(100%-0.6rem)]' : '',
+                      )}
+                    >
                       {line}
                     </span>
                   ))}

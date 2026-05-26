@@ -15,7 +15,6 @@ services:
       - /var/www/html/vendor
     depends_on:
       - mysql
-      - redis
     environment:
       APP_NAME: "Cabañas Playa Terco"
       APP_ENV: local
@@ -27,13 +26,11 @@ services:
       DB_DATABASE: cabanas_terco
       DB_USERNAME: cabanas_user
       DB_PASSWORD: secret
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      QUEUE_CONNECTION: redis
-      CACHE_DRIVER: redis
-      SESSION_DRIVER: redis
-      FILESYSTEM_DISK: s3
-      UPLOADS_DISK: s3
+      QUEUE_CONNECTION: sync
+      CACHE_STORE: database
+      SESSION_DRIVER: database
+      FILESYSTEM_DISK: public
+      UPLOADS_DISK: public
       AWS_ACCESS_KEY_ID: ${DO_SPACES_KEY:-}
       AWS_SECRET_ACCESS_KEY: ${DO_SPACES_SECRET:-}
       AWS_DEFAULT_REGION: ${DO_SPACES_REGION:-nyc3}
@@ -89,18 +86,6 @@ services:
     networks:
       - cabanas-network
 
-  # Redis (Cache + Queues)
-  redis:
-    image: redis:7-alpine
-    container_name: cabanas-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - cabanas-network
-
   # Mailhog (Email testing local)
   mailhog:
     image: mailhog/mailhog:latest
@@ -113,8 +98,6 @@ services:
 
 volumes:
   mysql_data:
-    driver: local
-  redis_data:
     driver: local
 
 networks:

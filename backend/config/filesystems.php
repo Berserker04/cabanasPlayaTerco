@@ -15,7 +15,7 @@ return [
 
     'default' => env('FILESYSTEM_DISK', 'local'),
 
-    'uploads_disk' => env('UPLOADS_DISK', 's3'),
+    'uploads_disk' => env('UPLOADS_DISK', 'public'),
 
     /*
     |--------------------------------------------------------------------------

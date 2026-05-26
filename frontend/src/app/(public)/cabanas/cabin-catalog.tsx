@@ -165,7 +165,7 @@ export function CabinCatalog({
           </div>
 
           <div className="mt-8 space-y-6">
-            <CabinMap cabins={cabins} selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} />
+            <CabinMap cabins={cabins} selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} compactLabels />
             {selectedSlot ? (
               <div className="flex items-center justify-between gap-3 rounded-lg border bg-stone-50 px-4 py-3 text-sm">
                 <span className="font-medium text-neutral-800">{MAP_SLOT_LABELS[selectedSlot]}</span>
