@@ -128,7 +128,7 @@ export function AvailabilitySearch() {
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-cyan-50">
                 Revisa el mapa por fecha. La reserva final siempre se confirma por contacto directo
-                con el administrador.
+                con el administrador y puede cambiar si hay cotizaciones en proceso.
               </p>
             </div>
             <form onSubmit={handleSubmit} className="rounded-lg bg-white p-4 text-neutral-950 shadow-xl">
@@ -213,7 +213,7 @@ export function AvailabilitySearch() {
                 Elige tus fechas para ver el mapa
               </h2>
               <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Verde indica disponible, rojo cotizada o reservada, y naranja no disponible por
+                Verde indica disponible, rojo no disponible por reserva en proceso, y naranja no disponible por
                 mantenimiento o bloqueo manual.
               </p>
             </div>
@@ -263,7 +263,7 @@ export function AvailabilitySearch() {
                     No vemos cabañas libres para esas fechas
                   </h2>
                   <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                    La ultima decision es directa del administrador. Escribenos igualmente para
+                    La disponibilidad es orientativa y la confirmacion final es directa del administrador. Escribenos para
                     revisar cambios recientes, ajustes de grupo u otras fechas.
                   </p>
                   <Button asChild className="mt-6">
@@ -375,7 +375,7 @@ function Legend() {
   return (
     <div className="mt-5 grid gap-2 text-xs text-neutral-700">
       <LegendItem className="bg-emerald-500" label="Disponible" />
-      <LegendItem className="bg-red-500" label="Cotizada o reservada" />
+      <LegendItem className="bg-red-500" label="Reserva en proceso o confirmada" />
       <LegendItem className="bg-amber-500" label="Mantenimiento o bloqueo" />
     </div>
   );

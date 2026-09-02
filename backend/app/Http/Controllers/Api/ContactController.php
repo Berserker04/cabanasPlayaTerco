@@ -11,6 +11,7 @@ use App\Enums\LeadSource;
 use App\Enums\LeadStatus;
 use App\Models\Cabin;
 use App\Models\Lead;
+use App\Services\PushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -18,6 +19,10 @@ use Throwable;
 
 class ContactController extends Controller
 {
+    public function __construct(
+        private readonly PushNotificationService $pushNotificationService
+    ) {}
+
     public function store(ContactRequest $request): JsonResponse
     {
         $cabin = $request->filled('cabin_id')
@@ -39,6 +44,7 @@ class ContactController extends Controller
         ]);
 
         $lead->load(['cabin', 'cabinType']);
+        $this->pushNotificationService->notifyStaffOfNewLead($lead);
 
         $emailSent = true;
         $message = 'Tu mensaje ha sido enviado. Te contactaremos pronto.';

@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('payments_income', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('guest_group_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('guest_group_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('reservation_id')->nullable()->constrained()->nullOnDelete();
             $table->decimal('amount', 12, 2);
             $table->string('method');

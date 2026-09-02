@@ -58,6 +58,7 @@ class UpdateCabinRequest extends FormRequest
             ],
             'is_active'         => ['boolean'],
             'sort_order'        => ['integer', 'min:0'],
+            'amenity_ids'       => ['missing'],
         ];
     }
 

@@ -18,6 +18,9 @@ Route::prefix('auth')->group(function () {
     Route::post('/login', [Api\AuthController::class, 'login'])
         ->middleware('throttle:5,1');
 
+    Route::post('/mobile/login', [Api\MobileAuthController::class, 'login'])
+        ->middleware('throttle:5,1');
+
     Route::post('/forgot-password', [Api\AuthController::class, 'forgotPassword']);
     Route::post('/reset-password', [Api\AuthController::class, 'resetPassword']);
 
@@ -28,6 +31,7 @@ Route::prefix('auth')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [Api\AuthController::class, 'logout']);
+        Route::post('/mobile/logout', [Api\MobileAuthController::class, 'logout']);
         Route::get('/user', [Api\AuthController::class, 'user']);
         Route::put('/profile', [Api\AuthController::class, 'updateProfile']);
         Route::put('/password', [Api\AuthController::class, 'updatePassword']);
@@ -37,6 +41,7 @@ Route::prefix('auth')->group(function () {
 // ── Cabins ───────────────────────────────────────────────────
 Route::get('/cabins', [Api\CabinController::class, 'index']);
 Route::get('/cabins/{cabin:slug}', [Api\CabinController::class, 'show']);
+Route::get('/amenities', [Api\AmenityController::class, 'index']);
 Route::get('/lodging-tariffs', [Api\LodgingTariffController::class, 'index']);
 
 // ── Gallery ──────────────────────────────────────────────────
@@ -87,54 +92,61 @@ Route::post('/contact', [Api\ContactController::class, 'store'])
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')
-    ->middleware(['auth:sanctum', 'admin'])
+    ->middleware(['auth:sanctum', 'staff'])
     ->group(function () {
 
         // ── Dashboard ────────────────────────────────────────
         Route::get('/dashboard/stats', [Admin\DashboardController::class, 'stats']);
 
         // ── Cabin Types ──────────────────────────────────────
-        Route::apiResource('cabin-types', Admin\CabinTypeController::class);
+        Route::apiResource('cabin-types', Admin\CabinTypeController::class)
+            ->middleware('admin');
 
         // ── Cabins ───────────────────────────────────────────
-        Route::apiResource('cabins', Admin\CabinController::class);
-        Route::post('/cabins/{cabin}/cover', [Admin\CabinController::class, 'uploadCover']);
+        Route::apiResource('cabins', Admin\CabinController::class)
+            ->middleware('admin');
+        Route::post('/cabins/{cabin}/cover', [Admin\CabinController::class, 'uploadCover'])
+            ->middleware('admin');
 
         // ── Lodging Tariffs ──────────────────────────────────
         Route::apiResource('lodging-tariffs', Admin\LodgingTariffController::class)
             ->except(['show'])
-            ->parameter('lodging-tariffs', 'lodgingTariff');
+            ->parameter('lodging-tariffs', 'lodgingTariff')
+            ->middleware('admin');
 
         // ── Cabin Media ──────────────────────────────────────
-        Route::post('/cabin-media', [Admin\CabinMediaController::class, 'store']);
-        Route::put('/cabin-media/{cabinMedia}', [Admin\CabinMediaController::class, 'update']);
-        Route::delete('/cabin-media/{cabinMedia}', [Admin\CabinMediaController::class, 'destroy']);
+        Route::post('/cabin-media', [Admin\CabinMediaController::class, 'store'])->middleware('admin');
+        Route::put('/cabin-media/{cabinMedia}', [Admin\CabinMediaController::class, 'update'])->middleware('admin');
+        Route::delete('/cabin-media/{cabinMedia}', [Admin\CabinMediaController::class, 'destroy'])->middleware('admin');
 
         // ── Amenities ────────────────────────────────────────
-        Route::get('/amenities', [Admin\AmenityController::class, 'index']);
-        Route::post('/amenities', [Admin\AmenityController::class, 'store']);
-        Route::put('/amenities/{amenity}', [Admin\AmenityController::class, 'update']);
-        Route::delete('/amenities/{amenity}', [Admin\AmenityController::class, 'destroy']);
+        Route::get('/amenities', [Admin\AmenityController::class, 'index'])->middleware('admin');
+        Route::post('/amenities', [Admin\AmenityController::class, 'store'])->middleware('admin');
+        Route::put('/amenities/{amenity}', [Admin\AmenityController::class, 'update'])->middleware('admin');
+        Route::delete('/amenities/{amenity}', [Admin\AmenityController::class, 'destroy'])->middleware('admin');
 
         // ── Availability & Reservations ──────────────────────
+        Route::get('/availability/calendar', [Admin\AvailabilityController::class, 'calendar']);
+        Route::get('/availability/planner', [Admin\AvailabilityController::class, 'planner']);
         Route::get('/availability', Admin\AvailabilityController::class);
         Route::apiResource('availability-blocks', Admin\AvailabilityBlockController::class)
             ->parameter('availability-blocks', 'availability_block');
         Route::get('/reservations/occupancy', [Admin\ReservationController::class, 'occupancy']);
-        Route::apiResource('reservations', Admin\ReservationController::class)->except(['show']);
+        Route::apiResource('reservations', Admin\ReservationController::class);
 
         // ── Reviews ──────────────────────────────────────────
-        Route::get('/reviews', [Admin\ReviewController::class, 'index']);
-        Route::put('/reviews/{review}', [Admin\ReviewController::class, 'update']);
-        Route::delete('/reviews/{review}', [Admin\ReviewController::class, 'destroy']);
+        Route::get('/reviews', [Admin\ReviewController::class, 'index'])->middleware('admin');
+        Route::put('/reviews/{review}', [Admin\ReviewController::class, 'update'])->middleware('admin');
+        Route::delete('/reviews/{review}', [Admin\ReviewController::class, 'destroy'])->middleware('admin');
 
         // ── Posts ────────────────────────────────────────────
-        Route::apiResource('posts', Admin\PostController::class);
+        Route::apiResource('posts', Admin\PostController::class)
+            ->middleware('admin');
 
         // ── Comments ─────────────────────────────────────────
-        Route::get('/comments', [Admin\CommentController::class, 'index']);
-        Route::put('/comments/{comment}', [Admin\CommentController::class, 'update']);
-        Route::delete('/comments/{comment}', [Admin\CommentController::class, 'destroy']);
+        Route::get('/comments', [Admin\CommentController::class, 'index'])->middleware('admin');
+        Route::put('/comments/{comment}', [Admin\CommentController::class, 'update'])->middleware('admin');
+        Route::delete('/comments/{comment}', [Admin\CommentController::class, 'destroy'])->middleware('admin');
 
         // ── Guest Groups ─────────────────────────────────────
         Route::get('/guest-groups/export', [Admin\GuestGroupController::class, 'export']);
@@ -150,24 +162,32 @@ Route::prefix('admin')
         Route::get('/payments/summary', [Admin\PaymentController::class, 'summary']);
         Route::apiResource('payments', Admin\PaymentController::class)->except(['show', 'destroy']);
 
+        // ── Simple Cashbox ───────────────────────────────────
+        Route::get('/finance/summary', [Admin\FinanceController::class, 'summary']);
+        Route::get('/expenses/summary', [Admin\ExpenseController::class, 'summary']);
+        Route::apiResource('expenses', Admin\ExpenseController::class);
+
         // ── Staff ────────────────────────────────────────────
-        Route::get('/staff-payments/summary', [Admin\StaffController::class, 'paymentsSummary']);
-        Route::apiResource('staff', Admin\StaffController::class);
-        Route::post('/staff/{staff}/payments', [Admin\StaffController::class, 'storePayment']);
-        Route::get('/staff/{staff}/payments', [Admin\StaffController::class, 'payments']);
+        Route::get('/staff/options', [Admin\StaffController::class, 'options']);
+        Route::get('/staff-payments/summary', [Admin\StaffController::class, 'paymentsSummary'])->middleware('admin');
+        Route::apiResource('staff', Admin\StaffController::class)->middleware('admin');
+        Route::post('/staff/{staff}/payments', [Admin\StaffController::class, 'storePayment'])->middleware('admin');
+        Route::get('/staff/{staff}/payments', [Admin\StaffController::class, 'payments'])->middleware('admin');
 
         // ── Leads ────────────────────────────────────────────
         Route::get('/leads', [Admin\LeadController::class, 'index']);
         Route::put('/leads/{lead}', [Admin\LeadController::class, 'update']);
 
         // ── Users ────────────────────────────────────────────
-        Route::get('/users', [Admin\UserController::class, 'index']);
-        Route::put('/users/{user}', [Admin\UserController::class, 'update']);
+        Route::get('/users', [Admin\UserController::class, 'index'])->middleware('admin');
+        Route::put('/users/{user}', [Admin\UserController::class, 'update'])->middleware('admin');
 
         // ── Gallery ──────────────────────────────────────────
         Route::apiResource('gallery-albums', Admin\GalleryAlbumController::class)
-            ->parameter('gallery-albums', 'gallery_album');
+            ->parameter('gallery-albums', 'gallery_album')
+            ->middleware('admin');
 
         Route::apiResource('gallery', Admin\GalleryController::class)
-            ->parameter('gallery', 'galleryItem');
+            ->parameter('gallery', 'galleryItem')
+            ->middleware('admin');
     });

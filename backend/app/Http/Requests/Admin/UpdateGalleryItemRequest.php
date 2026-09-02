@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Enums\GalleryCategory;
+use App\Enums\MapPoint;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -17,6 +18,7 @@ class UpdateGalleryItemRequest extends FormRequest
     {
         return [
             'gallery_album_id' => ['sometimes', 'nullable', 'integer', Rule::exists('gallery_albums', 'id')],
+            'map_point'        => ['sometimes', 'nullable', Rule::enum(MapPoint::class)],
             'alt'              => ['nullable', 'string', 'max:255'],
             'caption'          => ['nullable', 'string', 'max:500'],
             'category'         => ['sometimes', Rule::enum(GalleryCategory::class)],

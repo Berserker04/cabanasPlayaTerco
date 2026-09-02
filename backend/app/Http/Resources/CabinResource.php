@@ -32,10 +32,6 @@ class CabinResource extends JsonResource
             'is_active'       => $this->is_active,
             'sort_order'      => $this->sort_order,
             'type'            => new CabinTypeResource($this->whenLoaded('type')),
-            'amenities'       => $this->when(
-                $this->relationLoaded('type') && $this->type?->relationLoaded('amenities'),
-                fn () => AmenityResource::collection($this->type->amenities),
-            ),
             'media'           => CabinMediaResource::collection($this->whenLoaded('media')),
             'created_at'      => $this->created_at,
             'updated_at'      => $this->updated_at,

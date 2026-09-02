@@ -10,16 +10,18 @@ enum ReservationStatus: string
     case CheckedOut = 'checked_out';
     case Cancelled = 'cancelled';
     case NoShow = 'no_show';
+    case Expired = 'expired';
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::Pending => 'Pendiente',
             self::Confirmed => 'Confirmada',
             self::CheckedIn => 'Registrado',
             self::CheckedOut => 'Finalizada',
             self::Cancelled => 'Cancelada',
-            self::NoShow => 'No se presentó',
+            self::NoShow => 'No se presento',
+            self::Expired => 'Cotizacion vencida',
         };
     }
 }

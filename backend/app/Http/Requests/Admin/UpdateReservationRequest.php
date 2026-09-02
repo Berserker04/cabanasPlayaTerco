@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Enums\ReservationStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateReservationRequest extends FormRequest
 {
@@ -29,14 +30,16 @@ class UpdateReservationRequest extends FormRequest
             'cabin_ids'     => ['sometimes', 'array', 'min:1'],
             'cabin_ids.*'   => ['integer', 'distinct', 'exists:cabins,id'],
             'check_in'      => ['sometimes', 'date'],
-            'check_out'     => ['sometimes', 'date', 'after:check_in'],
+            'check_out'     => ['sometimes', 'date'],
             'guests_count'  => ['sometimes', 'integer', 'min:1'],
             'leader_name'   => ['nullable', 'string', 'max:255'],
             'display_color' => ['nullable', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'expires_at'    => ['nullable', 'date'],
             'status'        => ['sometimes', Rule::enum(ReservationStatus::class)],
             'source'        => ['nullable', 'string', 'max:100'],
             'notes'         => ['nullable', 'string'],
             'total_price'   => ['nullable', 'numeric', 'min:0'],
+            'assigned_to'   => ['nullable', 'exists:staff,id'],
         ];
     }
 
@@ -46,5 +49,23 @@ class UpdateReservationRequest extends FormRequest
             'check_out.after'     => 'La fecha de salida debe ser posterior a la llegada.',
             'display_color.regex' => 'El color debe estar en formato hexadecimal, por ejemplo #0ea5e9.',
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $reservation = $this->route('reservation');
+
+            if (! $reservation) {
+                return;
+            }
+
+            $checkIn = $this->input('check_in', $reservation->check_in->format('Y-m-d'));
+            $checkOut = $this->input('check_out', $reservation->check_out->format('Y-m-d'));
+
+            if ($checkIn && $checkOut && $checkOut <= $checkIn) {
+                $validator->errors()->add('check_out', 'La fecha de salida debe ser posterior a la llegada.');
+            }
+        });
     }
 }

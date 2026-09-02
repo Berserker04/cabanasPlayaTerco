@@ -23,6 +23,7 @@ class GalleryController extends Controller
                     ->orWhereHas('album', fn ($albumQuery) => $albumQuery->active());
             })
             ->when($request->filled('category'), fn ($query) => $query->where('category', $request->category))
+            ->when($request->filled('map_point'), fn ($query) => $query->where('map_point', $request->map_point))
             ->when($request->filled('type'), fn ($query) => $query->where('type', $request->type))
             ->when($request->filled('featured'), fn ($query) => $query->where('is_featured', $request->boolean('featured')))
             ->when($album, function ($query, $album) {

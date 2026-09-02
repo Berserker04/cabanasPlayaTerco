@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\ReservationStatus;
+use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreReservationRequest;
 use App\Http\Requests\Admin\UpdateReservationRequest;
 use App\Http\Resources\ReservationResource;
+use App\Models\Cabin;
 use App\Models\Reservation;
 use App\Services\AvailabilityService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +26,13 @@ class ReservationController extends Controller
     public function index(Request $request): JsonResponse
     {
         $reservations = Reservation::query()
-            ->with(['cabin.type', 'cabins.type', 'user', 'guestGroup'])
+            ->with(['cabin.type', 'cabins.type', 'user', 'guestGroup', 'assignedStaff'])
+            ->withSum([
+                'payments as total_paid' => fn ($query) => $query->whereIn('status', [
+                    PaymentStatus::Completed->value,
+                    PaymentStatus::Partial->value,
+                ]),
+            ], 'amount')
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
             ->when($request->cabin_id, function ($q, $id) {
                 $q->where('cabin_id', $id)
@@ -49,19 +58,20 @@ class ReservationController extends Controller
         $data = $request->validated();
         $cabinIds = $this->normalizeCabinIds($data);
 
-        $this->ensureCabinsAvailable(
-            checkIn: $data['check_in'],
-            checkOut: $data['check_out'],
-            cabinIds: $cabinIds,
-        );
-
         $reservation = DB::transaction(function () use ($data, $cabinIds, $request): Reservation {
-            unset($data['cabin_ids']);
-            $data['cabin_id'] = $cabinIds[0];
-            $data['status'] ??= ReservationStatus::Pending->value;
-            $data['created_by'] = $request->user()->id;
+            $this->lockCabins($cabinIds);
+            $this->ensureCabinsAvailable(
+                checkIn: $data['check_in'],
+                checkOut: $data['check_out'],
+                cabinIds: $cabinIds,
+            );
 
-            $reservation = Reservation::create($data);
+            unset($data['cabin_ids']);
+            $payload = $this->applyLifecycleDefaults($data);
+            $payload['cabin_id'] = $cabinIds[0];
+            $payload['created_by'] = $request->user()->id;
+
+            $reservation = Reservation::create($payload);
             $reservation->cabins()->sync($cabinIds);
 
             return $reservation;
@@ -73,37 +83,56 @@ class ReservationController extends Controller
         ], 201);
     }
 
+    public function show(Reservation $reservation): JsonResponse
+    {
+        $reservation->load(['cabin.type', 'cabins.type', 'user', 'guestGroup', 'assignedStaff', 'payments.recorder']);
+        $reservation->loadSum([
+            'payments as total_paid' => fn ($query) => $query->whereIn('status', [
+                PaymentStatus::Completed->value,
+                PaymentStatus::Partial->value,
+            ]),
+        ], 'amount');
+
+        return response()->json([
+            'data' => new ReservationResource($reservation),
+        ]);
+    }
+
     public function update(UpdateReservationRequest $request, Reservation $reservation): JsonResponse
     {
         $data = $request->validated();
-        $cabinIds = $this->normalizeCabinIds($data, $reservation);
-        $checkIn = $data['check_in'] ?? $reservation->check_in->format('Y-m-d');
-        $checkOut = $data['check_out'] ?? $reservation->check_out->format('Y-m-d');
 
-        $this->ensureCabinsAvailable(
-            checkIn: $checkIn,
-            checkOut: $checkOut,
-            cabinIds: $cabinIds,
-            ignoreReservationId: $reservation->id,
-        );
+        DB::transaction(function () use ($data, $reservation): void {
+            $reservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
+            $cabinIds = $this->normalizeCabinIds($data, $reservation);
+            $checkIn = $data['check_in'] ?? $reservation->check_in->format('Y-m-d');
+            $checkOut = $data['check_out'] ?? $reservation->check_out->format('Y-m-d');
 
-        DB::transaction(function () use ($data, $cabinIds, $reservation): void {
+            $this->lockCabins($cabinIds);
+            $this->ensureCabinsAvailable(
+                checkIn: $checkIn,
+                checkOut: $checkOut,
+                cabinIds: $cabinIds,
+                ignoreReservationId: $reservation->id,
+            );
+
             unset($data['cabin_ids']);
-            $data['cabin_id'] = $cabinIds[0];
+            $payload = $this->applyLifecycleDefaults($data, $reservation);
+            $payload['cabin_id'] = $cabinIds[0];
 
-            $reservation->update($data);
+            $reservation->update($payload);
             $reservation->cabins()->sync($cabinIds);
         });
 
         return response()->json([
-            'data'    => new ReservationResource($reservation->fresh()->load('cabin.type', 'cabins.type', 'user', 'guestGroup')),
+            'data'    => new ReservationResource($reservation->fresh()->load('cabin.type', 'cabins.type', 'user', 'guestGroup', 'assignedStaff')),
             'message' => 'Reserva actualizada.',
         ]);
     }
 
     public function destroy(Reservation $reservation): JsonResponse
     {
-        $reservation->update(['status' => \App\Enums\ReservationStatus::Cancelled]);
+        $reservation->update(['status' => ReservationStatus::Cancelled]);
 
         return response()->json([
             'message' => 'Reserva cancelada.',
@@ -121,8 +150,8 @@ class ReservationController extends Controller
         $end = $start->copy()->endOfMonth();
 
         $reservations = Reservation::query()
-            ->with(['cabin.type', 'cabins.type'])
-            ->active()
+            ->with(['cabin.type', 'cabins.type', 'assignedStaff'])
+            ->blockingAvailability()
             ->where('check_in', '<=', $end)
             ->where('check_out', '>', $start)
             ->get();
@@ -185,5 +214,47 @@ class ReservationController extends Controller
         throw ValidationException::withMessages([
             'cabin_ids' => ['Una o mas cabanas seleccionadas no estan disponibles para esas fechas.'],
         ]);
+    }
+
+    private function lockCabins(array $cabinIds): void
+    {
+        Cabin::query()
+            ->whereIn('id', $cabinIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->pluck('id');
+    }
+
+    private function applyLifecycleDefaults(array $data, ?Reservation $reservation = null): array
+    {
+        $status = ReservationStatus::from(
+            $data['status'] ?? $reservation?->status->value ?? ReservationStatus::Pending->value
+        );
+        $data['status'] = $status->value;
+
+        if ($status === ReservationStatus::Pending && ! array_key_exists('expires_at', $data)) {
+            $shouldCreateDefaultExpiry = $reservation === null
+                || $reservation->status !== ReservationStatus::Pending
+                || $reservation->expires_at === null
+                || $reservation->expires_at->isPast();
+
+            if ($shouldCreateDefaultExpiry) {
+                $data['expires_at'] = now()->addHours(48);
+            }
+        }
+
+        if ($status === ReservationStatus::Expired && ! array_key_exists('expires_at', $data)) {
+            $data['expires_at'] = $reservation?->expires_at ?? now();
+        }
+
+        if (
+            in_array($status, [ReservationStatus::Confirmed, ReservationStatus::CheckedIn], true)
+            && $reservation?->confirmed_at === null
+            && ! array_key_exists('confirmed_at', $data)
+        ) {
+            $data['confirmed_at'] = Carbon::now();
+        }
+
+        return $data;
     }
 }

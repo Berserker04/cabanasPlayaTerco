@@ -34,10 +34,12 @@ class StoreReservationRequest extends FormRequest
             'guests_count'  => ['required', 'integer', 'min:1'],
             'leader_name'   => ['nullable', 'string', 'max:255'],
             'display_color' => ['nullable', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'expires_at'    => ['nullable', 'date'],
             'status'        => ['sometimes', Rule::enum(ReservationStatus::class)],
             'source'        => ['nullable', 'string', 'max:100'],
             'notes'         => ['nullable', 'string'],
             'total_price'   => ['nullable', 'numeric', 'min:0'],
+            'assigned_to'   => ['nullable', 'exists:staff,id'],
         ];
     }
 

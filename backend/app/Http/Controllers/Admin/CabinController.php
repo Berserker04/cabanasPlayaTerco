@@ -23,7 +23,7 @@ class CabinController extends Controller
     {
         $cabins = Cabin::query()
             ->with([
-                'type.amenities',
+                'type',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
             ->when($request->filled('search'), function ($query) use ($request) {
@@ -166,7 +166,7 @@ class CabinController extends Controller
     private function loadForResponse(Cabin $cabin): Cabin
     {
         return $cabin->load([
-            'type.amenities',
+            'type',
             'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
         ]);
     }

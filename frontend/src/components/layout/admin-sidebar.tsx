@@ -54,15 +54,15 @@ export function AdminSidebar() {
       <div className="flex h-16 items-center gap-2 border-b px-4">
         <Link href="/admin" className="flex min-w-0 items-center gap-2 font-bold">
           <NextImage
-            src="/assets/terco_logo.png"
+            src="/assets/terco_logo_nav.png"
             alt=""
-            width={72}
-            height={72}
+            width={500}
+            height={328}
             quality={100}
             priority
             unoptimized
-            sizes="36px"
-            className="h-9 w-9 shrink-0 object-contain"
+            sizes="55px"
+            className="h-9 w-[55px] shrink-0 object-contain"
           />
           <span className="min-w-0 leading-tight">
             <span className="block truncate text-sm">Cabañas Playa Terco</span>

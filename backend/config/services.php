@@ -32,6 +32,10 @@ return [
         'url' => env('FRONTEND_URL', 'http://localhost:3000'),
     ],
 
+    'firebase' => [
+        'server_key' => env('FCM_SERVER_KEY'),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

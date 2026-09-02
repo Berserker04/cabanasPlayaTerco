@@ -17,9 +17,13 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   const params = await searchParams;
 
   return (
-    <RegisterForm
-      nextPath={sanitizeLocalPath(firstStringParam(params?.next))}
-      oauthError={firstStringParam(params?.error)}
-    />
+    <main className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
+      <div className="w-full max-w-md">
+        <RegisterForm
+          nextPath={sanitizeLocalPath(firstStringParam(params?.next))}
+          oauthError={firstStringParam(params?.error)}
+        />
+      </div>
+    </main>
   );
 }

@@ -4,7 +4,9 @@ import Image from 'next/image';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import { MAP_SLOT_LABELS } from '@/lib/cabin-utils';
+import { MAP_FEATURE_LABELS } from '@/lib/map-features';
 import type { AvailabilityTone, Cabin, MapSlot } from '@/types/cabin';
+import type { MapFeatureKey } from '@/types/map-feature';
 
 type CabinMapCabin = Pick<Cabin, 'id' | 'name' | 'slug' | 'map_slot' | 'status' | 'is_active'>;
 
@@ -26,7 +28,7 @@ type SlotPoint = {
 };
 
 type StaticLabelPoint = Omit<SlotPoint, 'id'> & {
-  id: string;
+  id: MapFeatureKey;
 };
 
 const SLOT_POINTS: SlotPoint[] = [
@@ -36,8 +38,8 @@ const SLOT_POINTS: SlotPoint[] = [
   { id: 'cabana_4', left: 51.6, top: 31.8, width: 8.4, height: 4.8, lines: ['Cabaña 4'] },
   { id: 'cabana_7', left: 22.8, top: 38.0, width: 8.2, height: 4.8, lines: ['Cabaña 7'] },
   { id: 'cabana_3', left: 51.6, top: 43.9, width: 8.4, height: 4.8, lines: ['Cabaña 3'] },
-  { id: 'cabana_2', left: 27.2, top: 53.0, width: 9.6, height: 5.2, lines: ['Cabaña 2', 'Piso 2'] },
-  { id: 'cabana_1', left: 27.2, top: 61.4, width: 9.6, height: 5.2, lines: ['Cabaña 1', 'Piso 1'] },
+  { id: 'cabana_2', left: 25.1, top: 53.0, width: 9.6, height: 5.2, lines: ['Cabaña 2', 'Piso 2'] },
+  { id: 'cabana_1', left: 25.1, top: 61.4, width: 9.6, height: 5.2, lines: ['Cabaña 1', 'Piso 1'] },
 ];
 
 const STATIC_LABEL_POINTS: StaticLabelPoint[] = [
@@ -85,9 +87,11 @@ export function CabinMap({
   cabins = [],
   activeSlot,
   selectedSlot,
+  selectedFeature,
   selectedSlots,
   slotStates,
   onSelectSlot,
+  onSelectFeature,
   className,
   compactLabels = false,
   linkMarkers = false,
@@ -95,9 +99,11 @@ export function CabinMap({
   cabins?: CabinMapCabin[];
   activeSlot?: MapSlot | null;
   selectedSlot?: MapSlot | null;
+  selectedFeature?: MapFeatureKey | null;
   selectedSlots?: MapSlot[];
   slotStates?: Partial<Record<MapSlot, CabinMapSlotState>>;
   onSelectSlot?: (slot: MapSlot) => void;
+  onSelectFeature?: (feature: MapFeatureKey) => void;
   className?: string;
   compactLabels?: boolean;
   linkMarkers?: boolean;
@@ -126,6 +132,8 @@ export function CabinMap({
 
           <div className="absolute inset-0" aria-label="Puntos interactivos del mapa">
             {STATIC_LABEL_POINTS.map((labelPoint) => {
+              const isFeatureActive = selectedFeature === labelPoint.id;
+              const hasFeatureAction = Boolean(onSelectFeature);
               const minWidth = labelPoint.lines.length > 1 ? (compactLabels ? '64px' : '76px') : '52px';
               const maxWidth = labelPoint.lines.length > 1 ? '96px' : '62px';
               const minHeight = labelPoint.lines.length > 1 ? (compactLabels ? '26px' : '30px') : '22px';
@@ -141,32 +149,61 @@ export function CabinMap({
                   : `max(${labelPoint.width}%, ${minWidth})`,
               };
 
+              const className = cn(
+                'absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center overflow-hidden rounded-[7px] border border-stone-500/50 bg-amber-50/95 text-center font-semibold leading-[1.05] text-stone-950 shadow-sm outline-none transition',
+                compactLabels
+                  ? 'px-0.5 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]'
+                  : 'px-1 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]',
+                hasFeatureAction
+                  ? 'cursor-pointer hover:border-cyan-700 hover:bg-white hover:shadow-md focus-visible:border-cyan-700 focus-visible:ring-4 focus-visible:ring-cyan-200 focus-visible:ring-offset-2'
+                  : 'pointer-events-none',
+                isFeatureActive
+                  ? 'border-cyan-700 bg-white ring-2 ring-cyan-700 ring-offset-2 ring-offset-white'
+                  : '',
+              );
+              const content = (
+                <span className="flex w-full flex-col items-center justify-center overflow-hidden px-0.5">
+                  {labelPoint.lines.map((line, index) => (
+                    <span
+                      key={line}
+                      className={cn(
+                        'block max-w-full truncate whitespace-nowrap leading-[1.05]',
+                        index > 0 ? 'text-[0.82em] font-medium' : '',
+                      )}
+                    >
+                      {line}
+                    </span>
+                  ))}
+                </span>
+              );
+
+              if (onSelectFeature) {
+                return (
+                  <button
+                    key={labelPoint.id}
+                    type="button"
+                    aria-label={MAP_FEATURE_LABELS[labelPoint.id]}
+                    aria-pressed={isFeatureActive}
+                    className={className}
+                    data-map-feature={labelPoint.id}
+                    style={style}
+                    onClick={() => onSelectFeature(labelPoint.id)}
+                  >
+                    {content}
+                  </button>
+                );
+              }
+
               return (
                 <div
                   key={labelPoint.id}
-                  aria-label={labelPoint.lines.join(' ')}
-                  className={cn(
-                    'pointer-events-none absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center overflow-hidden rounded-[7px] border border-stone-500/50 bg-amber-50/95 text-center font-semibold leading-[1.05] text-stone-950 shadow-sm',
-                    compactLabels
-                      ? 'px-0.5 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]'
-                      : 'px-1 text-[clamp(6.5px,1.8vw,12px)] sm:text-[clamp(7px,0.78vw,13px)]',
-                  )}
+                  aria-label={MAP_FEATURE_LABELS[labelPoint.id]}
+                  className={className}
+                  data-map-feature={labelPoint.id}
                   role="img"
                   style={style}
                 >
-                  <span className="flex w-full flex-col items-center justify-center overflow-hidden px-0.5">
-                    {labelPoint.lines.map((line, index) => (
-                      <span
-                        key={line}
-                        className={cn(
-                          'block max-w-full truncate whitespace-nowrap leading-[1.05]',
-                          index > 0 ? 'text-[0.82em] font-medium' : '',
-                        )}
-                      >
-                        {line}
-                      </span>
-                    ))}
-                  </span>
+                  {content}
                 </div>
               );
             })}

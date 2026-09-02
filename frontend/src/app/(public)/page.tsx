@@ -1,8 +1,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { CalendarDays, MapPin, MessageCircle, Waves } from 'lucide-react';
+import { CalendarDays, Check, MapPin, MessageCircle, Waves } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api';
 import { SITE_DESCRIPTION, SITE_NAME, WHATSAPP_NUMBER } from '@/lib/constants';
+import type { ApiResponse } from '@/types/api';
+import type { Amenity } from '@/types/cabin';
 
 const heroImage = '/assets/imagenes/240518846_4193049004078113_944283279498408299_n.jpg';
 const logoImage = '/assets/terco_logo.png';
@@ -43,7 +46,51 @@ const highlights = [
   },
 ];
 
-export default function HomePage() {
+const amenityCategoryLabels: Record<string, string> = {
+  room: 'Habitación',
+  bathroom: 'Baño',
+  kitchen: 'Cocina',
+  outdoor: 'Exterior',
+  general: 'General',
+};
+
+type AmenityGroup = {
+  key: string;
+  label: string;
+  amenities: Amenity[];
+};
+
+async function getAmenities(): Promise<Amenity[]> {
+  try {
+    const response = await api.get<ApiResponse<Amenity[]>>('/amenities', {
+      next: { revalidate: 60 },
+    });
+
+    return response.data;
+  } catch {
+    return [];
+  }
+}
+
+function groupAmenities(amenities: Amenity[]): AmenityGroup[] {
+  const groups = new Map<string, AmenityGroup>();
+
+  for (const amenity of amenities) {
+    const rawCategory = amenity.category?.trim() ?? '';
+    const key = amenityCategoryLabels[rawCategory] ? rawCategory : 'general';
+    const label = amenityCategoryLabels[key] ?? 'General';
+    const group = groups.get(key) ?? { key, label, amenities: [] };
+
+    group.amenities.push(amenity);
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values());
+}
+
+export default async function HomePage() {
+  const amenities = await getAmenities();
+  const amenityGroups = groupAmenities(amenities);
   const whatsappMessage = encodeURIComponent(
     `Hola, quiero consultar disponibilidad para hospedarme en ${SITE_NAME}.`
   );
@@ -139,6 +186,43 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {amenityGroups.length > 0 ? (
+        <section className="bg-cyan-950 py-16 text-white sm:py-20">
+          <div className="container mx-auto px-4">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                Amenidades
+              </p>
+              <h2 className="mt-4 text-3xl font-bold tracking-normal sm:text-4xl">
+                Amenidades para tu estadía
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-cyan-50 sm:text-base">
+                Un vistazo general a lo que puedes encontrar en Cabañas Playa Terco durante tu
+                descanso frente al Pacífico.
+              </p>
+            </div>
+
+            <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              {amenityGroups.map((group) => (
+                <article key={group.key} className="rounded-lg border border-white/15 bg-white/10 p-5">
+                  <h3 className="text-lg font-semibold tracking-normal text-white">{group.label}</h3>
+                  <div className="mt-4 grid gap-2">
+                    {group.amenities.map((amenity) => (
+                      <div key={amenity.id} className="flex items-start gap-3 rounded-md bg-white/[0.08] px-3 py-2">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-300 text-cyan-950">
+                          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
+                        <span className="text-sm leading-6 text-cyan-50">{amenity.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="bg-stone-50 py-16 sm:py-20">
         <div className="container mx-auto grid gap-10 px-4 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">

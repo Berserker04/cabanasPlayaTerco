@@ -14,7 +14,7 @@ class CabinController extends Controller
         $cabins = Cabin::query()
             ->visible()
             ->with([
-                'type.amenities',
+                'type',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
             ->orderBy('sort_order')
@@ -31,7 +31,7 @@ class CabinController extends Controller
         abort_if(! $cabin->is_active || $cabin->status->value === 'inactive', 404);
 
         $cabin->load([
-            'type.amenities',
+            'type',
             'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
         ]);
 

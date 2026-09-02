@@ -36,15 +36,15 @@ export function Navbar() {
           className="flex min-w-0 max-w-[calc(100%-3rem)] items-center gap-2 text-base font-bold tracking-tight sm:text-lg"
         >
           <Image
-            src="/assets/terco_logo.png"
+            src="/assets/terco_logo_nav.png"
             alt=""
-            width={96}
-            height={96}
+            width={500}
+            height={328}
             quality={100}
             priority
             unoptimized
-            sizes="48px"
-            className="h-12 w-12 shrink-0 object-contain"
+            sizes="(min-width: 640px) 73px, 61px"
+            className="h-10 w-[61px] shrink-0 object-contain sm:h-12 sm:w-[73px]"
           />
           <span className="truncate">{SITE_NAME}</span>
         </Link>

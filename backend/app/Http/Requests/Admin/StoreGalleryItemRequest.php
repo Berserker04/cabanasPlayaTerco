@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Enums\GalleryCategory;
+use App\Enums\MapPoint;
 use App\Http\Requests\Concerns\ValidatesMediaUploadSizes;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -21,6 +22,7 @@ class StoreGalleryItemRequest extends FormRequest
     {
         return [
             'gallery_album_id' => ['nullable', 'integer', Rule::exists('gallery_albums', 'id')],
+            'map_point'        => ['nullable', Rule::enum(MapPoint::class)],
             'file'             => ['required', ...$this->mediaFileRule()],
             'alt'              => ['nullable', 'string', 'max:255'],
             'caption'          => ['nullable', 'string', 'max:500'],

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\GalleryCategory;
+use App\Enums\MapPoint;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -13,10 +14,15 @@ class GalleryItemResource extends JsonResource
         $category = $this->category instanceof GalleryCategory
             ? $this->category
             : GalleryCategory::tryFrom((string) $this->category);
+        $mapPoint = $this->map_point instanceof MapPoint
+            ? $this->map_point
+            : MapPoint::tryFrom((string) $this->map_point);
 
         return [
             'id'               => $this->id,
             'gallery_album_id' => $this->gallery_album_id,
+            'map_point'        => $mapPoint?->value,
+            'map_point_label'  => $mapPoint?->label(),
             'album'            => new GalleryAlbumResource($this->whenLoaded('album')),
             'url'              => $this->url,
             'path'             => $this->path,

@@ -3,7 +3,8 @@ import { firstStringParam, sanitizeLocalPath } from '@/lib/auth-redirect';
 import { LoginForm } from './login-form';
 
 export const metadata: Metadata = {
-  title: 'Iniciar sesion',
+  title: 'Iniciar sesión',
+  description: 'Accede a tu cuenta para gestionar tus reservas en Cabañas Playa Terco.',
 };
 
 type LoginPageProps = {

@@ -53,7 +53,6 @@ export interface Cabin {
   is_active: boolean;
   sort_order: number;
   type?: CabinType;
-  amenities?: Amenity[];
   media?: CabinMedia[];
   created_at?: string;
   updated_at?: string;
@@ -118,6 +117,10 @@ export interface CabinAvailabilityEntry {
     check_in: string;
     check_out: string;
     guests_count: number;
+    expires_at: string | null;
+    confirmed_at: string | null;
+    is_expired_quote: boolean;
+    expires_soon: boolean;
   } | null;
   block: {
     id: number;
@@ -132,6 +135,8 @@ export interface AvailabilitySummary {
   total_cabins: number;
   available_count: number;
   reserved_count: number;
+  quoted_count?: number;
+  confirmed_count?: number;
   blocked_count: number;
   inactive_count: number;
   available_capacity: number;
@@ -159,4 +164,52 @@ export interface AvailabilityBlock {
   cabins?: Cabin[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface AdminAvailabilityCalendarDay {
+  date: string;
+  available: number;
+  total: number;
+  status: 'available' | 'limited' | 'full';
+}
+
+export interface AdminAvailabilityCalendarEvent {
+  id: number;
+  type: 'reservation' | 'block';
+  status: import('./reservation').ReservationStatus | 'blocked';
+  status_label: string;
+  leader_name: string | null;
+  display_color: string | null;
+  check_in: string;
+  check_out: string;
+  guests_count: number | null;
+  total_price: number | null;
+  notes: string | null;
+  expires_at: string | null;
+  confirmed_at: string | null;
+  is_expired_quote: boolean;
+  expires_soon: boolean;
+  blocks_availability: boolean;
+  cabin_ids: number[];
+  cabin_names: string[];
+}
+
+export interface AdminAvailabilityCalendar {
+  period: {
+    mode: 'month' | 'year';
+    month: string | null;
+    year: number;
+    start: string;
+    end: string;
+  };
+  cabins: Array<Pick<Cabin, 'id' | 'name' | 'map_slot' | 'max_guests'>>;
+  days: AdminAvailabilityCalendarDay[];
+  events: AdminAvailabilityCalendarEvent[];
+  summary: {
+    total_days: number;
+    available_days: number;
+    limited_days: number;
+    full_days: number;
+    events_count: number;
+  };
 }

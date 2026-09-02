@@ -20,11 +20,11 @@ export function Footer() {
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <Image
-                src="/assets/terco_logo.png"
+                src="/assets/terco_logo_nav.png"
                 alt=""
-                width={48}
-                height={48}
-                className="h-12 w-12 rounded-full object-contain"
+                width={500}
+                height={328}
+                className="h-12 w-[73px] object-contain"
               />
               <h3 className="text-lg font-bold">{SITE_NAME}</h3>
             </div>

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\GalleryCategory;
+use App\Enums\MapPoint;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,7 @@ class GalleryItem extends Model
 {
     protected $fillable = [
         'gallery_album_id',
+        'map_point',
         'url',
         'path',
         'thumbnail_url',
@@ -31,6 +33,7 @@ class GalleryItem extends Model
     {
         return [
             'category'    => GalleryCategory::class,
+            'map_point'   => MapPoint::class,
             'size_bytes'  => 'integer',
             'is_featured' => 'boolean',
             'is_active'   => 'boolean',

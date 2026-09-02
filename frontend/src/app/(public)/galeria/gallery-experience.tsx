@@ -125,7 +125,7 @@ export function GalleryExperience({
       const searchableText =
         entry.entryType === 'album'
           ? `${entry.album.title} ${entry.album.description ?? ''} ${entry.album.category_label}`
-          : `${entry.item.caption ?? ''} ${entry.item.alt ?? ''} ${entry.item.album?.title ?? ''} ${entry.item.category_label}`;
+          : `${entry.item.caption ?? ''} ${entry.item.alt ?? ''} ${entry.item.album?.title ?? ''} ${entry.item.category_label} ${entry.item.map_point_label ?? ''}`;
       const matchesSearch = normalizedSearch.length === 0 || searchableText.toLowerCase().includes(normalizedSearch);
 
       return matchesCategory && matchesType && matchesSearch;
@@ -462,7 +462,11 @@ function GalleryTile({
   const title =
     entry.entryType === 'album'
       ? entry.album.title
-      : entry.item.caption ?? entry.item.alt ?? entry.item.album?.title ?? entry.item.category_label;
+      : entry.item.caption ??
+        entry.item.alt ??
+        entry.item.map_point_label ??
+        entry.item.album?.title ??
+        entry.item.category_label;
 
   return (
     <button
@@ -519,6 +523,7 @@ function EntryBadges({ entry, albumItem }: { entry: GalleryEntry; albumItem: Gal
     return (
       <>
         <Badge variant="outline">{albumItem.category_label}</Badge>
+        {albumItem.map_point_label ? <Badge variant="outline">{albumItem.map_point_label}</Badge> : null}
         <Badge variant="outline">{albumItem.type === 'video' ? 'Video' : 'Foto'}</Badge>
       </>
     );
@@ -527,6 +532,9 @@ function EntryBadges({ entry, albumItem }: { entry: GalleryEntry; albumItem: Gal
   return (
     <>
       <Badge variant="outline">{entry.categoryLabel}</Badge>
+      {entry.entryType !== 'album' && entry.item.map_point_label ? (
+        <Badge variant="outline">{entry.item.map_point_label}</Badge>
+      ) : null}
       <Badge variant="outline">
         {entry.entryType === 'album' ? 'Album' : entry.entryType === 'video' ? 'Video' : 'Foto'}
       </Badge>
@@ -543,7 +551,7 @@ function lightboxTitle(entry: GalleryEntry, albumViewer: AlbumViewer | null) {
     return entry.album.title;
   }
 
-  return entry.item.album?.title ?? 'Galeria Playa Terco';
+  return entry.item.map_point_label ?? entry.item.album?.title ?? 'Galeria Playa Terco';
 }
 
 function lightboxDescription(entry: GalleryEntry, albumViewer: AlbumViewer | null) {
@@ -557,7 +565,7 @@ function lightboxDescription(entry: GalleryEntry, albumViewer: AlbumViewer | nul
     return entry.album.description ?? entry.album.category_label;
   }
 
-  return entry.item.caption ?? entry.item.alt ?? entry.item.category_label;
+  return entry.item.caption ?? entry.item.alt ?? entry.item.map_point_label ?? entry.item.category_label;
 }
 
 function FilterButton({

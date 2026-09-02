@@ -25,6 +25,7 @@ class GalleryController extends Controller
         $items = GalleryItem::query()
             ->with(['album', 'uploader'])
             ->when($request->filled('category'), fn ($query) => $query->where('category', $request->category))
+            ->when($request->filled('map_point'), fn ($query) => $query->where('map_point', $request->map_point))
             ->when($request->filled('album_id'), fn ($query) => $query->where('gallery_album_id', $request->integer('album_id')))
             ->when($request->filled('type'), fn ($query) => $query->where('type', $request->type))
             ->when($request->filled('is_active'), fn ($query) => $query->where('is_active', $request->boolean('is_active')))
@@ -60,6 +61,7 @@ class GalleryController extends Controller
 
         $item = GalleryItem::create([
             'gallery_album_id' => $request->filled('gallery_album_id') ? $request->integer('gallery_album_id') : null,
+            'map_point'        => $request->map_point,
             'url'              => $upload['url'],
             'path'             => $upload['path'],
             'thumbnail_url'    => $upload['thumbnail_url'],

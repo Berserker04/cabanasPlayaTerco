@@ -68,6 +68,11 @@ class User extends Authenticatable
         return $this->hasMany(Comment::class);
     }
 
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
     // ── Helpers ──
 
     public function hasRole(string $role): bool

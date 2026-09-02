@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Bath, BedDouble, Check, MessageCircle, Search, Users, Waves } from 'lucide-react';
+import { Bath, BedDouble, Images, MessageCircle, Search, Users, Waves } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CabinMap } from '@/components/cabins/cabin-map';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,10 @@ import {
   formatCurrencyCOP,
   getCabinCover,
 } from '@/lib/cabin-utils';
+import { MAP_FEATURE_LABELS } from '@/lib/map-features';
 import type { Cabin, LodgingTariff, MapSlot } from '@/types/cabin';
+import type { GalleryItem } from '@/types/gallery';
+import type { MapFeatureKey } from '@/types/map-feature';
 
 const guestOptions = [
   { label: 'Cualquier capacidad', value: 'any' },
@@ -34,13 +37,16 @@ const guestOptions = [
 export function CabinCatalog({
   cabins,
   tariffs,
+  mapFeatureMedia = {},
 }: {
   cabins: Cabin[];
   tariffs: LodgingTariff[];
+  mapFeatureMedia?: Partial<Record<MapFeatureKey, GalleryItem[]>>;
 }) {
   const [search, setSearch] = useState('');
   const [guests, setGuests] = useState('any');
   const [selectedSlot, setSelectedSlot] = useState<MapSlot | null>(null);
+  const [selectedFeature, setSelectedFeature] = useState<MapFeatureKey | null>(null);
 
   const filteredCabins = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -60,6 +66,17 @@ export function CabinCatalog({
   }, [cabins, guests, search, selectedSlot]);
 
   const heroImage = cabins[0] ? getCabinCover(cabins[0]) : CABIN_FALLBACK_IMAGES[0];
+  const selectedFeatureImages = selectedFeature ? (mapFeatureMedia[selectedFeature] ?? []) : [];
+
+  function handleSelectSlot(slot: MapSlot) {
+    setSelectedSlot(slot);
+    setSelectedFeature(null);
+  }
+
+  function handleSelectFeature(feature: MapFeatureKey) {
+    setSelectedFeature(feature);
+    setSelectedSlot(null);
+  }
 
   return (
     <>
@@ -165,13 +182,54 @@ export function CabinCatalog({
           </div>
 
           <div className="mt-8 space-y-6">
-            <CabinMap cabins={cabins} selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} compactLabels />
+            <CabinMap
+              cabins={cabins}
+              selectedSlot={selectedSlot}
+              selectedFeature={selectedFeature}
+              onSelectSlot={handleSelectSlot}
+              onSelectFeature={handleSelectFeature}
+              compactLabels
+            />
             {selectedSlot ? (
               <div className="flex items-center justify-between gap-3 rounded-lg border bg-stone-50 px-4 py-3 text-sm">
                 <span className="font-medium text-neutral-800">{MAP_SLOT_LABELS[selectedSlot]}</span>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedSlot(null)}>
                   Ver todas
                 </Button>
+              </div>
+            ) : null}
+            {selectedFeature ? (
+              <div className="rounded-lg border bg-stone-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-950">
+                      <Images className="h-4 w-4 text-cyan-700" />
+                      {MAP_FEATURE_LABELS[selectedFeature]}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Fotos publicas de este punto dentro de Playa Terco.
+                    </p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedFeature(null)}>
+                    Ver todas
+                  </Button>
+                </div>
+                {selectedFeatureImages.length > 0 ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {selectedFeatureImages.slice(0, 8).map((item) => (
+                      <div
+                        key={item.id}
+                        className="aspect-[4/3] rounded-md bg-cover bg-center"
+                        style={{ backgroundImage: `url(${item.thumbnail_url ?? item.url})` }}
+                        aria-label={item.alt ?? item.caption ?? MAP_FEATURE_LABELS[selectedFeature]}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-md border border-dashed bg-white p-4 text-sm text-muted-foreground">
+                    Aun no hay imagenes publicadas para este punto.
+                  </p>
+                )}
               </div>
             ) : null}
 
@@ -215,17 +273,6 @@ export function CabinCatalog({
                           {cabin.bathrooms_count}
                         </span>
                       </div>
-
-                      {cabin.amenities && cabin.amenities.length > 0 ? (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {cabin.amenities.slice(0, 3).map((amenity) => (
-                            <span key={amenity.id} className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1 text-xs text-cyan-900">
-                              <Check className="h-3 w-3" />
-                              {amenity.name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
 
                       <div className="mt-5 flex items-center justify-between gap-4 border-t pt-5">
                         <Button asChild variant="outline">

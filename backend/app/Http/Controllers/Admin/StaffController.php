@@ -34,6 +34,18 @@ class StaffController extends Controller
         ]);
     }
 
+    public function options(): JsonResponse
+    {
+        $staff = Staff::query()
+            ->active()
+            ->orderBy('full_name')
+            ->get();
+
+        return response()->json([
+            'data' => StaffResource::collection($staff),
+        ]);
+    }
+
     public function store(StoreStaffRequest $request): JsonResponse
     {
         $staff = Staff::create($request->validated());

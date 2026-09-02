@@ -223,6 +223,81 @@ class GalleryModuleTest extends TestCase
         $this->assertSame('video', $album->coverItem->type);
     }
 
+    public function test_admin_can_upload_gallery_media_for_map_points(): void
+    {
+        Storage::fake('s3');
+        Sanctum::actingAs($this->createAdmin());
+
+        $response = $this
+            ->withHeader('Accept', 'application/json')
+            ->post('/api/v1/admin/gallery', [
+                'map_point'   => 'kiosco',
+                'category'    => 'general',
+                'caption'     => 'Kiosco',
+                'alt'         => 'Kiosco Playa Terco',
+                'is_active'   => '1',
+                'is_featured' => '0',
+                'file'        => UploadedFile::fake()->create('kiosco.jpg', 512, 'image/jpeg'),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.map_point', 'kiosco')
+            ->assertJsonPath('data.map_point_label', 'Kiosco')
+            ->assertJsonPath('data.gallery_album_id', null)
+            ->assertJsonPath('data.category', 'general');
+
+        Storage::disk('s3')->assertExists($response->json('data.path'));
+    }
+
+    public function test_gallery_map_point_filter_returns_only_active_matching_media(): void
+    {
+        GalleryItem::create([
+            'map_point' => 'kiosco',
+            'url'       => 'https://example.test/kiosco.jpg',
+            'category'  => 'general',
+            'type'      => 'image',
+            'is_active' => true,
+        ]);
+
+        GalleryItem::create([
+            'map_point' => 'cocina_comedor',
+            'url'       => 'https://example.test/cocina.jpg',
+            'category'  => 'food',
+            'type'      => 'image',
+            'is_active' => true,
+        ]);
+
+        GalleryItem::create([
+            'map_point' => 'kiosco',
+            'url'       => 'https://example.test/kiosco-oculto.jpg',
+            'category'  => 'general',
+            'type'      => 'image',
+            'is_active' => false,
+        ]);
+
+        $this->getJson('/api/v1/gallery?map_point=kiosco&type=image')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.url', 'https://example.test/kiosco.jpg')
+            ->assertJsonPath('data.0.map_point', 'kiosco')
+            ->assertJsonPath('data.0.map_point_label', 'Kiosco');
+    }
+
+    public function test_admin_gallery_rejects_invalid_map_point(): void
+    {
+        Storage::fake('s3');
+        Sanctum::actingAs($this->createAdmin());
+
+        $this
+            ->withHeader('Accept', 'application/json')
+            ->post('/api/v1/admin/gallery', [
+                'map_point' => 'muelle',
+                'category'  => 'general',
+                'file'      => UploadedFile::fake()->create('muelle.jpg', 512, 'image/jpeg'),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['map_point']);
+    }
+
     public function test_gallery_admin_endpoints_require_admin_role(): void
     {
         Sanctum::actingAs(User::factory()->create());

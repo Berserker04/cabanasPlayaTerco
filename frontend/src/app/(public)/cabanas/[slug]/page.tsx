@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Bath, BedDouble, Check, MessageCircle, Users } from 'lucide-react';
+import { Bath, BedDouble, MessageCircle, Users } from 'lucide-react';
 import { CabinMap } from '@/components/cabins/cabin-map';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: cabin?.name ?? slug.replace(/-/g, ' '),
     description:
       cabin?.short_description ??
-      'Detalles de cabaña, capacidad, ubicacion y contacto directo en Playa Terco.',
+      'Detalles de cabaña, capacidad, ubicación y contacto directo en Playa Terco.',
   };
 }
 
@@ -66,7 +66,7 @@ export default async function CabinDetailPage({ params }: Props) {
           <div className="rounded-lg border bg-white p-8 text-center shadow-sm">
             <h1 className="text-2xl font-bold tracking-normal">No pudimos cargar esta cabaña</h1>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-              Puede ser un problema temporal de conexion con la API. Puedes volver al catalogo o
+              Puede ser un problema temporal de conexión con la API. Puedes volver al catálogo o
               escribirnos directamente para recibir ayuda.
             </p>
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
@@ -118,7 +118,7 @@ export default async function CabinDetailPage({ params }: Props) {
               {imageUrls.length === 1 && !videos[0] ? (
                 <div className="flex min-h-[180px] items-center justify-center rounded-lg bg-cyan-950 p-6 text-center text-white">
                   <p className="max-w-xs text-sm leading-6">
-                    Una estadia tranquila entre vegetacion tropical, playa y atencion directa.
+                    Una estadía tranquila entre vegetación tropical, playa y atención directa.
                   </p>
                 </div>
               ) : null}
@@ -141,53 +141,24 @@ export default async function CabinDetailPage({ params }: Props) {
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Fact icon={<Users className="h-5 w-5" />} label="Capacidad comoda" value={`${cabin.guest_capacity} huespedes`} />
-              <Fact icon={<Users className="h-5 w-5" />} label="Capacidad maxima" value={`${cabin.min_guests}-${cabin.max_guests}`} />
+              <Fact icon={<Users className="h-5 w-5" />} label="Capacidad cómoda" value={`${cabin.guest_capacity} huéspedes`} />
+              <Fact icon={<Users className="h-5 w-5" />} label="Capacidad máxima" value={`${cabin.min_guests}-${cabin.max_guests}`} />
               <Fact icon={<BedDouble className="h-5 w-5" />} label="Camas" value={`${cabin.beds_count}`} />
-              <Fact icon={<Bath className="h-5 w-5" />} label="Banos" value={`${cabin.bathrooms_count}`} />
+              <Fact icon={<Bath className="h-5 w-5" />} label="Baños" value={`${cabin.bathrooms_count}`} />
             </div>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-              <div>
-                <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">
-                  Ubicacion interna
-                </h2>
-                <div className="mt-5">
-                  <CabinMap cabins={[cabin]} activeSlot={cabin.map_slot} />
-                </div>
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">
-                  Comodidades
-                </h2>
-                {cabin.amenities && cabin.amenities.length > 0 ? (
-                  <div className="mt-5 grid gap-3">
-                    {cabin.amenities.map((amenity) => (
-                      <div key={amenity.id} className="flex items-center gap-3 rounded-lg border p-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-800">
-                          <Check className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-neutral-950">{amenity.name}</p>
-                          {amenity.category ? (
-                            <p className="text-xs text-muted-foreground">{amenity.category}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Escribenos para confirmar las comodidades disponibles en esta cabaña.
-                  </p>
-                )}
+            <div className="mt-10">
+              <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">
+                Ubicación interna
+              </h2>
+              <div className="mt-5">
+                <CabinMap cabins={[cabin]} activeSlot={cabin.map_slot} />
               </div>
             </div>
 
             {imageUrls.length > 1 || videos.length > 1 ? (
               <div className="mt-10">
-                <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">Galeria</h2>
+                <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">Galería</h2>
                 <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {imageUrls.slice(1).map((image) => (
                     <div
@@ -223,7 +194,7 @@ export default async function CabinDetailPage({ params }: Props) {
               </div>
             ) : (
               <p className="mt-3 text-sm leading-6 text-neutral-600">
-                Las tarifas se confirman por WhatsApp segun fechas y grupo.
+                Las tarifas se confirman por WhatsApp según fechas y grupo.
               </p>
             )}
             <div className="mt-6 grid gap-3">

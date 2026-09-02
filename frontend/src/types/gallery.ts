@@ -1,4 +1,5 @@
 import type { User } from './user';
+import type { MapFeatureKey } from './map-feature';
 
 export type GalleryCategory =
   | 'cabins'
@@ -36,6 +37,8 @@ export type GalleryAlbum = {
 export type GalleryItem = {
   id: number;
   gallery_album_id: number | null;
+  map_point: MapFeatureKey | null;
+  map_point_label: string | null;
   album?: GalleryAlbum | null;
   url: string;
   path: string | null;

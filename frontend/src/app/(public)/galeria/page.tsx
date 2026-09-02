@@ -50,6 +50,8 @@ const fallbackItems: GalleryItem[] = [
   {
     id: 1,
     gallery_album_id: 1,
+    map_point: null,
+    map_point_label: null,
     album: fallbackAlbums[0],
     url: '/assets/imagenes/511133422_9990219471027675_1591650365955070210_n.jpg',
     path: null,
@@ -69,6 +71,8 @@ const fallbackItems: GalleryItem[] = [
   {
     id: 2,
     gallery_album_id: 1,
+    map_point: null,
+    map_point_label: null,
     album: fallbackAlbums[0],
     url: '/assets/imagenes/54516895_2086105884772446_8521564931760324608_n.jpg',
     path: null,
@@ -88,6 +92,8 @@ const fallbackItems: GalleryItem[] = [
   {
     id: 3,
     gallery_album_id: 2,
+    map_point: null,
+    map_point_label: null,
     album: fallbackAlbums[1],
     url: '/assets/imagenes/511133396_9990216891027933_4540081246476097597_n.jpg',
     path: null,
@@ -107,6 +113,8 @@ const fallbackItems: GalleryItem[] = [
   {
     id: 4,
     gallery_album_id: 2,
+    map_point: null,
+    map_point_label: null,
     album: fallbackAlbums[1],
     url: '/assets/imagenes/240518846_4193049004078113_944283279498408299_n.jpg',
     path: null,

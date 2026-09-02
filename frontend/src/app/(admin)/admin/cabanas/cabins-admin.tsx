@@ -55,6 +55,11 @@ import {
   formatCurrencyCOP,
   getCabinCover,
 } from '@/lib/cabin-utils';
+import {
+  MAP_FEATURE_GALLERY_CATEGORIES,
+  MAP_FEATURE_LABELS,
+  MAP_FEATURE_OPTIONS,
+} from '@/lib/map-features';
 import type { ApiListResponse, ApiResponse } from '@/types/api';
 import type {
   Amenity,
@@ -64,6 +69,8 @@ import type {
   LodgingTariff,
   MapSlot,
 } from '@/types/cabin';
+import type { GalleryItem } from '@/types/gallery';
+import type { MapFeatureKey } from '@/types/map-feature';
 
 type CabinFormState = {
   name: string;
@@ -82,7 +89,7 @@ type CabinFormState = {
 };
 
 type UploadFormState = {
-  cabin_id: string;
+  destination: string;
   alt: string;
   sort_order: string;
   files: File[];
@@ -112,9 +119,27 @@ type AmenityFormState = {
   category: string;
 };
 
-type MediaWithCabin = CabinMedia & {
-  cabin_name: string;
+type UploadDestination =
+  | { kind: 'cabin'; id: number }
+  | { kind: 'feature'; key: MapFeatureKey };
+
+type AdminMediaItem =
+  | (CabinMedia & {
+      source: 'cabin';
+      display_name: string;
+      caption?: string | null;
+    })
+  | (GalleryItem & {
+      source: 'map_feature';
+      display_name: string;
+    });
+
+type AdminMediaUpdateVariables = {
+  media: AdminMediaItem;
+  payload: Record<string, unknown>;
 };
+
+type AdminMediaUpdateResponse = ApiResponse<CabinMedia> | ApiResponse<GalleryItem>;
 
 const statusOptions: Array<{ label: string; value: CabinStatus | 'all' }> = [
   { label: 'Todos', value: 'all' },
@@ -141,7 +166,7 @@ const emptyCabinForm: CabinFormState = {
 };
 
 const emptyUploadForm: UploadFormState = {
-  cabin_id: '',
+  destination: '',
   alt: '',
   sort_order: '0',
   files: [],
@@ -204,6 +229,30 @@ function joinLines(value?: string[]) {
   return (value ?? []).join('\n');
 }
 
+function cabinDestination(id: number) {
+  return `cabin:${id}`;
+}
+
+function featureDestination(key: MapFeatureKey) {
+  return `feature:${key}`;
+}
+
+function parseUploadDestination(value: string): UploadDestination | null {
+  if (value.startsWith('cabin:')) {
+    const id = Number(value.replace('cabin:', ''));
+
+    return Number.isFinite(id) && id > 0 ? { kind: 'cabin', id } : null;
+  }
+
+  if (value.startsWith('feature:')) {
+    const key = value.replace('feature:', '') as MapFeatureKey;
+
+    return key in MAP_FEATURE_LABELS ? { kind: 'feature', key } : null;
+  }
+
+  return null;
+}
+
 export function CabinsAdmin() {
   const queryClient = useQueryClient();
   const [cabinSearch, setCabinSearch] = useState('');
@@ -217,7 +266,7 @@ export function CabinsAdmin() {
   const [cabinMediaFiles, setCabinMediaFiles] = useState<File[]>([]);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState<UploadFormState>(emptyUploadForm);
-  const [editingMedia, setEditingMedia] = useState<MediaWithCabin | null>(null);
+  const [editingMedia, setEditingMedia] = useState<AdminMediaItem | null>(null);
   const [mediaForm, setMediaForm] = useState<MediaEditState>({
     alt: '',
     type: 'image',
@@ -252,18 +301,45 @@ export function CabinsAdmin() {
     queryFn: () => api.get<ApiResponse<Amenity[]>>('/admin/amenities'),
   });
 
+  const mapPointMediaQuery = useQuery({
+    queryKey: ['admin-map-point-media'],
+    queryFn: async () => {
+      const responses = await Promise.all(
+        MAP_FEATURE_OPTIONS.map((feature) =>
+          api.get<ApiListResponse<GalleryItem>>(
+            `/admin/gallery${buildQuery({ per_page: 100, map_point: feature.value })}`,
+          ),
+        ),
+      );
+
+      return responses.flatMap((response) => response.data);
+    },
+  });
+
   const cabins = useMemo(() => cabinsQuery.data?.data ?? [], [cabinsQuery.data?.data]);
   const tariffs = useMemo(() => tariffsQuery.data?.data ?? [], [tariffsQuery.data?.data]);
   const amenities = useMemo(() => amenitiesQuery.data?.data ?? [], [amenitiesQuery.data?.data]);
+  const mapPointMedia = useMemo(
+    () => mapPointMediaQuery.data ?? [],
+    [mapPointMediaQuery.data],
+  );
 
-  const mediaItems = useMemo<MediaWithCabin[]>(() => {
-    return cabins.flatMap((cabin) =>
+  const mediaItems = useMemo<AdminMediaItem[]>(() => {
+    const cabinItems = cabins.flatMap((cabin) =>
       (cabin.media ?? []).map((media) => ({
         ...media,
-        cabin_name: cabin.name,
+        source: 'cabin' as const,
+        display_name: cabin.name,
       })),
     );
-  }, [cabins]);
+    const featureItems = mapPointMedia.map((media) => ({
+      ...media,
+      source: 'map_feature' as const,
+      display_name: media.map_point_label ?? 'Punto del mapa',
+    }));
+
+    return [...cabinItems, ...featureItems];
+  }, [cabins, mapPointMedia]);
 
   const selectedSlotCabin = selectedSlot
     ? cabins.find((cabin) => cabin.map_slot === selectedSlot)
@@ -328,33 +404,89 @@ export function CabinsAdmin() {
   });
 
   const uploadMediaMutation = useMutation({
-    mutationFn: (formData: FormData) =>
-      api.post<ApiResponse<CabinMedia | CabinMedia[]>>('/admin/cabin-media', formData),
+    mutationFn: async ({
+      destination,
+      files,
+      alt,
+      sortOrder,
+    }: {
+      destination: UploadDestination;
+      files: File[];
+      alt: string;
+      sortOrder: number;
+    }) => {
+      if (destination.kind === 'cabin') {
+        const formData = new FormData();
+        formData.append('cabin_id', String(destination.id));
+        files.forEach((file) => formData.append('files[]', file));
+        formData.append('sort_order', String(sortOrder));
+
+        if (alt) {
+          formData.append('alt', alt);
+        }
+
+        return api.post<ApiResponse<CabinMedia | CabinMedia[]>>('/admin/cabin-media', formData);
+      }
+
+      const label = MAP_FEATURE_LABELS[destination.key];
+      const category = MAP_FEATURE_GALLERY_CATEGORIES[destination.key];
+
+      return Promise.all(
+        files.map((file, index) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('map_point', destination.key);
+          formData.append('category', category);
+          formData.append('caption', alt || label);
+          formData.append('alt', alt || label);
+          formData.append('sort_order', String(sortOrder + index));
+          formData.append('is_active', '1');
+          formData.append('is_featured', '0');
+
+          return api.post<ApiResponse<GalleryItem>>('/admin/gallery', formData);
+        }),
+      );
+    },
     onSuccess: () => {
       toast.success('Archivos subidos');
       setUploadDialogOpen(false);
       setUploadForm(emptyUploadForm);
       void queryClient.invalidateQueries({ queryKey: ['admin-cabins'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-map-point-media'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-gallery-items'] });
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
-  const updateMediaMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: Record<string, unknown> }) =>
-      api.put<ApiResponse<CabinMedia>>(`/admin/cabin-media/${id}`, payload),
+  const updateMediaMutation = useMutation<
+    AdminMediaUpdateResponse,
+    unknown,
+    AdminMediaUpdateVariables
+  >({
+    mutationFn: ({ media, payload }) =>
+      media.source === 'cabin'
+        ? api.put<ApiResponse<CabinMedia>>(`/admin/cabin-media/${media.id}`, payload)
+        : api.put<ApiResponse<GalleryItem>>(`/admin/gallery/${media.id}`, payload),
     onSuccess: () => {
       toast.success('Archivo actualizado');
       setEditingMedia(null);
       void queryClient.invalidateQueries({ queryKey: ['admin-cabins'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-map-point-media'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-gallery-items'] });
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
   const deleteMediaMutation = useMutation({
-    mutationFn: (id: number) => api.delete<{ message: string }>(`/admin/cabin-media/${id}`),
+    mutationFn: (media: AdminMediaItem) =>
+      media.source === 'cabin'
+        ? api.delete<{ message: string }>(`/admin/cabin-media/${media.id}`)
+        : api.delete<{ message: string }>(`/admin/gallery/${media.id}`),
     onSuccess: () => {
       toast.success('Archivo eliminado');
       void queryClient.invalidateQueries({ queryKey: ['admin-cabins'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-map-point-media'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-gallery-items'] });
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
@@ -443,15 +575,19 @@ export function CabinsAdmin() {
   function openUpload(cabin?: Cabin) {
     setUploadForm({
       ...emptyUploadForm,
-      cabin_id: cabin ? String(cabin.id) : cabins[0] ? String(cabins[0].id) : '',
+      destination: cabin
+        ? cabinDestination(cabin.id)
+        : cabins[0]
+          ? cabinDestination(cabins[0].id)
+          : featureDestination('kiosco'),
     });
     setUploadDialogOpen(true);
   }
 
-  function openEditMedia(media: MediaWithCabin) {
+  function openEditMedia(media: AdminMediaItem) {
     setEditingMedia(media);
     setMediaForm({
-      alt: media.alt ?? '',
+      alt: media.alt ?? ('caption' in media ? media.caption ?? '' : ''),
       type: media.type,
       sort_order: String(media.sort_order),
     });
@@ -521,21 +657,27 @@ export function CabinsAdmin() {
   function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!uploadForm.cabin_id || uploadForm.files.length === 0) {
-      toast.error('Selecciona cabaña y al menos un archivo.');
+    const destination = parseUploadDestination(uploadForm.destination);
+
+    if (!destination || uploadForm.files.length === 0) {
+      toast.error('Selecciona destino y al menos un archivo.');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('cabin_id', uploadForm.cabin_id);
-    uploadForm.files.forEach((file) => formData.append('files[]', file));
-    formData.append('sort_order', uploadForm.sort_order || '0');
-
-    if (uploadForm.alt) {
-      formData.append('alt', uploadForm.alt);
+    if (
+      destination.kind === 'feature' &&
+      uploadForm.files.some((file) => !file.type.startsWith('image/'))
+    ) {
+      toast.error('Kiosco y Cocina/Comedor solo aceptan imagenes.');
+      return;
     }
 
-    uploadMediaMutation.mutate(formData);
+    uploadMediaMutation.mutate({
+      destination,
+      files: uploadForm.files,
+      alt: uploadForm.alt.trim(),
+      sortOrder: Number(uploadForm.sort_order || 0),
+    });
   }
 
   function handleMediaUpdate(event: FormEvent<HTMLFormElement>) {
@@ -545,14 +687,20 @@ export function CabinsAdmin() {
       return;
     }
 
-    updateMediaMutation.mutate({
-      id: editingMedia.id,
-      payload: cleanPayload({
-        alt: mediaForm.alt,
-        type: mediaForm.type,
-        sort_order: Number(mediaForm.sort_order),
-      }),
-    });
+    const payload =
+      editingMedia.source === 'cabin'
+        ? cleanPayload({
+            alt: mediaForm.alt,
+            type: mediaForm.type,
+            sort_order: Number(mediaForm.sort_order),
+          })
+        : cleanPayload({
+            alt: mediaForm.alt,
+            caption: mediaForm.alt || editingMedia.caption || editingMedia.display_name,
+            sort_order: Number(mediaForm.sort_order),
+          });
+
+    updateMediaMutation.mutate({ media: editingMedia, payload });
   }
 
   function handleTariffSubmit(event: FormEvent<HTMLFormElement>) {
@@ -591,6 +739,10 @@ export function CabinsAdmin() {
     updateMediaMutation.isPending ||
     saveTariffMutation.isPending ||
     saveAmenityMutation.isPending;
+  const selectedUploadDestination = parseUploadDestination(uploadForm.destination);
+  const uploadAccept = selectedUploadDestination?.kind === 'feature'
+    ? 'image/jpeg,image/png,image/webp'
+    : 'image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime';
 
   return (
     <div className="space-y-6">
@@ -819,21 +971,31 @@ export function CabinsAdmin() {
           {mediaItems.length > 0 ? (
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {mediaItems.map((media) => (
-                <article key={media.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
+                <article key={`${media.source}-${media.id}`} className="overflow-hidden rounded-lg border bg-white shadow-sm">
                   {media.type === 'video' ? (
                     <video src={media.url} controls className="aspect-[4/3] w-full bg-neutral-950 object-cover" />
                   ) : (
-                    <div className="aspect-[4/3] bg-cover bg-center" style={{ backgroundImage: `url(${media.url})` }} />
+                    <div
+                      className="aspect-[4/3] bg-cover bg-center"
+                      style={{
+                        backgroundImage: `url(${
+                          media.source === 'map_feature' ? media.thumbnail_url ?? media.url : media.url
+                        })`,
+                      }}
+                    />
                   )}
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-medium">{media.cabin_name}</p>
+                        <p className="font-medium">{media.display_name}</p>
                         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                          {media.alt ?? 'Sin texto alternativo'}
+                          {media.alt ?? ('caption' in media ? media.caption : null) ?? 'Sin texto alternativo'}
                         </p>
                       </div>
-                      <Badge variant="outline">#{media.sort_order}</Badge>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge variant="outline">#{media.sort_order}</Badge>
+                        {media.source === 'map_feature' ? <Badge className="bg-cyan-100 text-cyan-800">Mapa</Badge> : null}
+                      </div>
                     </div>
                     <div className="mt-4 flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => openEditMedia(media)}>
@@ -844,7 +1006,7 @@ export function CabinsAdmin() {
                         size="sm"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => deleteMediaMutation.mutate(media.id)}
+                        onClick={() => deleteMediaMutation.mutate(media)}
                       >
                         <Trash2 className="h-4 w-4" />
                         Eliminar
@@ -1146,21 +1308,31 @@ export function CabinsAdmin() {
           <form onSubmit={handleUploadSubmit}>
             <DialogHeader>
               <DialogTitle>Subir media</DialogTitle>
-              <DialogDescription>Adjunta imagenes o videos para una cabaña real.</DialogDescription>
+              <DialogDescription>
+                Elige una cabaña, el Kiosco o la Cocina y Comedor como destino.
+              </DialogDescription>
+              <DialogDescription>
+                Para Kiosco y Cocina/Comedor se publican imagenes en el mapa y la galeria.
+              </DialogDescription>
             </DialogHeader>
             <div className="mt-5 grid gap-4">
-              <Field label="Cabaña">
+              <Field label="Destino">
                 <Select
-                  value={uploadForm.cabin_id}
-                  onValueChange={(value) => setUploadForm((current) => ({ ...current, cabin_id: value }))}
+                  value={uploadForm.destination}
+                  onValueChange={(value) => setUploadForm((current) => ({ ...current, destination: value }))}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecciona una cabaña" />
+                    <SelectValue placeholder="Selecciona destino" />
                   </SelectTrigger>
                   <SelectContent>
                     {cabins.map((cabin) => (
-                      <SelectItem key={cabin.id} value={String(cabin.id)}>
-                        {cabin.name}
+                      <SelectItem key={cabin.id} value={cabinDestination(cabin.id)}>
+                        Cabaña - {cabin.name}
+                      </SelectItem>
+                    ))}
+                    {MAP_FEATURE_OPTIONS.map((feature) => (
+                      <SelectItem key={feature.value} value={featureDestination(feature.value)}>
+                        {feature.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1170,11 +1342,16 @@ export function CabinsAdmin() {
                 <Input
                   type="file"
                   multiple
-                  accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+                  accept={uploadAccept}
                   onChange={(event) =>
                     setUploadForm((current) => ({ ...current, files: Array.from(event.target.files ?? []) }))
                   }
                 />
+                {selectedUploadDestination?.kind === 'feature' ? (
+                  <p className="text-xs text-muted-foreground">
+                    Para Kiosco y Cocina/Comedor solo se publican imagenes.
+                  </p>
+                ) : null}
                 {uploadForm.files.length > 0 ? (
                   <p className="text-xs text-muted-foreground">
                     {uploadForm.files.length} archivos listos para subir
@@ -1214,23 +1391,25 @@ export function CabinsAdmin() {
           <form onSubmit={handleMediaUpdate}>
             <DialogHeader>
               <DialogTitle>Editar media</DialogTitle>
-              <DialogDescription>{editingMedia?.cabin_name}</DialogDescription>
+              <DialogDescription>{editingMedia?.display_name}</DialogDescription>
             </DialogHeader>
             <div className="mt-5 grid gap-4">
-              <Field label="Tipo">
-                <Select
-                  value={mediaForm.type}
-                  onValueChange={(value) => setMediaForm((current) => ({ ...current, type: value as 'image' | 'video' }))}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="image">Imagen</SelectItem>
-                    <SelectItem value="video">Video</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
+              {editingMedia?.source === 'cabin' ? (
+                <Field label="Tipo">
+                  <Select
+                    value={mediaForm.type}
+                    onValueChange={(value) => setMediaForm((current) => ({ ...current, type: value as 'image' | 'video' }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="image">Imagen</SelectItem>
+                      <SelectItem value="video">Video</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
               <Field label="Texto alternativo">
                 <Input
                   value={mediaForm.alt}

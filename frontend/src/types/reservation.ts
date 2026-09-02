@@ -4,7 +4,8 @@ export type ReservationStatus =
   | 'checked_in'
   | 'checked_out'
   | 'cancelled'
-  | 'no_show';
+  | 'no_show'
+  | 'expired';
 
 export interface Reservation {
   id: number;
@@ -15,6 +16,10 @@ export interface Reservation {
   guests_count: number;
   leader_name: string | null;
   display_color: string | null;
+  expires_at: string | null;
+  confirmed_at: string | null;
+  is_expired_quote: boolean;
+  expires_soon: boolean;
   status: ReservationStatus;
   source: string | null;
   notes: string | null;

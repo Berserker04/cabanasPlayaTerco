@@ -12,6 +12,8 @@ use App\Models\LodgingTariff;
 use App\Models\Reservation;
 use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\AmenitySeeder;
+use Database\Seeders\CabinSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +24,44 @@ use Tests\TestCase;
 class CabinModuleTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_cabin_seeder_creates_eight_demo_cabins_with_images(): void
+    {
+        $this->seed([
+            AmenitySeeder::class,
+            CabinSeeder::class,
+        ]);
+
+        $cabins = Cabin::query()
+            ->with('media')
+            ->where('slug', 'like', 'cabana-%')
+            ->orderBy('sort_order')
+            ->get();
+
+        $this->assertCount(8, $cabins);
+
+        foreach ($cabins as $index => $cabin) {
+            $this->assertSame('cabana_' . ($index + 1), $cabin->map_slot);
+            $this->assertTrue($cabin->is_active);
+            $this->assertNotEmpty($cabin->cover_image);
+            $this->assertGreaterThanOrEqual(2, $cabin->media->count());
+            $this->assertTrue($cabin->media->contains('url', $cabin->cover_image));
+        }
+    }
+
+    public function test_public_amenities_returns_global_catalog_ordered_by_category_and_name(): void
+    {
+        Amenity::create(['name' => 'Vista al mar', 'icon' => 'waves', 'category' => 'outdoor']);
+        Amenity::create(['name' => 'Agua caliente', 'icon' => 'flame', 'category' => 'bathroom']);
+        Amenity::create(['name' => 'Hamaca', 'icon' => 'bed', 'category' => 'room']);
+
+        $this->getJson('/api/v1/amenities')
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.0.name', 'Agua caliente')
+            ->assertJsonPath('data.1.name', 'Vista al mar')
+            ->assertJsonPath('data.2.name', 'Hamaca');
+    }
 
     public function test_public_cabin_list_returns_active_real_cabins_with_media(): void
     {
@@ -58,15 +98,13 @@ class CabinModuleTest extends TestCase
             ->assertJsonPath('data.0.cover_image', 'https://example.test/cover.jpg')
             ->assertJsonPath('data.0.max_guests', 8)
             ->assertJsonPath('data.0.map_slot', 'cabana_1')
-            ->assertJsonPath('data.0.media.0.url', 'https://example.test/gallery.jpg');
+            ->assertJsonPath('data.0.media.0.url', 'https://example.test/gallery.jpg')
+            ->assertJsonMissingPath('data.0.amenities');
     }
 
-    public function test_public_cabin_detail_returns_amenities_media_and_map_slot(): void
+    public function test_public_cabin_detail_returns_media_and_map_slot_without_cabin_amenities(): void
     {
         $cabinType = $this->createCabinType();
-        $amenity = Amenity::create(['name' => 'Vista al mar', 'icon' => 'waves', 'category' => 'Ubicacion']);
-        $cabinType->amenities()->attach($amenity);
-
         $cabin = $this->createCabin([
             'cabin_type_id' => $cabinType->id,
             'name'          => 'Cabana 3',
@@ -88,8 +126,8 @@ class CabinModuleTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.slug', 'cabana-3')
             ->assertJsonPath('data.map_slot', 'cabana_3')
-            ->assertJsonPath('data.amenities.0.name', 'Vista al mar')
-            ->assertJsonPath('data.media.0.type', 'video');
+            ->assertJsonPath('data.media.0.type', 'video')
+            ->assertJsonMissingPath('data.amenities');
     }
 
     public function test_admin_can_create_real_cabin_and_active_map_slots_are_unique(): void
@@ -114,7 +152,8 @@ class CabinModuleTest extends TestCase
             ->assertJsonPath('data.slug', 'cabana-1')
             ->assertJsonPath('data.min_guests', 1)
             ->assertJsonPath('data.map_slot', 'cabana_1')
-            ->assertJsonPath('data.type.slug', 'cabana-playa-terco');
+            ->assertJsonPath('data.type.slug', 'cabana-playa-terco')
+            ->assertJsonMissingPath('data.amenities');
 
         $this->postJson('/api/v1/admin/cabins', [
             ...$payload,
@@ -128,6 +167,37 @@ class CabinModuleTest extends TestCase
             'name'      => 'Cabana inactiva',
             'is_active' => false,
         ])->assertCreated();
+    }
+
+    public function test_admin_cabin_requests_reject_amenity_ids(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $amenity = Amenity::create(['name' => 'Agua caliente', 'icon' => 'flame', 'category' => 'bathroom']);
+        $cabin = $this->createCabin();
+
+        $payload = [
+            'name'              => 'Cabana sin amenidades',
+            'short_description' => 'Catalogo global de amenidades.',
+            'description'       => 'Las amenidades no se asignan por cabana.',
+            'guest_capacity'    => 4,
+            'max_guests'        => 8,
+            'beds_count'        => 3,
+            'bathrooms_count'   => 1,
+            'map_slot'          => 'cabana_2',
+            'amenity_ids'       => [$amenity->id],
+        ];
+
+        $this->postJson('/api/v1/admin/cabins', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['amenity_ids']);
+
+        $this->putJson("/api/v1/admin/cabins/{$cabin->id}", [
+            'name'        => 'Cabana actualizada',
+            'amenity_ids' => [],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['amenity_ids']);
     }
 
     public function test_admin_can_upload_video_media_for_cabin(): void
@@ -289,6 +359,7 @@ class CabinModuleTest extends TestCase
             ->assertJsonPath('data.display_color', '#0ea5e9');
 
         $reservation = Reservation::firstOrFail();
+        $this->assertNotNull($reservation->expires_at);
 
         $this->assertDatabaseHas('reservation_cabin', [
             'reservation_id' => $reservation->id,
@@ -307,6 +378,59 @@ class CabinModuleTest extends TestCase
         $this->assertSame('reserved', $entries->firstWhere('cabin_id', $first->id)['state']);
         $this->assertSame('reserved', $entries->firstWhere('cabin_id', $second->id)['state']);
         $this->assertSame('Familia Rivas', $entries->firstWhere('cabin_id', $first->id)['leader_name']);
+    }
+
+    public function test_expired_pending_quotes_do_not_block_availability(): void
+    {
+        $cabinType = $this->createCabinType();
+        $cabin = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+
+        $reservation = Reservation::create([
+            'cabin_id'      => $cabin->id,
+            'check_in'      => '2030-07-20',
+            'check_out'     => '2030-07-22',
+            'guests_count'  => 2,
+            'status'        => ReservationStatus::Pending,
+            'expires_at'    => now()->subHour(),
+        ]);
+        $reservation->cabins()->sync([$cabin->id]);
+
+        $response = $this->getJson('/api/v1/availability?check_in=2030-07-20&check_out=2030-07-22')
+            ->assertOk();
+
+        $entry = collect($response->json('data.cabins'))->firstWhere('cabin_id', $cabin->id);
+
+        $this->assertSame('available', $entry['state']);
+        $this->assertTrue($entry['is_available']);
+    }
+
+    public function test_confirmed_reservations_block_even_without_quote_expiration(): void
+    {
+        $cabinType = $this->createCabinType();
+        $cabin = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+
+        $reservation = Reservation::create([
+            'cabin_id'      => $cabin->id,
+            'check_in'      => '2030-07-24',
+            'check_out'     => '2030-07-26',
+            'guests_count'  => 2,
+            'status'        => ReservationStatus::Confirmed,
+        ]);
+        $reservation->cabins()->sync([$cabin->id]);
+
+        $response = $this->getJson('/api/v1/availability?check_in=2030-07-24&check_out=2030-07-26')
+            ->assertOk();
+
+        $entry = collect($response->json('data.cabins'))->firstWhere('cabin_id', $cabin->id);
+
+        $this->assertSame('reserved', $entry['state']);
+        $this->assertFalse($entry['is_available']);
     }
 
     public function test_admin_cannot_overlap_active_reservations(): void
@@ -349,6 +473,44 @@ class CabinModuleTest extends TestCase
             'check_out'    => '2030-08-06',
             'guests_count' => 2,
         ])->assertCreated();
+
+        $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'    => [$first->id],
+            'check_in'     => '2030-08-05',
+            'check_out'    => '2030-08-06',
+            'guests_count' => 2,
+        ])->assertCreated();
+    }
+
+    public function test_expiration_command_marks_pending_quotes_expired_and_releases_cabin(): void
+    {
+        $cabinType = $this->createCabinType();
+        $cabin = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+
+        $reservation = Reservation::create([
+            'cabin_id'      => $cabin->id,
+            'check_in'      => '2030-08-10',
+            'check_out'     => '2030-08-12',
+            'guests_count'  => 2,
+            'status'        => ReservationStatus::Pending,
+            'expires_at'    => now()->subMinute(),
+        ]);
+        $reservation->cabins()->sync([$cabin->id]);
+
+        $this->artisan('reservations:expire-pending')
+            ->expectsOutput('Cotizaciones vencidas: 1')
+            ->assertExitCode(0);
+
+        $this->assertSame(ReservationStatus::Expired, $reservation->fresh()->status);
+
+        $response = $this->getJson('/api/v1/availability?check_in=2030-08-10&check_out=2030-08-12')
+            ->assertOk();
+        $entry = collect($response->json('data.cabins'))->firstWhere('cabin_id', $cabin->id);
+
+        $this->assertSame('available', $entry['state']);
     }
 
     public function test_cancelled_reservations_do_not_block_public_availability(): void
@@ -422,6 +584,56 @@ class CabinModuleTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.summary.available_count', 0)
             ->assertJsonPath('data.summary.can_host_guests', false);
+    }
+
+    public function test_admin_calendar_returns_daily_counts_and_events_for_month(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $cabinType = $this->createCabinType();
+        $first = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+        $second = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'name'          => 'Cabana 2',
+            'slug'          => 'cabana-2',
+            'code'          => 'CAB-02',
+            'map_slot'      => 'cabana_2',
+        ]);
+
+        $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'     => [$first->id],
+            'check_in'      => '2030-12-10',
+            'check_out'     => '2030-12-12',
+            'guests_count'  => 2,
+            'leader_name'   => 'Familia Agenda',
+            'status'        => ReservationStatus::Confirmed->value,
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/admin/availability-blocks', [
+            'check_in'       => '2030-12-11',
+            'check_out'      => '2030-12-12',
+            'reason'         => 'Mantenimiento',
+            'applies_to_all' => false,
+            'cabin_ids'      => [$second->id],
+        ])->assertCreated();
+
+        $response = $this->getJson('/api/v1/admin/availability/calendar?month=2030-12')
+            ->assertOk()
+            ->assertJsonPath('data.period.mode', 'month')
+            ->assertJsonPath('data.summary.events_count', 2);
+
+        $days = collect($response->json('data.days'));
+
+        $this->assertSame(1, $days->firstWhere('date', '2030-12-10')['available']);
+        $this->assertSame(0, $days->firstWhere('date', '2030-12-11')['available']);
+        $this->assertSame(2, $days->firstWhere('date', '2030-12-12')['available']);
+
+        $events = collect($response->json('data.events'));
+        $this->assertTrue($events->contains(fn ($event) => $event['leader_name'] === 'Familia Agenda'));
+        $this->assertTrue($events->contains(fn ($event) => $event['type'] === 'block'));
     }
 
     public function test_admin_endpoints_require_admin_role(): void
