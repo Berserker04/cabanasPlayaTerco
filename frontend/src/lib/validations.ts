@@ -1,5 +1,27 @@
 import { z } from 'zod';
 
+const cabinMapSlots = [
+  'cabana_1',
+  'cabana_2',
+  'cabana_3',
+  'cabana_4',
+  'cabana_5',
+  'cabana_6',
+  'cabana_7',
+  'cabana_8',
+] as const;
+
+const cabinStatuses = ['available', 'occupied', 'maintenance', 'inactive'] as const;
+
+const integerString = (label: string, minimum: number, maximum = 50) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} es obligatorio`)
+    .regex(/^\d+$/, `${label} debe ser un numero entero`)
+    .refine((value) => Number(value) >= minimum, `${label} debe ser mayor o igual a ${minimum}`)
+    .refine((value) => Number(value) <= maximum, `${label} no puede superar ${maximum}`);
+
 const todayIso = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -104,8 +126,53 @@ export const reviewSchema = z.object({
   body: z.string().min(20, 'La reseña debe tener al menos 20 caracteres'),
 });
 
+export const cabinFormSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, 'El nombre es obligatorio')
+      .max(255, 'El nombre no puede superar 255 caracteres'),
+    status: z.enum(cabinStatuses),
+    floor: z
+      .string()
+      .trim()
+      .refine((value) => value === '' || /^-?\d+$/.test(value), 'El piso debe ser un numero entero'),
+    short_description: z
+      .string()
+      .trim()
+      .max(500, 'El resumen no puede superar 500 caracteres'),
+    description: z.string().trim(),
+    guest_capacity: integerString('La capacidad comoda', 1),
+    max_guests: integerString('La capacidad maxima', 1),
+    beds_count: integerString('La cantidad de camas', 0),
+    bathrooms_count: integerString('La cantidad de banos', 0),
+    map_slot: z
+      .string()
+      .refine(
+        (value) => cabinMapSlots.includes(value as (typeof cabinMapSlots)[number]),
+        'La ubicacion en el mapa es obligatoria',
+      ),
+    is_active: z.boolean(),
+    sort_order: integerString('El orden', 0, 999),
+    notes: z.string().trim(),
+  })
+  .superRefine((data, ctx) => {
+    const comfortable = Number(data.guest_capacity);
+    const maximum = Number(data.max_guests);
+
+    if (comfortable > maximum) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['guest_capacity'],
+        message: 'La capacidad comoda no puede superar la capacidad maxima',
+      });
+    }
+  });
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ContactFormInput = z.input<typeof contactSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type ReviewInput = z.infer<typeof reviewSchema>;
+export type CabinFormInput = z.infer<typeof cabinFormSchema>;

@@ -156,18 +156,20 @@ export default async function CabinDetailPage({ params }: Props) {
               </div>
             </div>
 
-            {imageUrls.length > 1 || videos.length > 1 ? (
+            {images.length > 0 || videos.length > 0 ? (
               <div className="mt-10">
                 <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">Galería</h2>
                 <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {imageUrls.slice(1).map((image) => (
+                  {images.map((image) => (
                     <div
-                      key={image}
+                      key={image.id}
+                      role="img"
+                      aria-label={image.alt ?? `Imagen de ${cabin.name}`}
                       className="aspect-[4/3] rounded-lg bg-cover bg-center"
-                      style={{ backgroundImage: `url(${image})` }}
+                      style={{ backgroundImage: `url(${image.url})` }}
                     />
                   ))}
-                  {videos.slice(1).map((video) => (
+                  {videos.map((video) => (
                     <video key={video.id} src={video.url} controls className="aspect-[4/3] w-full rounded-lg bg-neutral-950 object-cover" />
                   ))}
                 </div>

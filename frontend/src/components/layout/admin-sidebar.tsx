@@ -15,8 +15,19 @@ import {
   Shield,
   LogOut,
   ChevronLeft,
+  Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +61,7 @@ export function AdminSidebar() {
   const { user, logout } = useAuth();
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
+    <aside className="hidden h-screen w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
       <div className="flex h-16 items-center gap-2 border-b px-4">
         <Link href="/admin" className="flex min-w-0 items-center gap-2 font-bold">
           <NextImage
@@ -121,5 +132,84 @@ export function AdminSidebar() {
         </Button>
       </div>
     </aside>
+  );
+}
+
+export function AdminMobileHeader() {
+  const pathname = usePathname();
+  const { user, logout } = useAuth();
+  const currentSection = ADMIN_LINKS.find((link) =>
+    link.href === '/admin' ? pathname === '/admin' : pathname.startsWith(link.href),
+  );
+
+  return (
+    <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4 md:hidden">
+      <Link href="/admin" className="flex min-w-0 items-center gap-2 font-semibold">
+        <NextImage
+          src="/assets/terco_logo_nav.png"
+          alt=""
+          width={500}
+          height={328}
+          quality={100}
+          priority
+          unoptimized
+          sizes="44px"
+          className="h-8 w-11 shrink-0 object-contain"
+        />
+        <span className="truncate text-sm">{currentSection?.label ?? 'Administracion'}</span>
+      </Link>
+
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button type="button" variant="outline" size="icon" aria-label="Abrir menu de administracion">
+            <Menu className="size-5" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-[min(86vw,320px)] gap-0 p-0 text-sidebar-foreground">
+          <SheetHeader className="border-b text-left">
+            <SheetTitle>Cabañas Playa Terco</SheetTitle>
+            <SheetDescription>Panel de administracion</SheetDescription>
+          </SheetHeader>
+          <nav className="flex-1 overflow-y-auto px-3 py-4">
+            <ul className="space-y-1">
+              {ADMIN_LINKS.map((link) => {
+                const Icon = ICON_MAP[link.icon];
+                const isActive = link.href === '/admin'
+                  ? pathname === '/admin'
+                  : pathname.startsWith(link.href);
+
+                return (
+                  <li key={link.href}>
+                    <SheetClose asChild>
+                      <Link
+                        href={link.href}
+                        className={cn(
+                          'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+                        )}
+                      >
+                        {Icon && <Icon className="size-4 shrink-0" />}
+                        {link.label}
+                      </Link>
+                    </SheetClose>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+          <SheetFooter className="border-t">
+            <p className="truncate text-sm font-medium">{user?.name}</p>
+            <SheetClose asChild>
+              <Button type="button" variant="ghost" className="justify-start text-muted-foreground" onClick={() => logout()}>
+                <LogOut className="size-4" />
+                Cerrar sesion
+              </Button>
+            </SheetClose>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </header>
   );
 }
