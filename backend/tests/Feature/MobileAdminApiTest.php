@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Contracts\GoogleIdentityVerifier;
 use App\Enums\CabinStatus;
 use App\Enums\ExpenseStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\ReservationStatus;
+use App\Enums\UserStatus;
 use App\Models\Cabin;
 use App\Models\CabinType;
 use App\Models\DeviceToken;
@@ -17,7 +19,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Mockery;
 use Tests\TestCase;
+use UnexpectedValueException;
 
 class MobileAdminApiTest extends TestCase
 {
@@ -47,9 +51,149 @@ class MobileAdminApiTest extends TestCase
         ]);
 
         $this
-            ->withHeader('Authorization', 'Bearer ' . $response->json('data.token'))
+            ->withHeader('Authorization', 'Bearer '.$response->json('data.token'))
             ->getJson('/api/v1/admin/dashboard/stats')
             ->assertOk();
+    }
+
+    public function test_mobile_password_login_returns_pending_for_non_staff_user(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'pending@example.com',
+        ]);
+        $this->assignUserRole($user);
+
+        $this->postJson('/api/v1/auth/mobile/login', [
+            'email' => 'pending@example.com',
+            'password' => 'password',
+        ])
+            ->assertStatus(202)
+            ->assertJsonPath('data.user.email', 'pending@example.com')
+            ->assertJsonPath('data.approval_required', true)
+            ->assertJsonMissingPath('data.token');
+    }
+
+    public function test_mobile_registration_creates_pending_user_without_token(): void
+    {
+        Role::create([
+            'name' => 'user',
+            'display_name' => 'Usuario',
+        ]);
+
+        $this->postJson('/api/v1/auth/mobile/register', [
+            'name' => 'Nueva Operadora',
+            'email' => 'nueva-operadora@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+        ])
+            ->assertStatus(202)
+            ->assertJsonPath('data.user.email', 'nueva-operadora@example.com')
+            ->assertJsonPath('data.user.roles.0', 'user')
+            ->assertJsonPath('data.approval_required', true)
+            ->assertJsonMissingPath('data.token');
+    }
+
+    public function test_mobile_google_login_creates_pending_user(): void
+    {
+        Role::create([
+            'name' => 'user',
+            'display_name' => 'Usuario',
+        ]);
+        config(['services.google.client_id' => 'web-client-id']);
+        $this->fakeGoogleIdentity([
+            'sub' => 'google-pending',
+            'email' => 'google-pending@example.com',
+            'name' => 'Google Pending',
+            'avatar' => 'https://example.com/avatar.png',
+        ]);
+
+        $this->postJson('/api/v1/auth/mobile/google', [
+            'id_token' => 'valid-id-token',
+        ])
+            ->assertStatus(202)
+            ->assertJsonPath('data.user.email', 'google-pending@example.com')
+            ->assertJsonPath('data.approval_required', true);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'google-pending@example.com',
+            'google_id' => 'google-pending',
+        ]);
+    }
+
+    public function test_mobile_google_login_issues_token_for_existing_staff_user(): void
+    {
+        $staff = User::factory()->create([
+            'email' => 'staff-google@example.com',
+        ]);
+        $staffRole = Role::create([
+            'name' => 'staff',
+            'display_name' => 'Personal',
+        ]);
+        $staff->roles()->attach($staffRole);
+
+        config(['services.google.client_id' => 'web-client-id']);
+        $this->fakeGoogleIdentity([
+            'sub' => 'google-staff',
+            'email' => 'staff-google@example.com',
+            'name' => 'Staff Google',
+            'avatar' => null,
+        ]);
+
+        $this->postJson('/api/v1/auth/mobile/google', [
+            'id_token' => 'valid-id-token',
+            'device_name' => 'Android Playa',
+            'platform' => 'android',
+            'push_token' => 'google-push-token',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.user.is_staff', true)
+            ->assertJsonPath('data.approval_required', false)
+            ->assertJsonStructure(['data' => ['token']]);
+
+        $this->assertDatabaseHas('device_tokens', [
+            'user_id' => $staff->id,
+            'token' => 'google-push-token',
+        ]);
+    }
+
+    public function test_mobile_google_login_rejects_invalid_identity(): void
+    {
+        config(['services.google.client_id' => 'web-client-id']);
+
+        $verifier = Mockery::mock(GoogleIdentityVerifier::class);
+        $verifier->shouldReceive('verify')
+            ->once()
+            ->with('invalid-id-token')
+            ->andThrow(new UnexpectedValueException('Token inválido.'));
+        $this->app->instance(GoogleIdentityVerifier::class, $verifier);
+
+        $this->postJson('/api/v1/auth/mobile/google', [
+            'id_token' => 'invalid-id-token',
+        ])
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Token inválido.');
+    }
+
+    public function test_mobile_google_login_rejects_suspended_user(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'suspended-mobile-google@example.com',
+            'google_id' => 'google-suspended-mobile',
+            'status' => UserStatus::Suspended,
+        ]);
+        $this->assignUserRole($user);
+
+        config(['services.google.client_id' => 'web-client-id']);
+        $this->fakeGoogleIdentity([
+            'sub' => 'google-suspended-mobile',
+            'email' => 'suspended-mobile-google@example.com',
+            'name' => 'Suspendida',
+            'avatar' => null,
+        ]);
+
+        $this->postJson('/api/v1/auth/mobile/google', [
+            'id_token' => 'valid-id-token',
+        ])->assertForbidden();
     }
 
     public function test_availability_planner_segments_conflicts_and_suggests_available_cabins(): void
@@ -191,11 +335,33 @@ class MobileAdminApiTest extends TestCase
         return $user;
     }
 
+    /**
+     * @param  array{sub: string, email: string, name: string, avatar: string|null}  $identity
+     */
+    private function fakeGoogleIdentity(array $identity): void
+    {
+        $verifier = Mockery::mock(GoogleIdentityVerifier::class);
+        $verifier->shouldReceive('verify')
+            ->once()
+            ->with('valid-id-token')
+            ->andReturn($identity);
+        $this->app->instance(GoogleIdentityVerifier::class, $verifier);
+    }
+
+    private function assignUserRole(User $user): void
+    {
+        $role = Role::firstOrCreate(
+            ['name' => 'user'],
+            ['display_name' => 'Usuario'],
+        );
+        $user->roles()->attach($role);
+    }
+
     private function createCabinType(array $overrides = []): CabinType
     {
         return CabinType::create(array_merge([
             'name' => 'Cabana Playa Terco',
-            'slug' => 'cabana-playa-terco-test-' . Str::random(8),
+            'slug' => 'cabana-playa-terco-test-'.Str::random(8),
             'description' => 'Tipo interno para pruebas.',
             'short_description' => 'Tipo interno.',
             'base_price' => 0,
@@ -214,8 +380,8 @@ class MobileAdminApiTest extends TestCase
         return Cabin::create(array_merge([
             'cabin_type_id' => $cabinTypeId,
             'name' => 'Cabana Terco',
-            'slug' => 'cabana-terco-' . Str::random(8),
-            'code' => 'CAB-' . Str::upper(Str::random(6)),
+            'slug' => 'cabana-terco-'.Str::random(8),
+            'code' => 'CAB-'.Str::upper(Str::random(6)),
             'status' => CabinStatus::Available,
             'floor' => 1,
             'cover_image' => 'https://example.test/cabana.jpg',

@@ -1,6 +1,10 @@
 import 'package:intl/intl.dart';
 
-final moneyFormat = NumberFormat.currency(locale: 'es_CO', symbol: r'$ ', decimalDigits: 0);
+final moneyFormat = NumberFormat.currency(
+  locale: 'es_CO',
+  symbol: r'$ ',
+  decimalDigits: 0,
+);
 final compactDateFormat = DateFormat('d MMM', 'es_CO');
 
 String money(num value) => moneyFormat.format(value);

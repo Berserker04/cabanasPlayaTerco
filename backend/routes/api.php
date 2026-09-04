@@ -21,6 +21,12 @@ Route::prefix('auth')->group(function () {
     Route::post('/mobile/login', [Api\MobileAuthController::class, 'login'])
         ->middleware('throttle:5,1');
 
+    Route::post('/mobile/register', [Api\MobileAuthController::class, 'register'])
+        ->middleware('throttle:3,1');
+
+    Route::post('/mobile/google', [Api\MobileAuthController::class, 'google'])
+        ->middleware('throttle:5,1');
+
     Route::post('/forgot-password', [Api\AuthController::class, 'forgotPassword']);
     Route::post('/reset-password', [Api\AuthController::class, 'resetPassword']);
 
@@ -100,6 +106,7 @@ Route::prefix('admin')
 
         // ── Dashboard ────────────────────────────────────────
         Route::get('/dashboard/stats', [Admin\DashboardController::class, 'stats']);
+        Route::get('/dashboard/operations', [Admin\DashboardController::class, 'operations']);
 
         // ── Cabin Types ──────────────────────────────────────
         Route::apiResource('cabin-types', Admin\CabinTypeController::class)

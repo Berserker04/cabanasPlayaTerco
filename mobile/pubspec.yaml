@@ -40,6 +40,7 @@ dependencies:
   flutter_secure_storage: ^10.3.0
   firebase_core: ^4.9.0
   firebase_messaging: ^16.2.2
+  google_sign_in: ^7.2.0
   intl: ^0.20.2
 
 dev_dependencies:
@@ -52,6 +53,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -63,6 +65,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/branding/terco_logo_nav.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -94,3 +99,14 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/branding/terco_logo.png"
+  min_sdk_android: 24
+  adaptive_icon_background: "#F4F8F7"
+  adaptive_icon_foreground: "assets/branding/terco_logo_nav.png"
+  adaptive_icon_foreground_inset: 20
+  remove_alpha_ios: true
+  background_color_ios: "#F4F8F7"

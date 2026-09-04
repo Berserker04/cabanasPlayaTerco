@@ -23,7 +23,7 @@ class PlayaTercoAdminApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title: 'Cabanas Playa Terco',
+      title: 'Cabañas Playa Terco',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

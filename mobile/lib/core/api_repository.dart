@@ -10,25 +10,49 @@ class ApiRepository {
   final Dio _dio;
   final PushTokenService _pushTokenService;
 
-  Future<AuthSession> login({required String email, required String password}) async {
-    final pushToken = await _pushTokenService.getToken();
-    final payload = <String, Object?>{
-      'email': email,
-      'password': password,
-      'device_name': 'Flutter ${defaultTargetPlatform.name}',
-      'platform': defaultTargetPlatform.name,
-    };
-    if (pushToken != null) {
-      payload['push_token'] = pushToken;
-    }
+  Future<AuthResult> login({
+    required String email,
+    required String password,
+  }) async {
+    final payload = await _devicePayload();
+    payload.addAll({'email': email, 'password': password});
 
-    final response = await _dio.post<JsonMap>('/auth/mobile/login', data: payload);
-
-    final data = asMap(response.data?['data']);
-    return AuthSession(
-      user: UserProfile.fromJson(asMap(data['user'])),
-      token: data['token']?.toString() ?? '',
+    final response = await _dio.post<JsonMap>(
+      '/auth/mobile/login',
+      data: payload,
     );
+
+    return AuthResult.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<AuthResult> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final response = await _dio.post<JsonMap>(
+      '/auth/mobile/register',
+      data: {
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': password,
+      },
+    );
+
+    return AuthResult.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<AuthResult> loginWithGoogle(String idToken) async {
+    final payload = await _devicePayload();
+    payload['id_token'] = idToken;
+
+    final response = await _dio.post<JsonMap>(
+      '/auth/mobile/google',
+      data: payload,
+    );
+
+    return AuthResult.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<UserProfile> currentUser() async {
@@ -42,6 +66,18 @@ class ApiRepository {
     } on DioException {
       // Token cleanup remains local even if the network request fails.
     }
+  }
+
+  Future<JsonMap> _devicePayload() async {
+    final pushToken = await _pushTokenService.getToken();
+    final payload = <String, dynamic>{
+      'device_name': 'Flutter ${defaultTargetPlatform.name}',
+      'platform': defaultTargetPlatform.name,
+    };
+    if (pushToken != null) {
+      payload['push_token'] = pushToken;
+    }
+    return payload;
   }
 
   Future<DashboardStats> dashboardStats() async {
@@ -97,7 +133,9 @@ class ApiRepository {
         if (status != null && status != 'all') 'status': status,
       },
     );
-    return asList(response.data?['data']).map(ReservationSummary.fromJson).toList();
+    return asList(
+      response.data?['data'],
+    ).map(ReservationSummary.fromJson).toList();
   }
 
   Future<void> createPayment({
@@ -107,14 +145,17 @@ class ApiRepository {
     required String paymentDate,
     String? reference,
   }) async {
-    await _dio.post<JsonMap>('/admin/payments', data: {
-      'reservation_id': reservationId,
-      'amount': amount,
-      'method': method,
-      'status': 'completed',
-      'payment_date': paymentDate,
-      if (reference != null && reference.isNotEmpty) 'reference': reference,
-    });
+    await _dio.post<JsonMap>(
+      '/admin/payments',
+      data: {
+        'reservation_id': reservationId,
+        'amount': amount,
+        'method': method,
+        'status': 'completed',
+        'payment_date': paymentDate,
+        if (reference != null && reference.isNotEmpty) 'reference': reference,
+      },
+    );
   }
 
   Future<List<LeadItem>> leads() async {
@@ -122,10 +163,12 @@ class ApiRepository {
     return asList(response.data?['data']).map(LeadItem.fromJson).toList();
   }
 
-  Future<void> updateLead(int id, {required String status, String? notes}) async {
-    final payload = <String, Object?>{
-      'status': status,
-    };
+  Future<void> updateLead(
+    int id, {
+    required String status,
+    String? notes,
+  }) async {
+    final payload = <String, Object?>{'status': status};
     if (notes != null) {
       payload['notes'] = notes;
     }

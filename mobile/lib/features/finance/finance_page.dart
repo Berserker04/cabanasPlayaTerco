@@ -7,7 +7,9 @@ import '../../shared/formatters.dart';
 import '../../shared/widgets.dart';
 
 final financeSummaryProvider = FutureProvider.autoDispose((ref) {
-  return ref.watch(apiRepositoryProvider).financeSummary(month: monthKey(DateTime.now()));
+  return ref
+      .watch(apiRepositoryProvider)
+      .financeSummary(month: monthKey(DateTime.now()));
 });
 
 final expensesProvider = FutureProvider.autoDispose((ref) {
@@ -27,8 +29,17 @@ class FinancePage extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text('Caja simple', style: Theme.of(context).textTheme.headlineSmall)),
-            FilledButton.icon(onPressed: () => _showExpenseDialog(context, ref), icon: const Icon(Icons.add), label: const Text('Gasto')),
+            Expanded(
+              child: Text(
+                'Caja simple',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () => _showExpenseDialog(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('Gasto'),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -41,13 +52,25 @@ class FinancePage extends ConsumerWidget {
         Text('Gastos', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         expenses.when(
-          loading: () => const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(),
+            ),
+          ),
           error: (error, _) => SectionCard(child: Text(errorMessage(error))),
           data: (items) {
             if (items.isEmpty) {
-              return const EmptyState(icon: Icons.receipt_long_outlined, title: 'Sin gastos', message: 'Registra gastos futuros o pagados desde el boton superior.');
+              return const EmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'Sin gastos',
+                message:
+                    'Registra gastos futuros o pagados desde el boton superior.',
+              );
             }
-            return Column(children: items.map((item) => _ExpenseCard(item: item)).toList());
+            return Column(
+              children: items.map((item) => _ExpenseCard(item: item)).toList(),
+            );
           },
         ),
       ],
@@ -70,20 +93,34 @@ class FinancePage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: category, decoration: const InputDecoration(labelText: 'Categoria')),
+                TextField(
+                  controller: category,
+                  decoration: const InputDecoration(labelText: 'Categoria'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: description, decoration: const InputDecoration(labelText: 'Descripcion')),
+                TextField(
+                  controller: description,
+                  decoration: const InputDecoration(labelText: 'Descripcion'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Monto')),
+                TextField(
+                  controller: amount,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Monto'),
+                ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: status,
                   decoration: const InputDecoration(labelText: 'Estado'),
                   items: const [
-                    DropdownMenuItem(value: 'pending', child: Text('Pendiente')),
+                    DropdownMenuItem(
+                      value: 'pending',
+                      child: Text('Pendiente'),
+                    ),
                     DropdownMenuItem(value: 'paid', child: Text('Pagado')),
                   ],
-                  onChanged: (value) => setDialogState(() => status = value ?? 'pending'),
+                  onChanged: (value) =>
+                      setDialogState(() => status = value ?? 'pending'),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -91,7 +128,9 @@ class FinancePage extends ConsumerWidget {
                     final picked = await showDatePicker(
                       context: context,
                       initialDate: dueDate,
-                      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                      firstDate: DateTime.now().subtract(
+                        const Duration(days: 1),
+                      ),
                       lastDate: DateTime(DateTime.now().year + 5),
                     );
                     if (picked != null) setDialogState(() => dueDate = picked);
@@ -103,8 +142,14 @@ class FinancePage extends ConsumerWidget {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Guardar')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Guardar'),
+            ),
           ],
         ),
       ),
@@ -121,13 +166,17 @@ class FinancePage extends ConsumerWidget {
         if (status == 'paid') 'paid_at': isoDate(DateTime.now()),
       });
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gasto guardado.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Gasto guardado.')));
         ref.invalidate(expensesProvider);
         ref.invalidate(financeSummaryProvider);
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage(error))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage(error))));
       }
     }
   }
@@ -143,11 +192,27 @@ class _FinanceSummary extends StatelessWidget {
     return SectionCard(
       child: Column(
         children: [
-          _MoneyRow(label: 'Ingresos', value: summary.incomeTotal, color: const Color(0xFF16A34A)),
-          _MoneyRow(label: 'Gastos pagados', value: summary.expenseTotal, color: const Color(0xFFDC2626)),
-          _MoneyRow(label: 'Gastos pendientes', value: summary.pendingExpenseTotal, color: const Color(0xFFD97706)),
+          _MoneyRow(
+            label: 'Ingresos',
+            value: summary.incomeTotal,
+            color: const Color(0xFF16A34A),
+          ),
+          _MoneyRow(
+            label: 'Gastos pagados',
+            value: summary.expenseTotal,
+            color: const Color(0xFFDC2626),
+          ),
+          _MoneyRow(
+            label: 'Gastos pendientes',
+            value: summary.pendingExpenseTotal,
+            color: const Color(0xFFD97706),
+          ),
           const Divider(),
-          _MoneyRow(label: 'Neto', value: summary.netTotal, color: const Color(0xFF2563EB)),
+          _MoneyRow(
+            label: 'Neto',
+            value: summary.netTotal,
+            color: const Color(0xFF2563EB),
+          ),
         ],
       ),
     );
@@ -155,7 +220,11 @@ class _FinanceSummary extends StatelessWidget {
 }
 
 class _MoneyRow extends StatelessWidget {
-  const _MoneyRow({required this.label, required this.value, required this.color});
+  const _MoneyRow({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final String label;
   final double value;
@@ -168,7 +237,10 @@ class _MoneyRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label)),
-          Text(money(value), style: TextStyle(color: color, fontWeight: FontWeight.w800)),
+          Text(
+            money(value),
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+          ),
         ],
       ),
     );
@@ -187,18 +259,31 @@ class _ExpenseCard extends StatelessWidget {
       child: SectionCard(
         child: Row(
           children: [
-            CircleAvatar(child: Text((item.category.isEmpty ? '?' : item.category.characters.first).toUpperCase())),
+            CircleAvatar(
+              child: Text(
+                (item.category.isEmpty ? '?' : item.category.characters.first)
+                    .toUpperCase(),
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.description, style: Theme.of(context).textTheme.titleMedium),
-                  Text('${item.category} · ${item.statusLabel} · ${item.dueDate}'),
+                  Text(
+                    item.description,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    '${item.category} · ${item.statusLabel} · ${item.dueDate}',
+                  ),
                 ],
               ),
             ),
-            Text(money(item.amount), style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+              money(item.amount),
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
           ],
         ),
       ),

@@ -41,16 +41,33 @@ class AdminShell extends ConsumerWidget {
         selectedIndex: index,
         onDestinationSelected: (value) => context.go(_locations[value]),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.space_dashboard_outlined), label: 'Panel'),
-          NavigationDestination(icon: Icon(Icons.event_available_outlined), label: 'Fechas'),
-          NavigationDestination(icon: Icon(Icons.mark_email_unread_outlined), label: 'Leads'),
-          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Caja'),
+          NavigationDestination(
+            icon: Icon(Icons.space_dashboard_outlined),
+            label: 'Panel',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.event_available_outlined),
+            label: 'Fechas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mark_email_unread_outlined),
+            label: 'Leads',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            label: 'Caja',
+          ),
         ],
       ),
     );
   }
 
-  static const _locations = ['/dashboard', '/availability', '/leads', '/finance'];
+  static const _locations = [
+    '/dashboard',
+    '/availability',
+    '/leads',
+    '/finance',
+  ];
 
   int _indexForLocation(String location) {
     final index = _locations.indexWhere(location.startsWith);

@@ -2,68 +2,95 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Contracts\GoogleIdentityVerifier;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\MobileGoogleLoginRequest;
+use App\Http\Requests\Auth\MobileLoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\UserResource;
 use App\Models\DeviceToken;
 use App\Models\User;
+use App\Services\MobileAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
+use LogicException;
+use UnexpectedValueException;
 
 class MobileAuthController extends Controller
 {
-    public function login(Request $request): JsonResponse
+    public function __construct(
+        private readonly MobileAuthService $mobileAuthService,
+        private readonly GoogleIdentityVerifier $googleIdentityVerifier,
+    ) {}
+
+    public function login(MobileLoginRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string'],
-            'device_name' => ['nullable', 'string', 'max:120'],
-            'platform' => ['nullable', 'string', 'max:40'],
-            'push_token' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $request->validated();
+        $user = $this->mobileAuthService->passwordUser($data['email'], $data['password']);
 
-        $user = User::query()
-            ->where('email', $data['email'])
-            ->first();
-
-        if (! $user || ! Hash::check($data['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Las credenciales no son correctas.'],
-            ]);
+        if ($this->mobileAuthService->approvalRequired($user)) {
+            return $this->pendingResponse($user);
         }
 
-        if (! $user->isActive()) {
-            abort(403, 'Tu cuenta esta suspendida. Contacta a un administrador.');
+        return $this->sessionResponse($user, $data, 'Inicio de sesión móvil exitoso.');
+    }
+
+    public function register(RegisterRequest $request): JsonResponse
+    {
+        $user = $this->mobileAuthService->registerPending($request->validated());
+
+        return $this->pendingResponse($user, 'Cuenta creada. Un administrador debe aprobar tu acceso.');
+    }
+
+    public function google(MobileGoogleLoginRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+
+        try {
+            $identity = $this->googleIdentityVerifier->verify($data['id_token']);
+        } catch (LogicException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 503);
+        } catch (UnexpectedValueException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 401);
         }
 
-        $user->load('roles');
+        $user = $this->mobileAuthService->resolveGoogleUser($identity);
 
-        if (! $user->isStaff()) {
-            abort(403, 'Acceso denegado. Se requiere rol operativo.');
+        if ($this->mobileAuthService->approvalRequired($user)) {
+            return $this->pendingResponse($user);
         }
 
-        if (! empty($data['push_token'])) {
-            DeviceToken::updateOrCreate(
-                ['token' => $data['push_token']],
-                [
-                    'user_id' => $user->id,
-                    'platform' => $data['platform'] ?? null,
-                    'device_name' => $data['device_name'] ?? null,
-                    'last_used_at' => now(),
-                ],
-            );
-        }
+        return $this->sessionResponse($user, $data, 'Inicio de sesión con Google exitoso.');
+    }
 
-        $token = $user->createToken($data['device_name'] ?? 'mobile', ['mobile'])->plainTextToken;
+    /**
+     * @param  array{device_name?: string|null, platform?: string|null, push_token?: string|null}  $device
+     */
+    private function sessionResponse(User $user, array $device, string $message): JsonResponse
+    {
+        $token = $this->mobileAuthService->issueToken($user, $device);
 
         return response()->json([
             'data' => [
                 'user' => new UserResource($user),
                 'token' => $token,
+                'approval_required' => false,
             ],
-            'message' => 'Inicio de sesion movil exitoso.',
+            'message' => $message,
         ]);
+    }
+
+    private function pendingResponse(
+        User $user,
+        string $message = 'Tu acceso al panel está pendiente de aprobación.',
+    ): JsonResponse {
+        return response()->json([
+            'data' => [
+                'user' => new UserResource($user),
+                'approval_required' => true,
+            ],
+            'message' => $message,
+        ], 202);
     }
 
     public function logout(Request $request): JsonResponse

@@ -21,11 +21,23 @@ class DashboardPage extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Operacion de hoy', style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+            'Operacion de hoy',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
           const SizedBox(height: 12),
           dashboard.when(
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
-            error: (error, _) => EmptyState(icon: Icons.cloud_off, title: 'Sin datos', message: errorMessage(error)),
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (error, _) => EmptyState(
+              icon: Icons.cloud_off,
+              title: 'Sin datos',
+              message: errorMessage(error),
+            ),
             data: (stats) => Column(
               children: [
                 _MetricTile(
@@ -81,10 +93,23 @@ class _MetricTile extends StatelessWidget {
       child: SectionCard(
         child: Row(
           children: [
-            CircleAvatar(backgroundColor: color.withValues(alpha: 0.12), child: Icon(icon, color: color)),
+            CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.12),
+              child: Icon(icon, color: color),
+            ),
             const SizedBox(width: 14),
-            Expanded(child: Text(label, style: Theme.of(context).textTheme.titleMedium)),
-            Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
           ],
         ),
       ),

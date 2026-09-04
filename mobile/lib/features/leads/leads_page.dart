@@ -20,10 +20,18 @@ class LeadsPage extends ConsumerWidget {
       onRefresh: () => ref.refresh(leadsProvider.future),
       child: leads.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => EmptyState(icon: Icons.cloud_off, title: 'Sin leads', message: errorMessage(error)),
+        error: (error, _) => EmptyState(
+          icon: Icons.cloud_off,
+          title: 'Sin leads',
+          message: errorMessage(error),
+        ),
         data: (items) {
           if (items.isEmpty) {
-            return const EmptyState(icon: Icons.inbox_outlined, title: 'Bandeja limpia', message: 'Los contactos nuevos apareceran aqui.');
+            return const EmptyState(
+              icon: Icons.inbox_outlined,
+              title: 'Bandeja limpia',
+              message: 'Los contactos nuevos apareceran aqui.',
+            );
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -31,7 +39,10 @@ class LeadsPage extends ConsumerWidget {
             separatorBuilder: (context, index) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return Text('Leads del sistema', style: Theme.of(context).textTheme.headlineSmall);
+                return Text(
+                  'Leads del sistema',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                );
               }
               return _LeadCard(item: items[index - 1]);
             },
@@ -55,14 +66,26 @@ class _LeadCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(item.name, style: Theme.of(context).textTheme.titleMedium)),
+              Expanded(
+                child: Text(
+                  item.name,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
               Chip(label: Text(item.statusLabel)),
             ],
           ),
           if (item.email != null) Text(item.email!),
           if (item.phone != null) Text(item.phone!),
-          if (item.checkIn != null) Text('${item.checkIn} -> ${item.checkOut ?? '-'} · ${item.guests ?? 0} personas'),
-          if (item.message != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(item.message!)),
+          if (item.checkIn != null)
+            Text(
+              '${item.checkIn} -> ${item.checkOut ?? '-'} · ${item.guests ?? 0} personas',
+            ),
+          if (item.message != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(item.message!),
+            ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -84,16 +107,24 @@ class _LeadCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _update(BuildContext context, WidgetRef ref, String status) async {
+  Future<void> _update(
+    BuildContext context,
+    WidgetRef ref,
+    String status,
+  ) async {
     try {
       await ref.read(apiRepositoryProvider).updateLead(item.id, status: status);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lead actualizado.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Lead actualizado.')));
         ref.invalidate(leadsProvider);
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage(error))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage(error))));
       }
     }
   }

@@ -2,7 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 class SectionCard extends StatelessWidget {
-  const SectionCard({super.key, required this.child, this.padding = const EdgeInsets.all(16)});
+  const SectionCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+  });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -16,7 +20,12 @@ class SectionCard extends StatelessWidget {
 }
 
 class EmptyState extends StatelessWidget {
-  const EmptyState({super.key, required this.icon, required this.title, required this.message});
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
 
   final IconData icon;
   final String title;
@@ -50,10 +59,10 @@ String errorMessage(Object error) {
       return data['message'].toString();
     }
     if (error.type == DioExceptionType.connectionError) {
-      return 'No hay conexion con el servidor.';
+      return 'No hay conexión con el servidor.';
     }
   }
-  return 'No pudimos completar la accion.';
+  return 'No pudimos completar la acción.';
 }
 
 Color toneColor(String tone) {

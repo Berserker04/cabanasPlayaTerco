@@ -35,12 +35,12 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(JsonMap json) => UserProfile(
-        id: asInt(json['id']),
-        name: json['name']?.toString() ?? 'Usuario',
-        email: json['email']?.toString() ?? '',
-        isAdmin: json['is_admin'] == true,
-        isStaff: json['is_staff'] == true,
-      );
+    id: asInt(json['id']),
+    name: json['name']?.toString() ?? 'Usuario',
+    email: json['email']?.toString() ?? '',
+    isAdmin: json['is_admin'] == true,
+    isStaff: json['is_staff'] == true,
+  );
 
   final int id;
   final String name;
@@ -54,6 +54,34 @@ class AuthSession {
 
   final UserProfile user;
   final String token;
+}
+
+class AuthResult {
+  const AuthResult({
+    required this.user,
+    required this.approvalRequired,
+    this.token,
+  });
+
+  factory AuthResult.fromJson(JsonMap json) {
+    final data = asMap(json['data']);
+    final token = data['token']?.toString();
+
+    return AuthResult(
+      user: UserProfile.fromJson(asMap(data['user'])),
+      approvalRequired: data['approval_required'] == true,
+      token: token == null || token.isEmpty ? null : token,
+    );
+  }
+
+  final UserProfile user;
+  final bool approvalRequired;
+  final String? token;
+
+  AuthSession? get session {
+    final value = token;
+    return value == null ? null : AuthSession(user: user, token: value);
+  }
 }
 
 class DashboardStats {
@@ -70,13 +98,17 @@ class DashboardStats {
 }
 
 class StaffOption {
-  const StaffOption({required this.id, required this.fullName, required this.roleLabel});
+  const StaffOption({
+    required this.id,
+    required this.fullName,
+    required this.roleLabel,
+  });
 
   factory StaffOption.fromJson(JsonMap json) => StaffOption(
-        id: asInt(json['id']),
-        fullName: json['full_name']?.toString() ?? '',
-        roleLabel: json['role_label']?.toString() ?? json['role']?.toString() ?? '',
-      );
+    id: asInt(json['id']),
+    fullName: json['full_name']?.toString() ?? '',
+    roleLabel: json['role_label']?.toString() ?? json['role']?.toString() ?? '',
+  );
 
   final int id;
   final String fullName;
@@ -94,13 +126,15 @@ class PlannerResult {
   });
 
   factory PlannerResult.fromJson(JsonMap json) => PlannerResult(
-        checkIn: json['check_in']?.toString() ?? '',
-        checkOut: json['check_out']?.toString() ?? '',
-        guests: json['guests'] == null ? null : asInt(json['guests']),
-        cabins: asList(json['cabins']).map(PlannerCabin.fromJson).toList(),
-        suggestions: asList(json['suggestions']).map(PlannerSuggestion.fromJson).toList(),
-        summary: asMap(json['summary']),
-      );
+    checkIn: json['check_in']?.toString() ?? '',
+    checkOut: json['check_out']?.toString() ?? '',
+    guests: json['guests'] == null ? null : asInt(json['guests']),
+    cabins: asList(json['cabins']).map(PlannerCabin.fromJson).toList(),
+    suggestions: asList(
+      json['suggestions'],
+    ).map(PlannerSuggestion.fromJson).toList(),
+    summary: asMap(json['summary']),
+  );
 
   final String checkIn;
   final String checkOut;
@@ -122,14 +156,17 @@ class PlannerCabin {
   });
 
   factory PlannerCabin.fromJson(JsonMap json) => PlannerCabin(
-        id: asInt(json['cabin_id']),
-        name: json['name']?.toString() ?? asMap(json['cabin'])['name']?.toString() ?? 'Cabana',
-        mapSlot: json['map_slot']?.toString(),
-        maxGuests: asInt(json['max_guests']),
-        fitsGuests: json['fits_guests'] == true,
-        availableForRange: json['available_for_range'] == true,
-        segments: asList(json['segments']).map(PlannerSegment.fromJson).toList(),
-      );
+    id: asInt(json['cabin_id']),
+    name:
+        json['name']?.toString() ??
+        asMap(json['cabin'])['name']?.toString() ??
+        'Cabana',
+    mapSlot: json['map_slot']?.toString(),
+    maxGuests: asInt(json['max_guests']),
+    fitsGuests: json['fits_guests'] == true,
+    availableForRange: json['available_for_range'] == true,
+    segments: asList(json['segments']).map(PlannerSegment.fromJson).toList(),
+  );
 
   final int id;
   final String name;
@@ -154,18 +191,20 @@ class PlannerSegment {
   });
 
   factory PlannerSegment.fromJson(JsonMap json) => PlannerSegment(
-        checkIn: json['check_in']?.toString() ?? '',
-        checkOut: json['check_out']?.toString() ?? '',
-        state: json['state']?.toString() ?? 'available',
-        tone: json['tone']?.toString() ?? 'green',
-        label: json['label']?.toString() ?? 'Disponible',
-        isAvailable: json['is_available'] == true,
-        reservation: json['reservation'] == null
-            ? null
-            : PlannerReservation.fromJson(asMap(json['reservation'])),
-        quotes: asList(json['quotes']).map(PlannerReservation.fromJson).toList(),
-        block: json['block'] == null ? null : PlannerBlock.fromJson(asMap(json['block'])),
-      );
+    checkIn: json['check_in']?.toString() ?? '',
+    checkOut: json['check_out']?.toString() ?? '',
+    state: json['state']?.toString() ?? 'available',
+    tone: json['tone']?.toString() ?? 'green',
+    label: json['label']?.toString() ?? 'Disponible',
+    isAvailable: json['is_available'] == true,
+    reservation: json['reservation'] == null
+        ? null
+        : PlannerReservation.fromJson(asMap(json['reservation'])),
+    quotes: asList(json['quotes']).map(PlannerReservation.fromJson).toList(),
+    block: json['block'] == null
+        ? null
+        : PlannerBlock.fromJson(asMap(json['block'])),
+  );
 
   final String checkIn;
   final String checkOut;
@@ -211,7 +250,9 @@ class PlannerReservation {
       expiresAt: json['expires_at']?.toString(),
       confirmedAt: json['confirmed_at']?.toString(),
       cabinIds: (json['cabin_ids'] as List? ?? const []).map(asInt).toList(),
-      cabinNames: (json['cabin_names'] as List? ?? const []).map((item) => item.toString()).toList(),
+      cabinNames: (json['cabin_names'] as List? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
       assignedName: staff['full_name']?.toString(),
     );
   }
@@ -245,15 +286,17 @@ class PlannerBlock {
   });
 
   factory PlannerBlock.fromJson(JsonMap json) => PlannerBlock(
-        id: asInt(json['id']),
-        reason: json['reason']?.toString() ?? 'Bloqueo',
-        notes: json['notes']?.toString(),
-        appliesToAll: json['applies_to_all'] == true,
-        checkIn: json['check_in']?.toString() ?? '',
-        checkOut: json['check_out']?.toString() ?? '',
-        cabinIds: (json['cabin_ids'] as List? ?? const []).map(asInt).toList(),
-        cabinNames: (json['cabin_names'] as List? ?? const []).map((item) => item.toString()).toList(),
-      );
+    id: asInt(json['id']),
+    reason: json['reason']?.toString() ?? 'Bloqueo',
+    notes: json['notes']?.toString(),
+    appliesToAll: json['applies_to_all'] == true,
+    checkIn: json['check_in']?.toString() ?? '',
+    checkOut: json['check_out']?.toString() ?? '',
+    cabinIds: (json['cabin_ids'] as List? ?? const []).map(asInt).toList(),
+    cabinNames: (json['cabin_names'] as List? ?? const [])
+        .map((item) => item.toString())
+        .toList(),
+  );
 
   final int id;
   final String reason;
@@ -275,12 +318,16 @@ class PlannerSuggestion {
   });
 
   factory PlannerSuggestion.fromJson(JsonMap json) => PlannerSuggestion(
-        cabinIds: (json['cabin_ids'] as List? ?? const []).map((item) => asInt(item)).toList(),
-        capacity: asInt(json['capacity']),
-        capacityExtra: asInt(json['capacity_extra']),
-        cabinsCount: asInt(json['cabins_count']),
-        names: asList(json['cabins']).map((item) => item['name']?.toString() ?? '').toList(),
-      );
+    cabinIds: (json['cabin_ids'] as List? ?? const [])
+        .map((item) => asInt(item))
+        .toList(),
+    capacity: asInt(json['capacity']),
+    capacityExtra: asInt(json['capacity_extra']),
+    cabinsCount: asInt(json['cabins_count']),
+    names: asList(
+      json['cabins'],
+    ).map((item) => item['name']?.toString() ?? '').toList(),
+  );
 
   final List<int> cabinIds;
   final int capacity;
@@ -304,17 +351,23 @@ class ReservationSummary {
   });
 
   factory ReservationSummary.fromJson(JsonMap json) => ReservationSummary(
-        id: asInt(json['id']),
-        leaderName: json['leader_name']?.toString() ?? 'Sin lider',
-        statusLabel: json['status_label']?.toString() ?? '',
-        checkIn: json['check_in']?.toString() ?? '',
-        checkOut: json['check_out']?.toString() ?? '',
-        guests: asInt(json['guests_count']),
-        totalPrice: json['total_price'] == null ? null : asDouble(json['total_price']),
-        totalPaid: asDouble(json['total_paid']),
-        balanceDue: json['balance_due'] == null ? null : asDouble(json['balance_due']),
-        cabinNames: asList(json['cabins']).map((item) => item['name']?.toString() ?? '').toList(),
-      );
+    id: asInt(json['id']),
+    leaderName: json['leader_name']?.toString() ?? 'Sin lider',
+    statusLabel: json['status_label']?.toString() ?? '',
+    checkIn: json['check_in']?.toString() ?? '',
+    checkOut: json['check_out']?.toString() ?? '',
+    guests: asInt(json['guests_count']),
+    totalPrice: json['total_price'] == null
+        ? null
+        : asDouble(json['total_price']),
+    totalPaid: asDouble(json['total_paid']),
+    balanceDue: json['balance_due'] == null
+        ? null
+        : asDouble(json['balance_due']),
+    cabinNames: asList(
+      json['cabins'],
+    ).map((item) => item['name']?.toString() ?? '').toList(),
+  );
 
   final int id;
   final String leaderName;
@@ -343,17 +396,17 @@ class LeadItem {
   });
 
   factory LeadItem.fromJson(JsonMap json) => LeadItem(
-        id: asInt(json['id']),
-        name: json['name']?.toString() ?? '',
-        email: json['email']?.toString(),
-        phone: json['phone']?.toString(),
-        status: json['status']?.toString() ?? 'new',
-        statusLabel: json['status_label']?.toString() ?? '',
-        message: json['message']?.toString(),
-        checkIn: json['check_in']?.toString(),
-        checkOut: json['check_out']?.toString(),
-        guests: json['guests_count'] == null ? null : asInt(json['guests_count']),
-      );
+    id: asInt(json['id']),
+    name: json['name']?.toString() ?? '',
+    email: json['email']?.toString(),
+    phone: json['phone']?.toString(),
+    status: json['status']?.toString() ?? 'new',
+    statusLabel: json['status_label']?.toString() ?? '',
+    message: json['message']?.toString(),
+    checkIn: json['check_in']?.toString(),
+    checkOut: json['check_out']?.toString(),
+    guests: json['guests_count'] == null ? null : asInt(json['guests_count']),
+  );
 
   final int id;
   final String name;
@@ -376,11 +429,11 @@ class FinanceSummary {
   });
 
   factory FinanceSummary.fromJson(JsonMap json) => FinanceSummary(
-        incomeTotal: asDouble(json['income_total']),
-        expenseTotal: asDouble(json['expense_total']),
-        pendingExpenseTotal: asDouble(json['pending_expense_total']),
-        netTotal: asDouble(json['net_total']),
-      );
+    incomeTotal: asDouble(json['income_total']),
+    expenseTotal: asDouble(json['expense_total']),
+    pendingExpenseTotal: asDouble(json['pending_expense_total']),
+    netTotal: asDouble(json['net_total']),
+  );
 
   final double incomeTotal;
   final double expenseTotal;
@@ -399,13 +452,13 @@ class ExpenseItem {
   });
 
   factory ExpenseItem.fromJson(JsonMap json) => ExpenseItem(
-        id: asInt(json['id']),
-        category: json['category']?.toString() ?? '',
-        description: json['description']?.toString() ?? '',
-        amount: asDouble(json['amount']),
-        statusLabel: json['status_label']?.toString() ?? '',
-        dueDate: json['due_date']?.toString() ?? '',
-      );
+    id: asInt(json['id']),
+    category: json['category']?.toString() ?? '',
+    description: json['description']?.toString() ?? '',
+    amount: asDouble(json['amount']),
+    statusLabel: json['status_label']?.toString() ?? '',
+    dueDate: json['due_date']?.toString() ?? '',
+  );
 
   final int id;
   final String category;
