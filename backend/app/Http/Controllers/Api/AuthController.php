@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
@@ -47,15 +48,24 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
-        if (! Auth::attempt($request->only('email', 'password'))) {
+        $user = User::query()
+            ->where('email', $request->string('email')->toString())
+            ->first();
+
+        if (! $user || ! Hash::check($request->string('password')->toString(), $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['Las credenciales no son correctas.'],
             ]);
         }
 
+        if (! $user->isActive()) {
+            abort(403, 'Tu cuenta esta suspendida. Contacta a un administrador.');
+        }
+
+        Auth::login($user);
         $request->session()->regenerate();
 
-        $user = Auth::user()->load('roles');
+        $user->load('roles');
 
         return response()->json([
             'data'    => new UserResource($user),
@@ -178,6 +188,10 @@ class AuthController extends Controller
             ->first();
 
         if ($user) {
+            if ($user->status === UserStatus::Suspended) {
+                return redirect()->away($this->frontendUrl('/login?error=suspended'));
+            }
+
             $user->forceFill([
                 'google_id'         => $googleUser->getId(),
                 'name'              => $googleUser->getName(),

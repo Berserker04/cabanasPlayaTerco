@@ -32,9 +32,12 @@ Route::prefix('auth')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [Api\AuthController::class, 'logout']);
         Route::post('/mobile/logout', [Api\MobileAuthController::class, 'logout']);
-        Route::get('/user', [Api\AuthController::class, 'user']);
-        Route::put('/profile', [Api\AuthController::class, 'updateProfile']);
-        Route::put('/password', [Api\AuthController::class, 'updatePassword']);
+
+        Route::middleware('active')->group(function () {
+            Route::get('/user', [Api\AuthController::class, 'user']);
+            Route::put('/profile', [Api\AuthController::class, 'updateProfile']);
+            Route::put('/password', [Api\AuthController::class, 'updatePassword']);
+        });
     });
 });
 
@@ -53,10 +56,10 @@ Route::get('/gallery', [Api\GalleryController::class, 'index']);
 Route::get('/reviews', [Api\ReviewController::class, 'index']);
 Route::get('/reviews/latest', [Api\ReviewController::class, 'latest']);
 Route::post('/reviews', [Api\ReviewController::class, 'store'])
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'active']);
 
 Route::prefix('me')
-    ->middleware('auth:sanctum')
+    ->middleware(['auth:sanctum', 'active'])
     ->group(function () {
         Route::get('/reviews', [Api\MeReviewController::class, 'index']);
         Route::put('/reviews/{review}', [Api\MeReviewController::class, 'update']);
@@ -76,7 +79,7 @@ Route::get('/posts/{post:slug}', [Api\PostController::class, 'show']);
 Route::get('/categories', [Api\PostController::class, 'categories']);
 Route::get('/tags', [Api\PostController::class, 'tags']);
 Route::post('/posts/{post}/comments', [Api\PostController::class, 'storeComment'])
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'active']);
 
 // ── Availability ─────────────────────────────────────────────
 Route::get('/availability', [Api\AvailabilityController::class, 'check']);
@@ -92,7 +95,7 @@ Route::post('/contact', [Api\ContactController::class, 'store'])
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')
-    ->middleware(['auth:sanctum', 'staff'])
+    ->middleware(['auth:sanctum', 'active', 'staff'])
     ->group(function () {
 
         // ── Dashboard ────────────────────────────────────────

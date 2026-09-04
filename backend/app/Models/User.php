@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\UserStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,6 +15,10 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
+    protected $attributes = [
+        'status' => UserStatus::Active->value,
+    ];
+
     protected $fillable = [
         'name',
         'email',
@@ -21,6 +26,7 @@ class User extends Authenticatable
         'google_id',
         'avatar',
         'phone',
+        'status',
     ];
 
     protected $hidden = [
@@ -33,6 +39,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'status' => UserStatus::class,
         ];
     }
 
@@ -88,5 +95,10 @@ class User extends Authenticatable
     public function isStaff(): bool
     {
         return $this->hasRole('staff') || $this->isAdmin();
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === UserStatus::Active;
     }
 }

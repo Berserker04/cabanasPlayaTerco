@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
 
         $middleware->alias([
+            'active' => \App\Http\Middleware\EnsureAccountIsActive::class,
             'admin' => \App\Http\Middleware\EnsureIsAdmin::class,
             'staff' => \App\Http\Middleware\EnsureIsStaff::class,
         ]);

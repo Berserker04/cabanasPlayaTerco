@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\UserStatus;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -176,6 +177,35 @@ class AuthTest extends TestCase
             'google_id' => 'google-123',
         ]);
         $this->assertTrue($createdUser->roles()->where('name', 'user')->exists());
+    }
+
+    public function test_google_callback_does_not_log_in_suspended_user(): void
+    {
+        User::factory()->create([
+            'name' => 'Suspended Google User',
+            'email' => 'suspended-google@example.com',
+            'google_id' => 'google-suspended',
+            'status' => UserStatus::Suspended,
+        ]);
+
+        config(['services.frontend.url' => 'http://localhost:3000']);
+
+        $googleUser = Mockery::mock(SocialiteUser::class);
+        $googleUser->shouldReceive('getId')->andReturn('google-suspended');
+        $googleUser->shouldReceive('getEmail')->andReturn('suspended-google@example.com');
+
+        $provider = Mockery::mock(Provider::class);
+        $provider->shouldReceive('user')->once()->andReturn($googleUser);
+
+        Socialite::shouldReceive('driver')
+            ->once()
+            ->with('google')
+            ->andReturn($provider);
+
+        $this->get('/api/v1/auth/google/callback')
+            ->assertRedirect('http://localhost:3000/login?error=suspended');
+
+        $this->assertGuest();
     }
 
     private function fromFrontend(): static

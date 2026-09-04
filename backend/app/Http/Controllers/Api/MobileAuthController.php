@@ -33,6 +33,10 @@ class MobileAuthController extends Controller
             ]);
         }
 
+        if (! $user->isActive()) {
+            abort(403, 'Tu cuenta esta suspendida. Contacta a un administrador.');
+        }
+
         $user->load('roles');
 
         if (! $user->isStaff()) {
