@@ -12,6 +12,20 @@ enum ReservationStatus: string
     case NoShow = 'no_show';
     case Expired = 'expired';
 
+    /** @return list<string> */
+    public static function blockingValues(): array
+    {
+        return [
+            self::Confirmed->value,
+            self::CheckedIn->value,
+        ];
+    }
+
+    public function blocksAvailability(): bool
+    {
+        return in_array($this->value, self::blockingValues(), true);
+    }
+
     public function label(): string
     {
         return match ($this) {

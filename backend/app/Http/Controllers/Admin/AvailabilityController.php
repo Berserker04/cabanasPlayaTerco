@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CabinAvailabilityResource;
 use App\Services\AvailabilityService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class AvailabilityController extends Controller
 {
@@ -61,16 +63,22 @@ class AvailabilityController extends Controller
 
     public function planner(Request $request): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'check_in'  => ['required', 'date'],
             'check_out' => ['required', 'date', 'after:check_in'],
             'guests'    => ['nullable', 'integer', 'min:1'],
         ]);
 
+        if (Carbon::parse($validated['check_in'])->diffInDays(Carbon::parse($validated['check_out'])) > 31) {
+            throw ValidationException::withMessages([
+                'check_out' => ['El rango de consulta no puede superar 31 dias.'],
+            ]);
+        }
+
         return response()->json([
             'data' => $this->availabilityService->getPlanner(
-                $request->check_in,
-                $request->check_out,
+                $validated['check_in'],
+                $validated['check_out'],
                 $request->integer('guests') ?: null,
             ),
         ]);

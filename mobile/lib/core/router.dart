@@ -6,7 +6,6 @@ import '../features/availability/availability_page.dart';
 import '../features/dashboard/dashboard_page.dart';
 import '../features/finance/finance_page.dart';
 import '../features/leads/leads_page.dart';
-import '../features/reservations/reservations_page.dart';
 import '../features/shell/admin_shell.dart';
 import 'providers.dart';
 
@@ -42,7 +41,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/reservations',
-            pageBuilder: (context, state) => const NoTransitionPage(child: ReservationsPage()),
+            redirect: (context, state) => '/availability',
           ),
           GoRoute(
             path: '/leads',

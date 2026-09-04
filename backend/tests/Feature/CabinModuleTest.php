@@ -375,9 +375,20 @@ class CabinModuleTest extends TestCase
 
         $entries = collect($response->json('data.cabins'));
 
-        $this->assertSame('reserved', $entries->firstWhere('cabin_id', $first->id)['state']);
-        $this->assertSame('reserved', $entries->firstWhere('cabin_id', $second->id)['state']);
-        $this->assertSame('Familia Rivas', $entries->firstWhere('cabin_id', $first->id)['leader_name']);
+        $this->assertSame('available', $entries->firstWhere('cabin_id', $first->id)['state']);
+        $this->assertSame('available', $entries->firstWhere('cabin_id', $second->id)['state']);
+
+        $planner = $this->getJson('/api/v1/admin/availability/planner?check_in=2030-07-10&check_out=2030-07-12&guests=10')
+            ->assertOk()
+            ->assertJsonPath('data.summary.available_count', 2)
+            ->assertJsonPath('data.summary.quoted_count', 2);
+
+        $plannerEntries = collect($planner->json('data.cabins'));
+        $firstSegment = $plannerEntries->firstWhere('cabin_id', $first->id)['segments'][0];
+
+        $this->assertTrue($firstSegment['is_available']);
+        $this->assertNull($firstSegment['reservation']);
+        $this->assertSame('Familia Rivas', $firstSegment['quotes'][0]['leader_name']);
     }
 
     public function test_expired_pending_quotes_do_not_block_availability(): void
@@ -433,7 +444,7 @@ class CabinModuleTest extends TestCase
         $this->assertFalse($entry['is_available']);
     }
 
-    public function test_admin_cannot_overlap_active_reservations(): void
+    public function test_quotes_can_overlap_but_confirmed_reservations_cannot(): void
     {
         Sanctum::actingAs($this->createAdmin());
 
@@ -450,7 +461,7 @@ class CabinModuleTest extends TestCase
             'map_slot'      => 'cabana_2',
         ]);
 
-        $this->postJson('/api/v1/admin/reservations', [
+        $firstQuote = $this->postJson('/api/v1/admin/reservations', [
             'cabin_ids'    => [$first->id],
             'check_in'     => '2030-08-01',
             'check_out'    => '2030-08-05',
@@ -458,11 +469,27 @@ class CabinModuleTest extends TestCase
             'status'       => ReservationStatus::Pending->value,
         ])->assertCreated();
 
-        $this->postJson('/api/v1/admin/reservations', [
+        $secondQuote = $this->postJson('/api/v1/admin/reservations', [
             'cabin_ids'    => [$first->id],
             'check_in'     => '2030-08-03',
             'check_out'    => '2030-08-06',
             'guests_count' => 2,
+            'status'       => ReservationStatus::Pending->value,
+        ])->assertCreated();
+
+        $planner = $this->getJson('/api/v1/admin/availability/planner?check_in=2030-08-03&check_out=2030-08-04')
+            ->assertOk();
+        $quotedCabin = collect($planner->json('data.cabins'))->firstWhere('cabin_id', $first->id);
+
+        $this->assertCount(2, $quotedCabin['segments'][0]['quotes']);
+        $this->assertTrue($quotedCabin['segments'][0]['is_available']);
+
+        $this->putJson('/api/v1/admin/reservations/' . $firstQuote->json('data.id'), [
+            'status' => ReservationStatus::Confirmed->value,
+        ])->assertOk();
+
+        $this->putJson('/api/v1/admin/reservations/' . $secondQuote->json('data.id'), [
+            'status' => ReservationStatus::Confirmed->value,
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['cabin_ids']);
@@ -472,6 +499,7 @@ class CabinModuleTest extends TestCase
             'check_in'     => '2030-08-03',
             'check_out'    => '2030-08-06',
             'guests_count' => 2,
+            'status'       => ReservationStatus::Confirmed->value,
         ])->assertCreated();
 
         $this->postJson('/api/v1/admin/reservations', [
@@ -479,7 +507,83 @@ class CabinModuleTest extends TestCase
             'check_in'     => '2030-08-05',
             'check_out'    => '2030-08-06',
             'guests_count' => 2,
+            'status'       => ReservationStatus::Confirmed->value,
         ])->assertCreated();
+    }
+
+    public function test_quote_can_be_edited_renewed_and_cancelled_after_another_occupancy_is_confirmed(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $cabinType = $this->createCabinType();
+        $cabin = $this->createCabin([
+            'cabin_type_id' => $cabinType->id,
+            'map_slot'      => 'cabana_1',
+        ]);
+
+        $quote = $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'    => [$cabin->id],
+            'check_in'     => '2030-08-10',
+            'check_out'    => '2030-08-15',
+            'guests_count' => 4,
+            'leader_name'  => 'Teffy',
+            'status'       => ReservationStatus::Pending->value,
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/admin/reservations', [
+            'cabin_ids'    => [$cabin->id],
+            'check_in'     => '2030-08-12',
+            'check_out'    => '2030-08-14',
+            'guests_count' => 6,
+            'leader_name'  => 'Ricardo',
+            'status'       => ReservationStatus::Confirmed->value,
+        ])->assertCreated();
+
+        $quoteId = $quote->json('data.id');
+
+        $this->putJson("/api/v1/admin/reservations/{$quoteId}", [
+            'cabin_ids'    => [$cabin->id],
+            'check_in'     => '2030-08-10',
+            'check_out'    => '2030-08-15',
+            'guests_count' => 4,
+            'leader_name'  => 'Teffy actualizada',
+            'status'       => ReservationStatus::Pending->value,
+            'source'       => 'whatsapp',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.leader_name', 'Teffy actualizada');
+
+        $this->putJson("/api/v1/admin/reservations/{$quoteId}", [
+            'check_out' => '2030-08-16',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['cabin_ids']);
+
+        $this->putJson("/api/v1/admin/reservations/{$quoteId}", [
+            'expires_at' => '2030-08-09 12:00:00',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', ReservationStatus::Pending->value);
+
+        $this->putJson("/api/v1/admin/reservations/{$quoteId}", [
+            'status' => ReservationStatus::Cancelled->value,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', ReservationStatus::Cancelled->value);
+
+        $this->assertDatabaseHas('reservations', [
+            'id'     => $quoteId,
+            'status' => ReservationStatus::Cancelled->value,
+        ]);
+    }
+
+    public function test_planner_rejects_ranges_longer_than_thirty_one_days(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->getJson('/api/v1/admin/availability/planner?check_in=2030-01-01&check_out=2030-02-02')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['check_out']);
     }
 
     public function test_expiration_command_marks_pending_quotes_expired_and_releases_cabin(): void

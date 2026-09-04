@@ -74,8 +74,20 @@ class ApiRepository {
     await _dio.post<JsonMap>('/admin/reservations', data: payload);
   }
 
+  Future<void> updateReservation(int id, JsonMap payload) async {
+    await _dio.put<JsonMap>('/admin/reservations/$id', data: payload);
+  }
+
   Future<void> createBlock(JsonMap payload) async {
     await _dio.post<JsonMap>('/admin/availability-blocks', data: payload);
+  }
+
+  Future<void> updateBlock(int id, JsonMap payload) async {
+    await _dio.put<JsonMap>('/admin/availability-blocks/$id', data: payload);
+  }
+
+  Future<void> deleteBlock(int id) async {
+    await _dio.delete<JsonMap>('/admin/availability-blocks/$id');
   }
 
   Future<List<ReservationSummary>> reservations({String? status}) async {

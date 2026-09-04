@@ -43,7 +43,6 @@ class AdminShell extends ConsumerWidget {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.space_dashboard_outlined), label: 'Panel'),
           NavigationDestination(icon: Icon(Icons.event_available_outlined), label: 'Fechas'),
-          NavigationDestination(icon: Icon(Icons.king_bed_outlined), label: 'Reservas'),
           NavigationDestination(icon: Icon(Icons.mark_email_unread_outlined), label: 'Leads'),
           NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Caja'),
         ],
@@ -51,7 +50,7 @@ class AdminShell extends ConsumerWidget {
     );
   }
 
-  static const _locations = ['/dashboard', '/availability', '/reservations', '/leads', '/finance'];
+  static const _locations = ['/dashboard', '/availability', '/leads', '/finance'];
 
   int _indexForLocation(String location) {
     final index = _locations.indexWhere(location.startsWith);

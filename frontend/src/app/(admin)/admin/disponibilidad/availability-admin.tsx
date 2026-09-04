@@ -1,24 +1,30 @@
 'use client';
 
 import {
+  AlertCircle,
   Ban,
+  BedDouble,
   CalendarDays,
-  CalendarRange,
   Check,
   CheckCircle2,
-  Clock,
+  Clock3,
   Edit3,
+  LayoutGrid,
   LoaderCircle,
   LockKeyhole,
-  MapPinned,
+  Map as MapIcon,
+  MessageCircle,
   Plus,
   RefreshCw,
   Trash2,
+  Users,
   XCircle,
 } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+
 import { CabinMap, type CabinMapSlotState } from '@/components/cabins/cabin-map';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,1052 +37,1136 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiError, api } from '@/lib/api';
-import { MAP_SLOT_LABELS } from '@/lib/cabin-utils';
+import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import type { ApiListResponse, ApiResponse } from '@/types/api';
+import type { ApiResponse } from '@/types/api';
 import type {
-  AdminAvailabilityCalendar,
-  AdminAvailabilityCalendarEvent,
   AvailabilityBlock,
-  AvailabilityResult,
-  CabinAvailabilityEntry,
   MapSlot,
+  PlannerCabin,
+  PlannerReservation,
+  PlannerResult,
+  PlannerSegment,
 } from '@/types/cabin';
-import type { Reservation, ReservationStatus } from '@/types/reservation';
+import type { Reservation } from '@/types/reservation';
 
-const DEFAULT_COLORS = ['#0ea5e9', '#10b981', '#f97316', '#8b5cf6', '#ef4444', '#14b8a6'];
+type ViewMode = 'matrix' | 'map';
+type RecordKind = 'pending' | 'confirmed';
 
-const todayIso = () => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  return today.toISOString().slice(0, 10);
+type Filters = {
+  checkIn: string;
+  checkOut: string;
+  guests: string;
 };
 
-const addDaysIso = (date: string, days: number) => {
-  const value = new Date(`${date}T00:00:00`);
-  value.setDate(value.getDate() + days);
-
-  return value.toISOString().slice(0, 10);
+type SelectedCell = {
+  cabin: PlannerCabin;
+  segment: PlannerSegment;
+  date: string;
 };
 
-const monthIso = () => todayIso().slice(0, 7);
+const DAY_MS = 86_400_000;
+const MAX_RANGE_DAYS = 31;
 
-const addHoursDateTimeLocal = (hours: number) => {
-  const value = new Date();
-  value.setHours(value.getHours() + hours, 0, 0, 0);
-
-  return toDateTimeLocal(value);
-};
-
-const toDateTimeLocal = (date: Date) => {
-  const pad = (part: number) => String(part).padStart(2, '0');
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
-
-const isoToDateTimeLocal = (value: string | null) => {
-  if (!value) {
-    return '';
-  }
-
-  return toDateTimeLocal(new Date(value));
-};
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return 'Sin vencimiento';
-  }
-
-  return new Intl.DateTimeFormat('es-CO', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
+function toDate(value: string) {
+  return new Date(`${value}T00:00:00Z`);
 }
 
-function monthLabel(month: string) {
-  const [year, monthNumber] = month.split('-').map(Number);
+function todayIso() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
 
+function addDaysIso(value: string, days: number) {
+  const date = toDate(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function rangeLength(checkIn: string, checkOut: string) {
+  return Math.round((toDate(checkOut).getTime() - toDate(checkIn).getTime()) / DAY_MS);
+}
+
+function isIsoDate(value: string | null): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(toDate(value).getTime()));
+}
+
+function datesForRange(checkIn: string, checkOut: string) {
+  const length = Math.max(0, rangeLength(checkIn, checkOut));
+  return Array.from({ length }, (_, index) => addDaysIso(checkIn, index));
+}
+
+function formatDay(value: string) {
   return new Intl.DateTimeFormat('es-CO', {
-    month: 'long',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+    .format(toDate(value))
+    .replace('.', '');
+}
+
+function formatRange(checkIn: string, checkOut: string) {
+  const formatter = new Intl.DateTimeFormat('es-CO', {
+    day: 'numeric',
+    month: 'short',
     year: 'numeric',
-  }).format(new Date(year, monthNumber - 1, 1));
-}
-
-function buildQuery(params: Record<string, string | number | boolean | undefined>) {
-  const searchParams = new URLSearchParams();
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== '') {
-      searchParams.set(key, String(value));
-    }
+    timeZone: 'UTC',
   });
-
-  const query = searchParams.toString();
-
-  return query ? `?${query}` : '';
+  return `${formatter.format(toDate(checkIn))} – ${formatter.format(toDate(checkOut))}`;
 }
 
-function cleanPayload(values: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(values).filter(([, value]) => value !== '' && value !== undefined),
-  );
+function dateTimeLocal(hoursAhead = 48) {
+  const date = new Date(Date.now() + hoursAhead * 60 * 60 * 1000);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function isoToDateTimeLocal(value: string | null) {
+  if (!value) return dateTimeLocal();
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return dateTimeLocal();
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function buildQuery(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  }
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : '';
 }
 
 function apiErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
-    return error.message;
+    const fieldMessage = error.errors ? Object.values(error.errors).flat()[0] : undefined;
+    return fieldMessage ?? error.message;
   }
-
-  return 'No pudimos completar la accion.';
+  return 'No pudimos completar la accion. Intenta de nuevo.';
 }
 
-function buildSlotStates(
-  entries: CabinAvailabilityEntry[],
-  selectedSlots: MapSlot[],
-  draftColor: string,
-) {
-  return entries.reduce<Partial<Record<MapSlot, CabinMapSlotState>>>((states, entry) => {
-    if (!entry.map_slot) {
-      return states;
-    }
+function segmentForDate(cabin: PlannerCabin, date: string) {
+  return cabin.segments.find((segment) => date >= segment.check_in && date < segment.check_out);
+}
 
-    states[entry.map_slot] = {
-      tone: entry.tone,
-      label: entry.label,
-      isAvailable: entry.is_available,
-      leaderName: entry.leader_name,
-      displayColor: selectedSlots.includes(entry.map_slot)
-        ? draftColor
-        : entry.display_color,
-    };
+function initialFilters(searchParams: URLSearchParams): Filters {
+  const today = todayIso();
+  const fromParam = searchParams.get('from');
+  const toParam = searchParams.get('to');
+  const from = isIsoDate(fromParam) ? fromParam : today;
+  const requestedTo = isIsoDate(toParam) ? toParam : addDaysIso(from, 14);
+  const length = rangeLength(from, requestedTo);
+  const to = length > 0 && length <= MAX_RANGE_DAYS ? requestedTo : addDaysIso(from, 14);
+  const guestsParam = searchParams.get('guests');
+  const guests = guestsParam && Number(guestsParam) > 0 ? guestsParam : '4';
 
-    return states;
-  }, {});
+  return { checkIn: from, checkOut: to, guests };
 }
 
 export function AvailabilityAdmin() {
   const queryClient = useQueryClient();
-  const defaultCheckIn = todayIso();
-  const [checkIn, setCheckIn] = useState(defaultCheckIn);
-  const [checkOut, setCheckOut] = useState(addDaysIso(defaultCheckIn, 1));
-  const [guests, setGuests] = useState('4');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const startingFilters = useMemo(() => initialFilters(new URLSearchParams(searchParams.toString())), [searchParams]);
+
+  const [draftFilters, setDraftFilters] = useState<Filters>(startingFilters);
+  const [filters, setFilters] = useState<Filters>(startingFilters);
+  const [filterError, setFilterError] = useState('');
+  const [view, setView] = useState<ViewMode>(searchParams.get('view') === 'map' ? 'map' : 'matrix');
   const [selectedCabinIds, setSelectedCabinIds] = useState<number[]>([]);
-  const [leaderName, setLeaderName] = useState('');
-  const [displayColor, setDisplayColor] = useState(DEFAULT_COLORS[0]);
-  const [reservationStatus, setReservationStatus] = useState<ReservationStatus>('pending');
-  const [expiresAt, setExpiresAt] = useState(addHoursDateTimeLocal(48));
-  const [totalPrice, setTotalPrice] = useState('');
-  const [reservationNotes, setReservationNotes] = useState('');
-  const [editingReservationId, setEditingReservationId] = useState<number | null>(null);
-  const [blockAll, setBlockAll] = useState(false);
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<PlannerReservation | null>(null);
+  const [recordKind, setRecordKind] = useState<RecordKind>('pending');
+  const [recordCheckIn, setRecordCheckIn] = useState(filters.checkIn);
+  const [recordCheckOut, setRecordCheckOut] = useState(filters.checkOut);
+  const [recordGuests, setRecordGuests] = useState(filters.guests);
+  const [recordLeader, setRecordLeader] = useState('');
+  const [recordNotes, setRecordNotes] = useState('');
+  const [recordExpiresAt, setRecordExpiresAt] = useState(dateTimeLocal());
+  const [recordCabinIds, setRecordCabinIds] = useState<number[]>([]);
+  const [recordError, setRecordError] = useState('');
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
+  const [blockCheckIn, setBlockCheckIn] = useState(filters.checkIn);
+  const [blockCheckOut, setBlockCheckOut] = useState(filters.checkOut);
   const [blockReason, setBlockReason] = useState('');
   const [blockNotes, setBlockNotes] = useState('');
-  const [agendaMode, setAgendaMode] = useState<'month' | 'year'>('month');
-  const [agendaMonth, setAgendaMonth] = useState(monthIso());
-  const [agendaYear, setAgendaYear] = useState(String(new Date().getFullYear()));
+  const [blockAll, setBlockAll] = useState(false);
+  const [blockCabinIds, setBlockCabinIds] = useState<number[]>([]);
+  const [blockError, setBlockError] = useState('');
+  const [detail, setDetail] = useState<SelectedCell | null>(null);
 
-  const availabilityQuery = useQuery({
-    queryKey: ['admin-availability', checkIn, checkOut, guests],
+  const plannerQuery = useQuery({
+    queryKey: ['admin-availability-planner', filters.checkIn, filters.checkOut, filters.guests],
     queryFn: () =>
-      api.get<ApiResponse<AvailabilityResult>>(
-        `/admin/availability${buildQuery({
-          check_in: checkIn,
-          check_out: checkOut,
-          guests,
+      api.get<ApiResponse<PlannerResult>>(
+        `/admin/availability/planner${buildQuery({
+          check_in: filters.checkIn,
+          check_out: filters.checkOut,
+          guests: Number(filters.guests) || undefined,
         })}`,
       ),
-    enabled: Boolean(checkIn && checkOut && checkOut > checkIn),
   });
 
-  const blocksQuery = useQuery({
-    queryKey: ['admin-availability-blocks', checkIn, checkOut],
-    queryFn: () =>
-      api.get<ApiListResponse<AvailabilityBlock>>(
-        `/admin/availability-blocks${buildQuery({ from: checkIn, to: checkOut })}`,
-      ),
-    enabled: Boolean(checkIn && checkOut && checkOut > checkIn),
-  });
+  const planner = plannerQuery.data?.data;
+  const cabins = useMemo(() => planner?.cabins ?? [], [planner?.cabins]);
+  const dates = useMemo(() => datesForRange(filters.checkIn, filters.checkOut), [filters]);
+  const selectedCabins = cabins.filter((cabin) => selectedCabinIds.includes(cabin.cabin_id));
+  const selectedCapacity = selectedCabins.reduce((total, cabin) => total + cabin.max_guests, 0);
 
-  const calendarQuery = useQuery({
-    queryKey: ['admin-availability-calendar', agendaMode, agendaMonth, agendaYear],
-    queryFn: () =>
-      api.get<ApiResponse<AdminAvailabilityCalendar>>(
-        `/admin/availability/calendar${buildQuery(
-          agendaMode === 'month'
-            ? { month: agendaMonth }
-            : { year: Number(agendaYear) || new Date().getFullYear() },
-        )}`,
-      ),
-    enabled: agendaMode === 'month' ? Boolean(agendaMonth) : Boolean(agendaYear),
-  });
+  function refreshPlanner() {
+    void queryClient.invalidateQueries({ queryKey: ['admin-availability-planner'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-availability'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-availability-calendar'] });
+  }
 
-  const availability = availabilityQuery.data?.data;
-  const entries = useMemo(() => availability?.cabins ?? [], [availability?.cabins]);
-  const blocks = useMemo(() => blocksQuery.data?.data ?? [], [blocksQuery.data?.data]);
-  const calendar = calendarQuery.data?.data;
-  const reservationEvents = useMemo(
-    () => calendar?.events.filter((event) => event.type === 'reservation') ?? [],
-    [calendar?.events],
-  );
-  const quoteAlerts = useMemo(
-    () =>
-      reservationEvents.filter(
-        (event) => event.status === 'pending' && (event.is_expired_quote || event.expires_soon),
-      ),
-    [reservationEvents],
-  );
-  const monthSummaries = useMemo(() => {
-    const grouped = new Map<string, { available: number; limited: number; full: number; total: number }>();
+  function syncUrl(nextFilters: Filters, nextView = view) {
+    const query = new URLSearchParams();
+    query.set('from', nextFilters.checkIn);
+    query.set('to', nextFilters.checkOut);
+    query.set('guests', nextFilters.guests);
+    if (nextView === 'map') query.set('view', 'map');
+    router.replace(`${pathname}?${query.toString()}`, { scroll: false });
+  }
 
-    for (const day of calendar?.days ?? []) {
-      const key = day.date.slice(0, 7);
-      const summary = grouped.get(key) ?? { available: 0, limited: 0, full: 0, total: 0 };
-      summary[day.status] += 1;
-      summary.total += 1;
-      grouped.set(key, summary);
+  function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const length = rangeLength(draftFilters.checkIn, draftFilters.checkOut);
+    if (length <= 0) {
+      setFilterError('La salida debe ser posterior a la llegada.');
+      return;
+    }
+    if (length > MAX_RANGE_DAYS) {
+      setFilterError(`El rango no puede superar ${MAX_RANGE_DAYS} dias.`);
+      return;
+    }
+    if (Number(draftFilters.guests) < 1) {
+      setFilterError('Ingresa al menos una persona.');
+      return;
     }
 
-    return Array.from(grouped.entries());
-  }, [calendar?.days]);
-  const mapCabins = useMemo(() => entries.map((entry) => entry.cabin), [entries]);
-  const selectedSlots = useMemo(
-    () =>
-      entries
-        .filter((entry) => selectedCabinIds.includes(entry.cabin_id) && entry.map_slot)
-        .map((entry) => entry.map_slot as MapSlot),
-    [entries, selectedCabinIds],
-  );
-  const slotStates = useMemo(
-    () => buildSlotStates(entries, selectedSlots, displayColor),
-    [displayColor, entries, selectedSlots],
-  );
-  const selectedEntries = entries.filter((entry) => selectedCabinIds.includes(entry.cabin_id));
-  const isBusy =
-    availabilityQuery.isLoading ||
-    blocksQuery.isLoading ||
-    availabilityQuery.isFetching;
+    setFilterError('');
+    setFilters(draftFilters);
+    setSelectedCabinIds([]);
+    syncUrl(draftFilters);
+  }
 
-  const saveReservationMutation = useMutation({
+  function setViewMode(next: string) {
+    const nextView = next as ViewMode;
+    setView(nextView);
+    syncUrl(filters, nextView);
+  }
+
+  function toggleCabin(cabin: PlannerCabin) {
+    if (!cabin.available_for_range) {
+      toast.info(`${cabin.name} no esta disponible durante todo el rango.`);
+      return;
+    }
+
+    const hasQuotes = cabin.segments.some((segment) => segment.quotes.length > 0);
+    if (hasQuotes && !selectedCabinIds.includes(cabin.cabin_id)) {
+      toast.info(`${cabin.name} tiene cotizaciones, pero sigue disponible.`);
+    }
+
+    setSelectedCabinIds((current) =>
+      current.includes(cabin.cabin_id)
+        ? current.filter((id) => id !== cabin.cabin_id)
+        : [...current, cabin.cabin_id],
+    );
+  }
+
+  function openNewRecord() {
+    if (selectedCabinIds.length === 0) {
+      toast.error('Selecciona al menos una cabana disponible.');
+      return;
+    }
+    setEditingRecord(null);
+    setRecordKind('pending');
+    setRecordCheckIn(filters.checkIn);
+    setRecordCheckOut(filters.checkOut);
+    setRecordGuests(filters.guests);
+    setRecordLeader('');
+    setRecordNotes('');
+    setRecordExpiresAt(dateTimeLocal());
+    setRecordCabinIds(selectedCabinIds);
+    setRecordError('');
+    setRecordOpen(true);
+  }
+
+  function openEditRecord(record: PlannerReservation) {
+    setDetail(null);
+    setEditingRecord(record);
+    setRecordKind(record.status === 'pending' ? 'pending' : 'confirmed');
+    setRecordCheckIn(record.check_in);
+    setRecordCheckOut(record.check_out);
+    setRecordGuests(String(record.guests_count || 1));
+    setRecordLeader(record.leader_name ?? '');
+    setRecordNotes(record.notes ?? '');
+    setRecordExpiresAt(isoToDateTimeLocal(record.expires_at));
+    setRecordCabinIds(record.cabin_ids);
+    setRecordError('');
+    setRecordOpen(true);
+  }
+
+  const saveRecordMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number | null; payload: Record<string, unknown> }) =>
       id
         ? api.put<ApiResponse<Reservation>>(`/admin/reservations/${id}`, payload)
         : api.post<ApiResponse<Reservation>>('/admin/reservations', payload),
     onSuccess: () => {
-      toast.success(editingReservationId ? 'Reserva/cotizacion actualizada' : 'Reserva/cotizacion creada');
-      resetReservationForm();
-      setDisplayColor((current) => {
-        const currentIndex = DEFAULT_COLORS.indexOf(current);
-
-        return DEFAULT_COLORS[(currentIndex + 1) % DEFAULT_COLORS.length];
-      });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability-blocks'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability-calendar'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-reservations'] });
+      toast.success(editingRecord ? 'Registro actualizado.' : 'Registro guardado.');
+      setRecordOpen(false);
+      setSelectedCabinIds([]);
+      setEditingRecord(null);
+      setRecordError('');
+      refreshPlanner();
     },
-    onError: (error) => toast.error(apiErrorMessage(error)),
+    onError: (error) => setRecordError(apiErrorMessage(error)),
   });
 
-  const reservationActionMutation = useMutation({
+  function handleRecordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const length = rangeLength(recordCheckIn, recordCheckOut);
+    if (!recordLeader.trim()) {
+      setRecordError('Escribe el nombre del turista o grupo.');
+      return;
+    }
+    if (recordCabinIds.length === 0) {
+      setRecordError('Selecciona al menos una cabana.');
+      return;
+    }
+    if (length <= 0 || length > MAX_RANGE_DAYS) {
+      setRecordError(`El rango debe tener entre 1 y ${MAX_RANGE_DAYS} noches.`);
+      return;
+    }
+    const expiresAt = recordKind === 'pending' ? new Date(recordExpiresAt) : null;
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+      setRecordError('Selecciona una fecha y hora de vencimiento validas.');
+      return;
+    }
+
+    setRecordError('');
+    saveRecordMutation.mutate({
+      id: editingRecord?.id ?? null,
+      payload: {
+        cabin_ids: recordCabinIds,
+        check_in: recordCheckIn,
+        check_out: recordCheckOut,
+        guests_count: Number(recordGuests) || 1,
+        leader_name: recordLeader.trim(),
+        status: recordKind,
+        expires_at: expiresAt?.toISOString() ?? null,
+        source: 'whatsapp',
+        notes: recordNotes.trim() || null,
+      },
+    });
+  }
+
+  const recordActionMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Record<string, unknown> }) =>
       api.put<ApiResponse<Reservation>>(`/admin/reservations/${id}`, payload),
     onSuccess: () => {
-      toast.success('Reserva actualizada');
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability-calendar'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-reservations'] });
+      toast.success('Registro actualizado.');
+      setDetail(null);
+      refreshPlanner();
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
+  function openNewBlock() {
+    setEditingBlockId(null);
+    setBlockCheckIn(filters.checkIn);
+    setBlockCheckOut(filters.checkOut);
+    setBlockReason('');
+    setBlockNotes('');
+    setBlockAll(false);
+    setBlockCabinIds(selectedCabinIds);
+    setBlockError('');
+    setBlockOpen(true);
+  }
+
+  async function openEditBlock(blockId: number) {
+    try {
+      const response = await api.get<ApiResponse<AvailabilityBlock>>(`/admin/availability-blocks/${blockId}`);
+      const block = response.data;
+      setDetail(null);
+      setEditingBlockId(block.id);
+      setBlockCheckIn(block.check_in);
+      setBlockCheckOut(block.check_out);
+      setBlockReason(block.reason);
+      setBlockNotes(block.notes ?? '');
+      setBlockAll(block.applies_to_all);
+      setBlockCabinIds(block.cabin_ids ?? block.cabins?.map((cabin) => cabin.id) ?? []);
+      setBlockError('');
+      setBlockOpen(true);
+    } catch (error) {
+      toast.error(apiErrorMessage(error));
+    }
+  }
+
   const saveBlockMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) =>
-      api.post<ApiResponse<AvailabilityBlock>>('/admin/availability-blocks', payload),
+    mutationFn: ({ id, payload }: { id: number | null; payload: Record<string, unknown> }) =>
+      id
+        ? api.put<ApiResponse<AvailabilityBlock>>(`/admin/availability-blocks/${id}`, payload)
+        : api.post<ApiResponse<AvailabilityBlock>>('/admin/availability-blocks', payload),
     onSuccess: () => {
-      toast.success('Bloqueo creado');
-      setBlockReason('');
-      setBlockNotes('');
-      setBlockAll(false);
+      toast.success(editingBlockId ? 'Bloqueo actualizado.' : 'Bloqueo creado.');
+      setBlockOpen(false);
       setSelectedCabinIds([]);
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability-blocks'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability-calendar'] });
+      setBlockError('');
+      refreshPlanner();
     },
-    onError: (error) => toast.error(apiErrorMessage(error)),
+    onError: (error) => setBlockError(apiErrorMessage(error)),
   });
+
+  function handleBlockSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const length = rangeLength(blockCheckIn, blockCheckOut);
+    if (!blockReason.trim()) {
+      setBlockError('Indica el motivo del bloqueo.');
+      return;
+    }
+    if (!blockAll && blockCabinIds.length === 0) {
+      setBlockError('Selecciona cabanas o aplica el bloqueo a todas.');
+      return;
+    }
+    if (length <= 0 || length > MAX_RANGE_DAYS) {
+      setBlockError(`El rango debe tener entre 1 y ${MAX_RANGE_DAYS} noches.`);
+      return;
+    }
+
+    setBlockError('');
+    saveBlockMutation.mutate({
+      id: editingBlockId,
+      payload: {
+        check_in: blockCheckIn,
+        check_out: blockCheckOut,
+        reason: blockReason.trim(),
+        notes: blockNotes.trim() || null,
+        applies_to_all: blockAll,
+        cabin_ids: blockAll ? [] : blockCabinIds,
+      },
+    });
+  }
 
   const deleteBlockMutation = useMutation({
     mutationFn: (id: number) => api.delete<{ message: string }>(`/admin/availability-blocks/${id}`),
     onSuccess: () => {
-      toast.success('Bloqueo eliminado');
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability-blocks'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-availability-calendar'] });
+      toast.success('Bloqueo eliminado.');
+      setDetail(null);
+      refreshPlanner();
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
-  function toggleCabin(entry: CabinAvailabilityEntry) {
-    const isSelected = selectedCabinIds.includes(entry.cabin_id);
-
-    if (!entry.is_available && !isSelected) {
-      toast.info(`${entry.cabin.name}: ${entry.label}`);
-      return;
+  const selectedSlots = selectedCabins
+    .map((cabin) => cabin.map_slot)
+    .filter((slot): slot is MapSlot => Boolean(slot));
+  const slotStates = useMemo(() => {
+    const states: Partial<Record<MapSlot, CabinMapSlotState>> = {};
+    for (const cabin of cabins) {
+      if (!cabin.map_slot) continue;
+      const unavailable = cabin.segments.find((segment) => !segment.is_available);
+      const quoteCount = cabin.segments.reduce((total, segment) => Math.max(total, segment.quotes.length), 0);
+      states[cabin.map_slot] = unavailable
+        ? { tone: unavailable.tone, label: unavailable.label, isAvailable: false }
+        : {
+            tone: 'green',
+            label: quoteCount > 0 ? `Disponible con ${quoteCount} cotizaciones` : 'Disponible',
+            isAvailable: true,
+            displayColor: selectedCabinIds.includes(cabin.cabin_id) ? '#0891b2' : undefined,
+          };
     }
-
-    setSelectedCabinIds((current) =>
-      current.includes(entry.cabin_id)
-        ? current.filter((id) => id !== entry.cabin_id)
-        : [...current, entry.cabin_id],
-    );
-  }
+    return states;
+  }, [cabins, selectedCabinIds]);
 
   function handleMapSelect(slot: MapSlot) {
-    const entry = entries.find((item) => item.map_slot === slot);
-
-    if (!entry) {
-      toast.info('No hay cabana registrada en este punto.');
-      return;
-    }
-
-    toggleCabin(entry);
-  }
-
-  function handleReservationSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (selectedCabinIds.length === 0) {
-      toast.error('Selecciona al menos una cabana disponible.');
-      return;
-    }
-
-    saveReservationMutation.mutate({
-      id: editingReservationId,
-      payload: cleanPayload({
-        cabin_ids: selectedCabinIds,
-        check_in: checkIn,
-        check_out: checkOut,
-        guests_count: Number(guests || 1),
-        leader_name: leaderName,
-        display_color: displayColor,
-        status: reservationStatus,
-        expires_at: reservationStatus === 'pending' ? expiresAt : undefined,
-        source: 'admin',
-        total_price: totalPrice ? Number(totalPrice) : undefined,
-        notes: reservationNotes,
-      }),
-    });
-  }
-
-  function resetReservationForm() {
-    setEditingReservationId(null);
-    setSelectedCabinIds([]);
-    setLeaderName('');
-    setReservationNotes('');
-    setTotalPrice('');
-    setReservationStatus('pending');
-    setExpiresAt(addHoursDateTimeLocal(48));
-  }
-
-  function editReservation(event: AdminAvailabilityCalendarEvent) {
-    setEditingReservationId(event.id);
-    setCheckIn(event.check_in);
-    setCheckOut(event.check_out);
-    setGuests(String(event.guests_count ?? 1));
-    setSelectedCabinIds(event.cabin_ids);
-    setLeaderName(event.leader_name ?? '');
-    setDisplayColor(event.display_color ?? DEFAULT_COLORS[0]);
-    setReservationStatus(event.status as ReservationStatus);
-    setExpiresAt(isoToDateTimeLocal(event.expires_at) || addHoursDateTimeLocal(48));
-    setTotalPrice(event.total_price ? String(event.total_price) : '');
-    setReservationNotes(event.notes ?? '');
-  }
-
-  function quickUpdateReservation(id: number, payload: Record<string, unknown>) {
-    reservationActionMutation.mutate({ id, payload });
-  }
-
-  function handleBlockSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!blockReason.trim()) {
-      toast.error('Indica una razon para el bloqueo.');
-      return;
-    }
-
-    if (!blockAll && selectedCabinIds.length === 0) {
-      toast.error('Selecciona cabanas o marca bloqueo general.');
-      return;
-    }
-
-    saveBlockMutation.mutate(
-      cleanPayload({
-        check_in: checkIn,
-        check_out: checkOut,
-        reason: blockReason,
-        notes: blockNotes,
-        applies_to_all: blockAll,
-        cabin_ids: blockAll ? undefined : selectedCabinIds,
-      }),
-    );
+    const cabin = cabins.find((item) => item.map_slot === slot);
+    if (cabin) toggleCabin(cabin);
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-5 pb-24">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-cyan-700">
-            Operacion
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal">Disponibilidad</h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-cyan-700">Operacion diaria</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">Disponibilidad</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Consulta fechas, selecciona cabanas en el mapa y registra cotizaciones, reservas o
-            bloqueos manuales sin crear una reserva.
+            Consulta un rango, revisa cada cabana y registra lo acordado por WhatsApp.
           </p>
         </div>
-        <div className="grid gap-2 rounded-lg border bg-white p-3 sm:grid-cols-[160px_160px_120px]">
-          <Field label="Llegada">
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={openNewBlock}>
+            <LockKeyhole className="size-4" />
+            Bloquear fechas
+          </Button>
+          <Button type="button" onClick={openNewRecord} disabled={selectedCabinIds.length === 0}>
+            <Plus className="size-4" />
+            Registrar
+            {selectedCabinIds.length > 0 ? ` (${selectedCabinIds.length})` : ''}
+          </Button>
+        </div>
+      </header>
+
+      <section className="rounded-xl border bg-white p-4 shadow-sm">
+        <form onSubmit={handleFilterSubmit} className="grid gap-3 md:grid-cols-[1fr_1fr_140px_auto] md:items-end">
+          <Field id="availability-check-in" label="Llegada">
             <Input
+              id="availability-check-in"
               type="date"
-              value={checkIn}
+              value={draftFilters.checkIn}
               onChange={(event) => {
-                const next = event.target.value;
-                setCheckIn(next);
-                if (checkOut <= next) {
-                  setCheckOut(addDaysIso(next, 1));
-                }
+                const checkIn = event.target.value;
+                setDraftFilters((current) => ({
+                  ...current,
+                  checkIn,
+                  checkOut: current.checkOut <= checkIn ? addDaysIso(checkIn, 1) : current.checkOut,
+                }));
               }}
             />
           </Field>
-          <Field label="Salida">
+          <Field id="availability-check-out" label="Salida">
             <Input
+              id="availability-check-out"
               type="date"
-              min={addDaysIso(checkIn, 1)}
-              value={checkOut}
-              onChange={(event) => setCheckOut(event.target.value)}
+              min={addDaysIso(draftFilters.checkIn, 1)}
+              max={addDaysIso(draftFilters.checkIn, MAX_RANGE_DAYS)}
+              value={draftFilters.checkOut}
+              onChange={(event) => setDraftFilters((current) => ({ ...current, checkOut: event.target.value }))}
             />
           </Field>
-          <Field label="Personas">
+          <Field id="availability-guests" label="Personas">
             <Input
+              id="availability-guests"
               type="number"
               min={1}
               max={50}
-              value={guests}
-              onChange={(event) => setGuests(event.target.value)}
+              value={draftFilters.guests}
+              onChange={(event) => setDraftFilters((current) => ({ ...current, guests: event.target.value }))}
             />
           </Field>
+          <Button type="submit" disabled={plannerQuery.isFetching}>
+            {plannerQuery.isFetching ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}
+            Consultar
+          </Button>
+        </form>
+        {filterError ? (
+          <p className="mt-3 flex items-center gap-2 text-sm text-red-700" role="alert">
+            <AlertCircle className="size-4" /> {filterError}
+          </p>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Mostrando {rangeLength(filters.checkIn, filters.checkOut)} noches: {formatRange(filters.checkIn, filters.checkOut)}.
+          </p>
+        )}
+      </section>
+
+      {planner ? <AvailabilityMetrics planner={planner} /> : null}
+
+      <section className="rounded-xl border bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="font-semibold">Ocupacion por cabana y dia</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Selecciona una cabana libre para todo el rango o abre una celda para ver su detalle.</p>
+          </div>
+          <Tabs value={view} onValueChange={setViewMode}>
+            <TabsList>
+              <TabsTrigger value="matrix"><LayoutGrid className="size-4" /> Matriz</TabsTrigger>
+              <TabsTrigger value="map"><MapIcon className="size-4" /> Mapa</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-      </div>
 
-      {availability ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <Metric label="Cabanas" value={availability.summary.total_cabins} />
-          <Metric label="Disponibles" value={availability.summary.available_count} />
-          <Metric label="Cotizadas/reservadas" value={availability.summary.reserved_count} />
-          <Metric label="Bloqueadas" value={availability.summary.blocked_count} />
-          <Metric label="Capacidad libre" value={availability.summary.available_capacity} />
-        </div>
-      ) : null}
+        <StatusLegend />
 
-      <OperationalCalendar
-        calendar={calendar}
-        isLoading={calendarQuery.isLoading || calendarQuery.isFetching}
-        mode={agendaMode}
-        month={agendaMonth}
-        year={agendaYear}
-        quoteAlerts={quoteAlerts}
-        monthSummaries={monthSummaries}
-        onModeChange={setAgendaMode}
-        onMonthChange={setAgendaMonth}
-        onYearChange={setAgendaYear}
-        onEdit={editReservation}
-        onConfirm={(event) => quickUpdateReservation(event.id, { status: 'confirmed' })}
-        onRenew={(event) =>
-          quickUpdateReservation(event.id, {
-            status: 'pending',
-            expires_at: addHoursDateTimeLocal(48),
-          })
-        }
-        onCancel={(event) => quickUpdateReservation(event.id, { status: 'cancelled' })}
-        actionPending={reservationActionMutation.isPending}
-      />
-
-      <div className="grid gap-5 xl:grid-cols-[1fr_390px]">
-        <div className="space-y-5">
-          {availabilityQuery.isError ? (
-            <ErrorState message="No pudimos cargar disponibilidad para esas fechas." />
-          ) : (
+        {plannerQuery.isLoading ? (
+          <LoadingState />
+        ) : plannerQuery.isError ? (
+          <ErrorState message={apiErrorMessage(plannerQuery.error)} onRetry={() => void plannerQuery.refetch()} />
+        ) : cabins.length === 0 ? (
+          <EmptyState />
+        ) : view === 'matrix' ? (
+          <AvailabilityMatrix
+            cabins={cabins}
+            dates={dates}
+            selectedCabinIds={selectedCabinIds}
+            onToggleCabin={toggleCabin}
+            onOpenCell={(cell) => setDetail(cell)}
+          />
+        ) : (
+          <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <CabinMap
-              cabins={mapCabins}
+              cabins={cabins.map((cabin) => cabin.cabin)}
               selectedSlots={selectedSlots}
               slotStates={slotStates}
               onSelectSlot={handleMapSelect}
             />
-          )}
-
-          <section className="rounded-lg border bg-white p-4">
-            <div className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Cabanas del rango</h2>
-                <p className="text-sm text-muted-foreground">Tambien puedes seleccionar por lista.</p>
-              </div>
-              {isBusy ? (
-                <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                  Actualizando
-                </span>
-              ) : null}
+            <div className="rounded-lg border bg-stone-50 p-4">
+              <h3 className="font-semibold">Seleccion del rango</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Los puntos verdes se pueden seleccionar. Abre la matriz para revisar cada dia.
+              </p>
+              <SelectedSummary cabins={selectedCabins} capacity={selectedCapacity} guests={Number(filters.guests)} />
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {entries.map((entry) => (
-                <button
-                  key={entry.cabin_id}
-                  type="button"
-                  onClick={() => toggleCabin(entry)}
-                  className={cn(
-                    'rounded-lg border p-3 text-left transition hover:border-cyan-700 hover:bg-cyan-50/50',
-                    selectedCabinIds.includes(entry.cabin_id) ? 'border-cyan-700 bg-cyan-50' : 'bg-white',
-                    !entry.is_available ? 'cursor-not-allowed opacity-80 hover:border-border hover:bg-white' : '',
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-neutral-950">{entry.cabin.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {entry.map_slot ? MAP_SLOT_LABELS[entry.map_slot] : 'Sin punto'}
-                      </p>
-                    </div>
-                    <StateBadge entry={entry} />
-                  </div>
-                  {entry.leader_name ? (
-                    <p className="mt-2 text-xs font-medium text-neutral-700">{entry.leader_name}</p>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
+          </div>
+        )}
+      </section>
 
-        <aside className="space-y-5">
-          <section className="rounded-lg border bg-white p-5">
-            <MapPinned className="h-6 w-6 text-cyan-700" />
-            <h2 className="mt-4 text-lg font-semibold">Seleccion actual</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {selectedEntries.length > 0
-                ? `${selectedEntries.length} cabanas seleccionadas para ${guests || 0} personas.`
-                : 'Selecciona cabanas verdes desde el mapa o la lista.'}
-            </p>
-            {selectedEntries.length > 0 ? (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {selectedEntries.map((entry) => (
-                  <Badge key={entry.cabin_id} variant="outline">
-                    {entry.cabin.name}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-          </section>
-
-          <section className="rounded-lg border bg-white p-5">
-            <div className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-cyan-700" />
-              <h2 className="text-lg font-semibold">
-                {editingReservationId ? 'Editar cotizacion/reserva' : 'Nueva cotizacion/reserva'}
-              </h2>
-            </div>
-            {editingReservationId ? (
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-900">
-                <span>Editando reserva #{editingReservationId}</span>
-                <Button type="button" size="sm" variant="ghost" onClick={resetReservationForm}>
-                  Cancelar edicion
-                </Button>
-              </div>
-            ) : null}
-            <form onSubmit={handleReservationSubmit} className="mt-5 space-y-4">
-              <Field label="Lider del grupo">
-                <Input value={leaderName} onChange={(event) => setLeaderName(event.target.value)} />
-              </Field>
-              <div className="grid grid-cols-[1fr_72px] gap-3">
-                <Field label="Estado">
-                  <Select
-                    value={reservationStatus}
-                    onValueChange={(value) => setReservationStatus(value as ReservationStatus)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Cotizada</SelectItem>
-                      <SelectItem value="confirmed">Confirmada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Color">
-                  <Input
-                    type="color"
-                    value={displayColor}
-                    onChange={(event) => setDisplayColor(event.target.value)}
-                    className="h-10 p-1"
-                  />
-                </Field>
-              </div>
-              {reservationStatus === 'pending' ? (
-                <Field label="Vence cotizacion">
-                  <Input
-                    type="datetime-local"
-                    value={expiresAt}
-                    onChange={(event) => setExpiresAt(event.target.value)}
-                  />
-                </Field>
-              ) : null}
-              <Field label="Valor total opcional">
-                <Input
-                  type="number"
-                  min={0}
-                  value={totalPrice}
-                  onChange={(event) => setTotalPrice(event.target.value)}
-                />
-              </Field>
-              <Field label="Notas internas">
-                <Textarea
-                  value={reservationNotes}
-                  onChange={(event) => setReservationNotes(event.target.value)}
-                  rows={3}
-                />
-              </Field>
-              <Button type="submit" disabled={saveReservationMutation.isPending} className="w-full">
-                {saveReservationMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                {editingReservationId ? 'Actualizar cotizacion/reserva' : 'Guardar cotizacion/reserva'}
-              </Button>
-            </form>
-          </section>
-
-          <section className="rounded-lg border bg-white p-5">
-            <div className="flex items-center gap-2">
-              <LockKeyhole className="h-5 w-5 text-amber-600" />
-              <h2 className="text-lg font-semibold">Bloquear disponibilidad</h2>
-            </div>
-            <form onSubmit={handleBlockSubmit} className="mt-5 space-y-4">
-              <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={blockAll}
-                  onChange={(event) => setBlockAll(event.target.checked)}
-                />
-                Aplicar a todas las cabanas
-              </label>
-              <Field label="Razon">
-                <Input value={blockReason} onChange={(event) => setBlockReason(event.target.value)} />
-              </Field>
-              <Field label="Notas internas">
-                <Textarea
-                  value={blockNotes}
-                  onChange={(event) => setBlockNotes(event.target.value)}
-                  rows={3}
-                />
-              </Field>
+      {planner?.suggestions.length ? (
+        <section className="rounded-xl border bg-cyan-50/60 p-4">
+          <div className="flex items-center gap-2 text-cyan-950">
+            <Users className="size-5" />
+            <h2 className="font-semibold">Combinaciones sugeridas</h2>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {planner.suggestions.slice(0, 4).map((suggestion) => (
               <Button
-                type="submit"
+                key={suggestion.cabin_ids.join('-')}
+                type="button"
                 variant="outline"
-                disabled={saveBlockMutation.isPending}
-                className="w-full border-amber-300 text-amber-800 hover:bg-amber-50"
+                className="bg-white"
+                onClick={() => setSelectedCabinIds(suggestion.cabin_ids)}
               >
-                {saveBlockMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                Crear bloqueo
+                {suggestion.cabins.map((cabin) => cabin.name).join(' + ')} · {suggestion.capacity} personas
               </Button>
-            </form>
-          </section>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-          <section className="rounded-lg border bg-white p-5">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-cyan-700" />
-              <h2 className="text-lg font-semibold">Bloqueos del rango</h2>
-            </div>
-            <div className="mt-4 space-y-3">
-              {blocks.length > 0 ? (
-                blocks.map((block) => (
-                  <div key={block.id} className="rounded-md border bg-stone-50 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{block.reason}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {block.check_in} a {block.check_out}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {block.applies_to_all ? 'Todas las cabanas' : `${block.cabin_ids?.length ?? 0} cabanas`}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteBlockMutation.mutate(block.id)}
-                        disabled={deleteBlockMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Eliminar bloqueo</span>
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No hay bloqueos manuales en este rango.</p>
-              )}
-            </div>
-          </section>
-        </aside>
-      </div>
+      {selectedCabins.length > 0 ? (
+        <div className="fixed inset-x-4 bottom-4 z-30 ml-auto flex max-w-xl items-center justify-between gap-3 rounded-xl border bg-neutral-950 p-3 text-white shadow-xl md:left-auto md:right-6">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{selectedCabins.map((cabin) => cabin.name).join(', ')}</p>
+            <p className="text-xs text-white/70">Capacidad {selectedCapacity} · {rangeLength(filters.checkIn, filters.checkOut)} noches</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={openNewRecord}>
+            Registrar
+          </Button>
+        </div>
+      ) : null}
+
+      <RecordSheet
+        open={recordOpen}
+        onOpenChange={setRecordOpen}
+        editing={Boolean(editingRecord)}
+        kind={recordKind}
+        onKindChange={setRecordKind}
+        checkIn={recordCheckIn}
+        checkOut={recordCheckOut}
+        guests={recordGuests}
+        leader={recordLeader}
+        notes={recordNotes}
+        expiresAt={recordExpiresAt}
+        cabins={cabins}
+        cabinIds={recordCabinIds}
+        onCheckInChange={setRecordCheckIn}
+        onCheckOutChange={setRecordCheckOut}
+        onGuestsChange={setRecordGuests}
+        onLeaderChange={setRecordLeader}
+        onNotesChange={setRecordNotes}
+        onExpiresAtChange={setRecordExpiresAt}
+        onCabinIdsChange={setRecordCabinIds}
+        error={recordError}
+        isPending={saveRecordMutation.isPending}
+        onSubmit={handleRecordSubmit}
+      />
+
+      <BlockSheet
+        open={blockOpen}
+        onOpenChange={setBlockOpen}
+        editing={editingBlockId !== null}
+        checkIn={blockCheckIn}
+        checkOut={blockCheckOut}
+        reason={blockReason}
+        notes={blockNotes}
+        appliesToAll={blockAll}
+        cabinIds={blockCabinIds}
+        cabins={cabins}
+        onCheckInChange={setBlockCheckIn}
+        onCheckOutChange={setBlockCheckOut}
+        onReasonChange={setBlockReason}
+        onNotesChange={setBlockNotes}
+        onAppliesToAllChange={setBlockAll}
+        onCabinIdsChange={setBlockCabinIds}
+        error={blockError}
+        isPending={saveBlockMutation.isPending}
+        onSubmit={handleBlockSubmit}
+      />
+
+      <DetailSheet
+        detail={detail}
+        onClose={() => setDetail(null)}
+        onEditRecord={openEditRecord}
+        onConfirm={(record) => recordActionMutation.mutate({ id: record.id, payload: { status: 'confirmed' } })}
+        onRenew={(record) =>
+          recordActionMutation.mutate({
+            id: record.id,
+            payload: { status: 'pending', expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() },
+          })
+        }
+        onCancel={(record) => recordActionMutation.mutate({ id: record.id, payload: { status: 'cancelled' } })}
+        onEditBlock={openEditBlock}
+        onDeleteBlock={(id) => deleteBlockMutation.mutate(id)}
+        isPending={recordActionMutation.isPending || deleteBlockMutation.isPending}
+      />
     </div>
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return (
-    <div>
-      <Label className="mb-2 block">{label}</Label>
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function AvailabilityMetrics({ planner }: { planner: PlannerResult }) {
+  const metrics = [
+    { label: 'Disponibles', value: planner.summary.available_count, icon: CheckCircle2, tone: 'text-emerald-700' },
+    { label: 'Ocupadas', value: planner.summary.reserved_count, icon: BedDouble, tone: 'text-red-700' },
+    { label: 'Con cotizaciones', value: planner.summary.quoted_count ?? 0, icon: MessageCircle, tone: 'text-violet-700' },
+    { label: 'Bloqueadas', value: planner.summary.blocked_count + planner.summary.maintenance_count, icon: LockKeyhole, tone: 'text-amber-700' },
+    { label: 'Capacidad libre', value: planner.summary.available_capacity, icon: Users, tone: 'text-cyan-700' },
+  ];
+
   return (
-    <div className="rounded-lg border bg-white p-4">
-      <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-bold">{value}</p>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {metrics.map((metric) => {
+        const Icon = metric.icon;
+        return (
+          <div key={metric.label} className="flex items-center gap-3 rounded-xl border bg-white p-4 shadow-sm">
+            <div className={cn('rounded-lg bg-stone-100 p-2', metric.tone)}><Icon className="size-5" /></div>
+            <div>
+              <p className="text-2xl font-bold">{metric.value}</p>
+              <p className="text-xs text-muted-foreground">{metric.label}</p>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function StateBadge({ entry }: { entry: CabinAvailabilityEntry }) {
-  if (entry.tone === 'green') {
-    return (
-      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-        <CheckCircle2 className="h-3 w-3" />
-        Disponible
-      </Badge>
-    );
-  }
-
-  if (entry.tone === 'red') {
-    return (
-      <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
-        <Ban className="h-3 w-3" />
-        {entry.label}
-      </Badge>
-    );
-  }
-
-  if (entry.tone === 'orange') {
-    return (
-      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-        <LockKeyhole className="h-3 w-3" />
-        {entry.label}
-      </Badge>
-    );
-  }
-
-  return <Badge variant="outline">Inactiva</Badge>;
-}
-
-function ErrorState({ message }: { message: string }) {
+function StatusLegend() {
+  const items = [
+    ['bg-emerald-500', 'Disponible'],
+    ['bg-violet-500', 'Cotizacion (no bloquea)'],
+    ['bg-red-500', 'Ocupada'],
+    ['bg-amber-500', 'Bloqueo / mantenimiento'],
+    ['bg-stone-400', 'Inactiva'],
+  ];
   return (
-    <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-sm text-destructive">
-      {message}
+    <div className="flex flex-wrap gap-x-4 gap-y-2 border-b px-4 py-3 text-xs text-muted-foreground" aria-label="Leyenda de disponibilidad">
+      {items.map(([color, label]) => (
+        <span key={label} className="inline-flex items-center gap-2"><span className={cn('size-2.5 rounded-full', color)} />{label}</span>
+      ))}
     </div>
   );
 }
 
-function OperationalCalendar({
-  calendar,
-  isLoading,
-  mode,
-  month,
-  year,
-  quoteAlerts,
-  monthSummaries,
-  onModeChange,
-  onMonthChange,
-  onYearChange,
-  onEdit,
-  onConfirm,
-  onRenew,
-  onCancel,
-  actionPending,
+function AvailabilityMatrix({
+  cabins,
+  dates,
+  selectedCabinIds,
+  onToggleCabin,
+  onOpenCell,
 }: {
-  calendar: AdminAvailabilityCalendar | undefined;
-  isLoading: boolean;
-  mode: 'month' | 'year';
-  month: string;
-  year: string;
-  quoteAlerts: AdminAvailabilityCalendarEvent[];
-  monthSummaries: Array<[string, { available: number; limited: number; full: number; total: number }]>;
-  onModeChange: (mode: 'month' | 'year') => void;
-  onMonthChange: (month: string) => void;
-  onYearChange: (year: string) => void;
-  onEdit: (event: AdminAvailabilityCalendarEvent) => void;
-  onConfirm: (event: AdminAvailabilityCalendarEvent) => void;
-  onRenew: (event: AdminAvailabilityCalendarEvent) => void;
-  onCancel: (event: AdminAvailabilityCalendarEvent) => void;
-  actionPending: boolean;
+  cabins: PlannerCabin[];
+  dates: string[];
+  selectedCabinIds: number[];
+  onToggleCabin: (cabin: PlannerCabin) => void;
+  onOpenCell: (cell: SelectedCell) => void;
 }) {
-  const days = calendar?.days ?? [];
-  const events = calendar?.events ?? [];
-  const firstDayOffset = days.length > 0 ? new Date(`${days[0].date}T00:00:00`).getDay() : 0;
-
   return (
-    <section className="rounded-lg border bg-white p-4">
-      <div className="flex flex-col gap-4 border-b pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <CalendarRange className="h-5 w-5 text-cyan-700" />
-            <h2 className="text-lg font-semibold">Calendario operativo</h2>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Vista de ocupacion futura por rango, cotizaciones vigentes y alertas de vencimiento.
-          </p>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-[auto_160px_110px]">
-          <div className="inline-flex rounded-md border bg-stone-50 p-1">
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'month' ? 'default' : 'ghost'}
-              onClick={() => onModeChange('month')}
-            >
-              Mes
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'year' ? 'default' : 'ghost'}
-              onClick={() => onModeChange('year')}
-            >
-              Ano
-            </Button>
-          </div>
-          {mode === 'month' ? (
-            <Input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} />
-          ) : (
-            <Input
-              type="number"
-              min={2026}
-              max={2100}
-              value={year}
-              onChange={(event) => onYearChange(event.target.value)}
-            />
-          )}
-          <div className="inline-flex items-center justify-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
-            {isLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
-            {calendar?.summary.events_count ?? 0} eventos
-          </div>
-        </div>
-      </div>
-
-      {quoteAlerts.length > 0 ? (
-        <div className="mt-4 grid gap-2 md:grid-cols-2">
-          {quoteAlerts.map((event) => (
-            <div
-              key={`alert-${event.id}`}
-              className={cn(
-                'rounded-md border px-3 py-2 text-sm',
-                event.is_expired_quote
-                  ? 'border-red-200 bg-red-50 text-red-900'
-                  : 'border-amber-200 bg-amber-50 text-amber-900',
-              )}
-            >
-              <p className="font-medium">
-                {event.is_expired_quote ? 'Cotizacion vencida' : 'Cotizacion por vencer'}: {event.leader_name ?? 'Sin lider'}
-              </p>
-              <p className="mt-1 text-xs">
-                {event.cabin_names.join(', ')} - vence {formatDateTime(event.expires_at)}
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_390px]">
-        <div>
-          {mode === 'month' ? (
-            <div className="grid grid-cols-7 gap-1 text-xs">
-              {['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'].map((label) => (
-                <div key={label} className="px-2 py-1 font-medium text-muted-foreground">
-                  {label}
-                </div>
-              ))}
-              {Array.from({ length: firstDayOffset }).map((_, index) => (
-                <div key={`offset-${index}`} className="min-h-20 rounded-md bg-stone-50" />
-              ))}
-              {days.map((day) => (
-                <CalendarDay key={day.date} day={day} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {monthSummaries.map(([key, summary]) => (
-                <div key={key} className="rounded-md border bg-stone-50 p-3">
-                  <p className="font-medium capitalize">{monthLabel(key)}</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                    <MiniMetric label="Libres" value={summary.available} />
-                    <MiniMetric label="Limit." value={summary.limited} />
-                    <MiniMetric label="Llenos" value={summary.full} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Agenda del periodo</h3>
-          <div className="max-h-[460px] space-y-2 overflow-auto pr-1">
-            {events.length > 0 ? (
-              events.map((event) => (
-                <AgendaEvent
-                  key={`${event.type}-${event.id}`}
-                  event={event}
-                  onEdit={onEdit}
-                  onConfirm={onConfirm}
-                  onRenew={onRenew}
-                  onCancel={onCancel}
-                  actionPending={actionPending}
-                />
-              ))
-            ) : (
-              <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                No hay reservas, cotizaciones o bloqueos en este periodo.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
+    <div className="max-h-[620px] overflow-auto" tabIndex={0} aria-label="Matriz desplazable de disponibilidad">
+      <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
+        <thead>
+          <tr>
+            <th className="sticky left-0 top-0 z-30 w-48 min-w-48 border-b border-r bg-stone-50 p-3 text-left">Cabana</th>
+            {dates.map((date) => (
+              <th key={date} className="sticky top-0 z-20 w-24 min-w-24 border-b bg-stone-50 p-2 text-center font-medium capitalize">
+                {formatDay(date)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {cabins.map((cabin) => {
+            const selected = selectedCabinIds.includes(cabin.cabin_id);
+            return (
+              <tr key={cabin.cabin_id}>
+                <th className="sticky left-0 z-10 border-b border-r bg-white p-2 text-left">
+                  <button
+                    type="button"
+                    onClick={() => onToggleCabin(cabin)}
+                    disabled={!cabin.available_for_range}
+                    aria-pressed={selected}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-lg p-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600',
+                      selected ? 'bg-cyan-50 text-cyan-950' : 'hover:bg-stone-50',
+                      !cabin.available_for_range && 'cursor-not-allowed opacity-60',
+                    )}
+                  >
+                    <span className={cn('grid size-5 shrink-0 place-items-center rounded border', selected ? 'border-cyan-700 bg-cyan-700 text-white' : 'bg-white')}>
+                      {selected ? <Check className="size-3.5" /> : null}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{cabin.name}</span>
+                      <span className="block text-xs font-normal text-muted-foreground">Max. {cabin.max_guests}</span>
+                    </span>
+                  </button>
+                </th>
+                {dates.map((date) => {
+                  const segment = segmentForDate(cabin, date);
+                  return (
+                    <td key={date} className="border-b p-1">
+                      {segment ? (
+                        <MatrixCell
+                          cabin={cabin}
+                          segment={segment}
+                          date={date}
+                          onToggle={() => onToggleCabin(cabin)}
+                          onOpen={() => onOpenCell({ cabin, segment, date })}
+                        />
+                      ) : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-function CalendarDay({ day }: { day: AdminAvailabilityCalendar['days'][number] }) {
+function MatrixCell({
+  cabin,
+  segment,
+  date,
+  onToggle,
+  onOpen,
+}: {
+  cabin: PlannerCabin;
+  segment: PlannerSegment;
+  date: string;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
+  const hasDetail = Boolean(segment.reservation || segment.block || segment.quotes.length > 0 || !segment.is_available);
+  const label = segment.state === 'reserved'
+    ? 'Ocupada'
+    : segment.state === 'blocked'
+      ? 'Bloqueo'
+      : segment.state === 'maintenance'
+        ? 'Mantenimiento'
+        : segment.state === 'inactive'
+          ? 'Inactiva'
+          : 'Disponible';
+  const Icon = segment.state === 'reserved'
+    ? BedDouble
+    : segment.state === 'blocked' || segment.state === 'maintenance'
+      ? LockKeyhole
+      : segment.state === 'inactive'
+        ? Ban
+        : CheckCircle2;
+
   return (
-    <div
+    <button
+      type="button"
+      onClick={hasDetail ? onOpen : onToggle}
+      aria-label={`${cabin.name}, ${formatDay(date)}: ${label}${segment.quotes.length ? `, ${segment.quotes.length} cotizaciones` : ''}`}
       className={cn(
-        'min-h-20 rounded-md border p-2',
-        day.status === 'full'
-          ? 'border-red-200 bg-red-50'
-          : day.status === 'limited'
-            ? 'border-amber-200 bg-amber-50'
-            : 'border-emerald-100 bg-emerald-50',
+        'relative flex h-16 w-full min-w-20 flex-col items-center justify-center gap-1 rounded-md border px-1 text-[11px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700',
+        segment.state === 'reserved' && 'border-red-200 bg-red-50 text-red-900 hover:bg-red-100',
+        (segment.state === 'blocked' || segment.state === 'maintenance') && 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100',
+        segment.state === 'inactive' && 'border-stone-200 bg-stone-100 text-stone-600',
+        segment.state === 'available' && 'border-emerald-100 bg-emerald-50 text-emerald-900 hover:bg-emerald-100',
       )}
     >
-      <p className="font-medium">{Number(day.date.slice(8, 10))}</p>
-      <p className="mt-3 text-xs text-muted-foreground">
-        {day.available}/{day.total} libres
+      <Icon className="size-4" />
+      <span>{label}</span>
+      {segment.quotes.length > 0 ? (
+        <span className="absolute right-1 top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-violet-600 px-1 text-[9px] leading-4 text-white" title="Cotizaciones vigentes">
+          {segment.quotes.length}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function SelectedSummary({ cabins, capacity, guests }: { cabins: PlannerCabin[]; capacity: number; guests: number }) {
+  if (cabins.length === 0) {
+    return <p className="mt-4 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Aun no seleccionas cabanas.</p>;
+  }
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex flex-wrap gap-2">{cabins.map((cabin) => <Badge key={cabin.cabin_id} variant="outline">{cabin.name}</Badge>)}</div>
+      <p className={cn('text-sm font-medium', capacity >= guests ? 'text-emerald-700' : 'text-amber-700')}>
+        Capacidad {capacity} para {guests} personas.
       </p>
     </div>
   );
 }
 
-function MiniMetric({ label, value }: { label: string; value: number }) {
+function LoadingState() {
+  return <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-5 animate-spin" /> Consultando disponibilidad...</div>;
+}
+
+function EmptyState() {
+  return <div className="grid min-h-64 place-items-center p-6 text-center"><div><BedDouble className="mx-auto size-8 text-muted-foreground" /><p className="mt-3 font-semibold">No hay cabanas configuradas</p><p className="mt-1 text-sm text-muted-foreground">Agrega cabanas activas con ubicacion en el mapa.</p></div></div>;
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return <div className="grid min-h-64 place-items-center p-6 text-center"><div><AlertCircle className="mx-auto size-8 text-red-600" /><p className="mt-3 font-semibold">No pudimos cargar la disponibilidad</p><p className="mt-1 text-sm text-muted-foreground">{message}</p><Button type="button" variant="outline" className="mt-4" onClick={onRetry}><RefreshCw className="size-4" /> Reintentar</Button></div></div>;
+}
+
+function RecordSheet({
+  open,
+  onOpenChange,
+  editing,
+  kind,
+  onKindChange,
+  checkIn,
+  checkOut,
+  guests,
+  leader,
+  notes,
+  expiresAt,
+  cabins,
+  cabinIds,
+  onCheckInChange,
+  onCheckOutChange,
+  onGuestsChange,
+  onLeaderChange,
+  onNotesChange,
+  onExpiresAtChange,
+  onCabinIdsChange,
+  error,
+  isPending,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editing: boolean;
+  kind: RecordKind;
+  onKindChange: (kind: RecordKind) => void;
+  checkIn: string;
+  checkOut: string;
+  guests: string;
+  leader: string;
+  notes: string;
+  expiresAt: string;
+  cabins: PlannerCabin[];
+  cabinIds: number[];
+  onCheckInChange: (value: string) => void;
+  onCheckOutChange: (value: string) => void;
+  onGuestsChange: (value: string) => void;
+  onLeaderChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+  onExpiresAtChange: (value: string) => void;
+  onCabinIdsChange: (ids: number[]) => void;
+  error: string;
+  isPending: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
   return (
-    <div className="rounded-md bg-white px-2 py-2">
-      <p className="font-bold">{value}</p>
-      <p className="text-muted-foreground">{label}</p>
-    </div>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>{editing ? 'Editar registro' : 'Registrar desde WhatsApp'}</SheetTitle>
+          <SheetDescription>Guarda lo necesario para mantener clara la ocupacion. La conversacion sigue en WhatsApp.</SheetDescription>
+        </SheetHeader>
+        <form id="record-form" onSubmit={onSubmit} className="space-y-5 px-4 pb-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-stone-100 p-1">
+            <button type="button" onClick={() => onKindChange('pending')} className={cn('rounded-md px-3 py-2 text-sm font-medium', kind === 'pending' ? 'bg-white text-violet-800 shadow-sm' : 'text-muted-foreground')}>Cotizacion</button>
+            <button type="button" onClick={() => onKindChange('confirmed')} className={cn('rounded-md px-3 py-2 text-sm font-medium', kind === 'confirmed' ? 'bg-white text-red-800 shadow-sm' : 'text-muted-foreground')}>Ocupacion confirmada</button>
+          </div>
+          <div className={cn('rounded-lg border p-3 text-sm', kind === 'pending' ? 'border-violet-200 bg-violet-50 text-violet-950' : 'border-red-200 bg-red-50 text-red-950')}>
+            {kind === 'pending' ? 'La cotizacion quedara visible, pero no bloqueara la cabana.' : 'La ocupacion bloqueara estas fechas para nuevas reservas.'}
+          </div>
+          <Field id="record-leader" label="Turista o grupo">
+            <Input id="record-leader" autoFocus value={leader} onChange={(event) => onLeaderChange(event.target.value)} placeholder="Ej. Familia Rivas" />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="record-check-in" label="Llegada"><Input id="record-check-in" type="date" value={checkIn} onChange={(event) => onCheckInChange(event.target.value)} /></Field>
+            <Field id="record-check-out" label="Salida"><Input id="record-check-out" type="date" min={addDaysIso(checkIn, 1)} max={addDaysIso(checkIn, MAX_RANGE_DAYS)} value={checkOut} onChange={(event) => onCheckOutChange(event.target.value)} /></Field>
+          </div>
+          <Field id="record-guests" label="Personas"><Input id="record-guests" type="number" min={1} max={50} value={guests} onChange={(event) => onGuestsChange(event.target.value)} /></Field>
+          <div>
+            <Label>Cabanas</Label>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {cabins.map((cabin) => {
+                const checked = cabinIds.includes(cabin.cabin_id);
+                const disabled = !cabin.available_for_range && !checked;
+
+                return (
+                  <label key={cabin.cabin_id} className={cn('flex min-h-11 items-center gap-3 rounded-lg border p-3 text-sm', disabled && 'cursor-not-allowed opacity-50')}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={(event) => onCabinIdsChange(
+                        event.target.checked
+                          ? [...cabinIds, cabin.cabin_id]
+                          : cabinIds.filter((id) => id !== cabin.cabin_id),
+                      )}
+                    />
+                    <span><span className="block font-medium">{cabin.name}</span><span className="text-xs text-muted-foreground">{disabled ? 'No libre en todo el rango' : 'Disponible para seleccionar'}</span></span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          {kind === 'pending' ? <Field id="record-expires" label="Vigente hasta"><Input id="record-expires" type="datetime-local" required value={expiresAt} onChange={(event) => onExpiresAtChange(event.target.value)} /></Field> : null}
+          <Field id="record-notes" label="Notas opcionales"><Textarea id="record-notes" value={notes} onChange={(event) => onNotesChange(event.target.value)} rows={4} placeholder="Acuerdos o referencia de la conversacion" /></Field>
+          {error ? <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p> : null}
+        </form>
+        <SheetFooter className="border-t">
+          <Button type="submit" form="record-form" disabled={isPending}>{isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}{editing ? 'Guardar cambios' : 'Guardar registro'}</Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-function AgendaEvent({
-  event,
-  onEdit,
+function BlockSheet({
+  open,
+  onOpenChange,
+  editing,
+  checkIn,
+  checkOut,
+  reason,
+  notes,
+  appliesToAll,
+  cabinIds,
+  cabins,
+  onCheckInChange,
+  onCheckOutChange,
+  onReasonChange,
+  onNotesChange,
+  onAppliesToAllChange,
+  onCabinIdsChange,
+  error,
+  isPending,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editing: boolean;
+  checkIn: string;
+  checkOut: string;
+  reason: string;
+  notes: string;
+  appliesToAll: boolean;
+  cabinIds: number[];
+  cabins: PlannerCabin[];
+  onCheckInChange: (value: string) => void;
+  onCheckOutChange: (value: string) => void;
+  onReasonChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+  onAppliesToAllChange: (value: boolean) => void;
+  onCabinIdsChange: (ids: number[]) => void;
+  error: string;
+  isPending: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader><SheetTitle>{editing ? 'Editar bloqueo' : 'Bloquear fechas'}</SheetTitle><SheetDescription>Úsalo para mantenimiento, eventos privados o cierres operativos.</SheetDescription></SheetHeader>
+        <form id="block-form" onSubmit={onSubmit} className="space-y-5 px-4 pb-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="block-check-in" label="Desde"><Input id="block-check-in" type="date" value={checkIn} onChange={(event) => onCheckInChange(event.target.value)} /></Field>
+            <Field id="block-check-out" label="Hasta"><Input id="block-check-out" type="date" min={addDaysIso(checkIn, 1)} max={addDaysIso(checkIn, MAX_RANGE_DAYS)} value={checkOut} onChange={(event) => onCheckOutChange(event.target.value)} /></Field>
+          </div>
+          <label className="flex min-h-11 items-center gap-3 rounded-lg border p-3 text-sm font-medium"><input type="checkbox" checked={appliesToAll} onChange={(event) => onAppliesToAllChange(event.target.checked)} /> Aplicar a todas las cabanas</label>
+          {!appliesToAll ? (
+            <Field id="block-cabins" label="Cabanas">
+              <Select value="" onValueChange={(value) => { const id = Number(value); if (id && !cabinIds.includes(id)) onCabinIdsChange([...cabinIds, id]); }}>
+                <SelectTrigger id="block-cabins"><SelectValue placeholder="Agregar cabana" /></SelectTrigger>
+                <SelectContent>{cabins.filter((cabin) => !cabinIds.includes(cabin.cabin_id)).map((cabin) => <SelectItem key={cabin.cabin_id} value={String(cabin.cabin_id)}>{cabin.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+          ) : null}
+          {!appliesToAll && cabinIds.length > 0 ? <div className="flex flex-wrap gap-2">{cabinIds.map((id) => { const cabin = cabins.find((item) => item.cabin_id === id); return <button key={id} type="button" onClick={() => onCabinIdsChange(cabinIds.filter((item) => item !== id))}><Badge variant="outline">{cabin?.name ?? `Cabana ${id}`} <XCircle className="ml-1 size-3" /></Badge></button>; })}</div> : null}
+          <Field id="block-reason" label="Motivo"><Input id="block-reason" value={reason} onChange={(event) => onReasonChange(event.target.value)} placeholder="Ej. Mantenimiento de techo" /></Field>
+          <Field id="block-notes" label="Notas opcionales"><Textarea id="block-notes" value={notes} onChange={(event) => onNotesChange(event.target.value)} rows={4} /></Field>
+          {error ? <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p> : null}
+        </form>
+        <SheetFooter className="border-t"><Button type="submit" form="block-form" disabled={isPending}>{isPending ? <LoaderCircle className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}{editing ? 'Guardar cambios' : 'Crear bloqueo'}</Button></SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DetailSheet({
+  detail,
+  onClose,
+  onEditRecord,
   onConfirm,
   onRenew,
   onCancel,
-  actionPending,
+  onEditBlock,
+  onDeleteBlock,
+  isPending,
 }: {
-  event: AdminAvailabilityCalendarEvent;
-  onEdit: (event: AdminAvailabilityCalendarEvent) => void;
-  onConfirm: (event: AdminAvailabilityCalendarEvent) => void;
-  onRenew: (event: AdminAvailabilityCalendarEvent) => void;
-  onCancel: (event: AdminAvailabilityCalendarEvent) => void;
-  actionPending: boolean;
+  detail: SelectedCell | null;
+  onClose: () => void;
+  onEditRecord: (record: PlannerReservation) => void;
+  onConfirm: (record: PlannerReservation) => void;
+  onRenew: (record: PlannerReservation) => void;
+  onCancel: (record: PlannerReservation) => void;
+  onEditBlock: (id: number) => void;
+  onDeleteBlock: (id: number) => void;
+  isPending: boolean;
 }) {
-  const isReservation = event.type === 'reservation';
-  const isPending = event.status === 'pending';
-
+  if (!detail) return null;
+  const { cabin, segment, date } = detail;
   return (
-    <article className="rounded-md border bg-stone-50 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: event.display_color ?? (event.type === 'block' ? '#f59e0b' : '#0ea5e9') }}
-            />
-            <p className="text-sm font-medium">{event.leader_name ?? event.status_label}</p>
-            <EventBadge event={event} />
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {event.check_in} a {event.check_out} - {event.cabin_names.join(', ')}
-          </p>
-          {isPending ? (
-            <p className="mt-1 text-xs text-muted-foreground">Vence {formatDateTime(event.expires_at)}</p>
-          ) : null}
+    <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader><SheetTitle>{cabin.name} · {formatDay(date)}</SheetTitle><SheetDescription>{segment.label}</SheetDescription></SheetHeader>
+        <div className="space-y-4 px-4 pb-6">
+          {segment.reservation ? <RecordDetail title="Ocupacion confirmada" record={segment.reservation} tone="red" actions={<><Button type="button" size="sm" variant="outline" onClick={() => onEditRecord(segment.reservation!)}><Edit3 className="size-3.5" /> Editar</Button><Button type="button" size="sm" variant="ghost" onClick={() => onCancel(segment.reservation!)} disabled={isPending}><XCircle className="size-3.5" /> Cancelar</Button></>} /> : null}
+          {segment.quotes.map((quote) => <RecordDetail key={quote.id} title="Cotizacion vigente" record={quote} tone="violet" actions={<><Button type="button" size="sm" variant="outline" onClick={() => onEditRecord(quote)}><Edit3 className="size-3.5" /> Editar</Button><Button type="button" size="sm" onClick={() => onConfirm(quote)} disabled={isPending}><Check className="size-3.5" /> Confirmar</Button><Button type="button" size="sm" variant="outline" onClick={() => onRenew(quote)} disabled={isPending}><Clock3 className="size-3.5" /> Renovar 48h</Button><Button type="button" size="sm" variant="ghost" onClick={() => onCancel(quote)} disabled={isPending}><XCircle className="size-3.5" /> Cancelar</Button></>} />)}
+          {segment.block ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950"><div className="flex items-center gap-2 font-semibold"><LockKeyhole className="size-4" /> Bloqueo</div><p className="mt-2 text-sm">{segment.block.reason}</p>{segment.block.notes ? <p className="mt-1 text-xs text-amber-800">{segment.block.notes}</p> : null}<div className="mt-4 flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => onEditBlock(segment.block!.id)}><Edit3 className="size-3.5" /> Editar</Button><Button type="button" size="sm" variant="ghost" onClick={() => onDeleteBlock(segment.block!.id)} disabled={isPending}><Trash2 className="size-3.5" /> Eliminar</Button></div></div> : null}
+          {!segment.reservation && !segment.block && segment.quotes.length === 0 ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">Esta cabana esta disponible para la fecha seleccionada.</p> : null}
         </div>
-      </div>
-      {isReservation ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => onEdit(event)} disabled={actionPending}>
-            <Edit3 className="h-3.5 w-3.5" />
-            Editar
-          </Button>
-          {isPending ? (
-            <>
-              <Button type="button" size="sm" variant="outline" onClick={() => onConfirm(event)} disabled={actionPending}>
-                <Check className="h-3.5 w-3.5" />
-                Confirmar
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => onRenew(event)} disabled={actionPending}>
-                <RefreshCw className="h-3.5 w-3.5" />
-                Renovar 48h
-              </Button>
-            </>
-          ) : null}
-          {event.status !== 'cancelled' ? (
-            <Button type="button" size="sm" variant="ghost" onClick={() => onCancel(event)} disabled={actionPending}>
-              <XCircle className="h-3.5 w-3.5" />
-              Cancelar
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-function EventBadge({ event }: { event: AdminAvailabilityCalendarEvent }) {
-  if (event.type === 'block') {
-    return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Bloqueo</Badge>;
-  }
-
-  if (event.is_expired_quote || event.status === 'expired') {
-    return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Vencida</Badge>;
-  }
-
-  if (event.expires_soon) {
-    return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Por vencer</Badge>;
-  }
-
-  if (event.status === 'pending') {
-    return <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100">Cotizada</Badge>;
-  }
-
-  return <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-100">{event.status_label}</Badge>;
+function RecordDetail({ title, record, tone, actions }: { title: string; record: PlannerReservation; tone: 'red' | 'violet'; actions: ReactNode }) {
+  return (
+    <div className={cn('rounded-lg border p-4', tone === 'red' ? 'border-red-200 bg-red-50 text-red-950' : 'border-violet-200 bg-violet-50 text-violet-950')}>
+      <div className="flex items-center justify-between gap-2"><p className="font-semibold">{title}</p><Badge variant="outline">{record.status_label}</Badge></div>
+      <p className="mt-3 font-medium">{record.leader_name ?? 'Sin nombre'}</p>
+      <p className="mt-1 text-sm">{formatRange(record.check_in, record.check_out)} · {record.guests_count} personas</p>
+      <p className="mt-1 text-sm">{record.cabin_names.join(', ')}</p>
+      {record.expires_at ? <p className="mt-2 flex items-center gap-1 text-xs"><Clock3 className="size-3.5" /> Vence {new Date(record.expires_at).toLocaleString('es-CO')}</p> : null}
+      {record.notes ? <p className="mt-2 text-sm opacity-80">{record.notes}</p> : null}
+      <div className="mt-4 flex flex-wrap gap-2">{actions}</div>
+    </div>
+  );
 }

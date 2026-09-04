@@ -107,14 +107,23 @@ class ReservationController extends Controller
             $cabinIds = $this->normalizeCabinIds($data, $reservation);
             $checkIn = $data['check_in'] ?? $reservation->check_in->format('Y-m-d');
             $checkOut = $data['check_out'] ?? $reservation->check_out->format('Y-m-d');
-
-            $this->lockCabins($cabinIds);
-            $this->ensureCabinsAvailable(
-                checkIn: $checkIn,
-                checkOut: $checkOut,
-                cabinIds: $cabinIds,
-                ignoreReservationId: $reservation->id,
+            $targetStatus = ReservationStatus::from(
+                $data['status'] ?? $reservation->status->value
             );
+
+            if (
+                $targetStatus->blocksAvailability()
+                || ($targetStatus === ReservationStatus::Pending
+                    && $this->reservationPlacementChanges($reservation, $checkIn, $checkOut, $cabinIds))
+            ) {
+                $this->lockCabins($cabinIds);
+                $this->ensureCabinsAvailable(
+                    checkIn: $checkIn,
+                    checkOut: $checkOut,
+                    cabinIds: $cabinIds,
+                    ignoreReservationId: $reservation->id,
+                );
+            }
 
             unset($data['cabin_ids']);
             $payload = $this->applyLifecycleDefaults($data, $reservation);
@@ -214,6 +223,22 @@ class ReservationController extends Controller
         throw ValidationException::withMessages([
             'cabin_ids' => ['Una o mas cabanas seleccionadas no estan disponibles para esas fechas.'],
         ]);
+    }
+
+    private function reservationPlacementChanges(
+        Reservation $reservation,
+        string $checkIn,
+        string $checkOut,
+        array $cabinIds,
+    ): bool
+    {
+        $existingCabinIds = $this->normalizeCabinIds([], $reservation);
+        sort($existingCabinIds);
+        sort($cabinIds);
+
+        return $checkIn !== $reservation->check_in->format('Y-m-d')
+            || $checkOut !== $reservation->check_out->format('Y-m-d')
+            || $cabinIds !== $existingCabinIds;
     }
 
     private function lockCabins(array $cabinIds): void

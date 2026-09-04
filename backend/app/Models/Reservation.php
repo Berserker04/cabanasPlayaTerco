@@ -115,19 +115,7 @@ class Reservation extends Model
 
     public function scopeBlockingAvailability(Builder $query): Builder
     {
-        return $query->where(function (Builder $query): void {
-            $query
-                ->whereIn('status', [
-                    ReservationStatus::Confirmed->value,
-                    ReservationStatus::CheckedIn->value,
-                ])
-                ->orWhere(function (Builder $query): void {
-                    $query
-                        ->where('status', ReservationStatus::Pending->value)
-                        ->whereNotNull('expires_at')
-                        ->where('expires_at', '>', now());
-                });
-        });
+        return $query->whereIn('status', ReservationStatus::blockingValues());
     }
 
     public function scopeForCabins(Builder $query, Collection|array $cabinIds): Builder

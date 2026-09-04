@@ -27,10 +27,8 @@ export const NAV_LINKS = [
 
 export const ADMIN_NAV_LINKS = [
   { href: '/admin', label: 'Dashboard', icon: 'LayoutDashboard' },
-  { href: '/admin/reservas', label: 'Reservas', icon: 'CalendarDays' },
+  { href: '/admin/disponibilidad', label: 'Disponibilidad', icon: 'CalendarDays' },
   { href: '/admin/cabanas', label: 'Cabañas', icon: 'Home' },
-  { href: '/admin/huespedes', label: 'Huéspedes', icon: 'Users' },
-  { href: '/admin/ingresos', label: 'Ingresos', icon: 'DollarSign' },
   { href: '/admin/resenas', label: 'Reseñas', icon: 'Star' },
   { href: '/admin/blog', label: 'Blog', icon: 'FileText' },
   { href: '/admin/galeria', label: 'Galería', icon: 'Image' },

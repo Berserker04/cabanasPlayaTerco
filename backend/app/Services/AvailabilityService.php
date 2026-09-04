@@ -155,6 +155,17 @@ class AvailabilityService
             ->overlapping($checkInDate, $checkOutDate)
             ->get();
 
+        $quotes = Reservation::query()
+            ->with(['cabins:id,name', 'cabin:id,name', 'guestGroup', 'assignedStaff'])
+            ->where('status', ReservationStatus::Pending->value)
+            ->where(function ($query): void {
+                $query
+                    ->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            })
+            ->overlapping($checkInDate, $checkOutDate)
+            ->get();
+
         $blocks = AvailabilityBlock::query()
             ->with('cabins:id,name')
             ->overlapping($checkInDate, $checkOutDate)
@@ -164,6 +175,7 @@ class AvailabilityService
             ->map(fn (Cabin $cabin) => $this->buildPlannerCabin(
                 cabin: $cabin,
                 reservations: $reservations,
+                quotes: $quotes,
                 blocks: $blocks,
                 checkInDate: $checkInDate,
                 checkOutDate: $checkOutDate,
@@ -178,7 +190,10 @@ class AvailabilityService
         $summary = [
             'total_cabins' => $plannerCabins->count(),
             'available_count' => $availableForRange->count(),
-            'quoted_count' => $plannerCabins->filter(fn (array $entry) => $this->hasPlannerState($entry, 'quoted'))->count(),
+            'quoted_count' => $plannerCabins
+                ->filter(fn (array $entry) => collect($entry['segments'])
+                    ->contains(fn (array $segment) => count($segment['quotes']) > 0))
+                ->count(),
             'reserved_count' => $plannerCabins->filter(fn (array $entry) => $this->hasPlannerState($entry, 'reserved'))->count(),
             'blocked_count' => $plannerCabins->filter(fn (array $entry) => $this->hasPlannerState($entry, 'blocked'))->count(),
             'maintenance_count' => $plannerCabins->filter(fn (array $entry) => $this->hasPlannerState($entry, 'maintenance'))->count(),
@@ -350,13 +365,14 @@ class AvailabilityService
     private function buildPlannerCabin(
         Cabin $cabin,
         Collection $reservations,
+        Collection $quotes,
         Collection $blocks,
         Carbon $checkInDate,
         Carbon $checkOutDate,
         ?int $guests,
     ): array {
-        $segments = $this->buildPlannerSegments($cabin, $reservations, $blocks, $checkInDate, $checkOutDate);
-        $availableForRange = $segments->every(fn (array $segment) => $segment['state'] === 'available');
+        $segments = $this->buildPlannerSegments($cabin, $reservations, $quotes, $blocks, $checkInDate, $checkOutDate);
+        $availableForRange = $segments->every(fn (array $segment) => $segment['is_available']);
 
         return [
             'cabin_id' => $cabin->id,
@@ -373,6 +389,7 @@ class AvailabilityService
     private function buildPlannerSegments(
         Cabin $cabin,
         Collection $reservations,
+        Collection $quotes,
         Collection $blocks,
         Carbon $checkInDate,
         Carbon $checkOutDate,
@@ -381,7 +398,7 @@ class AvailabilityService
         $current = null;
 
         for ($date = $checkInDate->copy(); $date->lt($checkOutDate); $date->addDay()) {
-            $state = $this->plannerStateForDate($cabin, $reservations, $blocks, $date);
+            $state = $this->plannerStateForDate($cabin, $reservations, $quotes, $blocks, $date);
             $signature = $this->plannerStateSignature($state);
 
             if ($current && $current['signature'] === $signature) {
@@ -402,6 +419,7 @@ class AvailabilityService
                 'label' => $state['label'],
                 'is_available' => $state['is_available'],
                 'reservation' => $state['reservation'],
+                'quotes' => $state['quotes'],
                 'block' => $state['block'],
                 'signature' => $signature,
             ];
@@ -415,29 +433,36 @@ class AvailabilityService
         return $segments;
     }
 
-    private function plannerStateForDate(Cabin $cabin, Collection $reservations, Collection $blocks, Carbon $date): array
+    private function plannerStateForDate(
+        Cabin $cabin,
+        Collection $reservations,
+        Collection $quotes,
+        Collection $blocks,
+        Carbon $date,
+    ): array
     {
+        $quotePayloads = $this->quotesForCabinOnDate($quotes, $cabin, $date)
+            ->map(fn (Reservation $quote) => $this->plannerReservationPayload($quote))
+            ->values()
+            ->all();
+
         if (! $cabin->is_active || $cabin->status === CabinStatus::Inactive) {
-            return $this->plannerState('inactive', 'gray', 'Inactiva');
+            return $this->plannerState('inactive', 'gray', 'Inactiva', quotes: $quotePayloads);
         }
 
         if ($cabin->status === CabinStatus::Maintenance) {
-            return $this->plannerState('maintenance', 'orange', 'Mantenimiento');
+            return $this->plannerState('maintenance', 'orange', 'Mantenimiento', quotes: $quotePayloads);
         }
 
         $reservation = $this->reservationForCabinOnDate($reservations, $cabin, $date);
 
         if ($reservation) {
-            $state = $reservation->status === ReservationStatus::Pending ? 'quoted' : 'reserved';
-            $label = $state === 'quoted'
-                ? ($reservation->leader_name ? "Cotizada: {$reservation->leader_name}" : 'Cotizada')
-                : ($reservation->leader_name ? "Reservada: {$reservation->leader_name}" : 'Reservada');
-
             return $this->plannerState(
-                state: $state,
+                state: 'reserved',
                 tone: 'red',
-                label: $label,
+                label: $reservation->leader_name ? "Ocupada: {$reservation->leader_name}" : 'Ocupada',
                 reservation: $this->plannerReservationPayload($reservation),
+                quotes: $quotePayloads,
             );
         }
 
@@ -448,16 +473,29 @@ class AvailabilityService
                 state: 'blocked',
                 tone: 'orange',
                 label: $block->reason,
+                quotes: $quotePayloads,
                 block: [
                     'id' => $block->id,
                     'reason' => $block->reason,
                     'notes' => $block->notes,
                     'applies_to_all' => $block->applies_to_all,
+                    'check_in' => $block->check_in->format('Y-m-d'),
+                    'check_out' => $block->check_out->format('Y-m-d'),
+                    'cabin_ids' => $block->cabins->pluck('id')->map(fn ($id) => (int) $id)->values(),
+                    'cabin_names' => $block->applies_to_all
+                        ? ['Todas las cabanas']
+                        : $block->cabins->pluck('name')->values(),
                 ],
             );
         }
 
-        return $this->plannerState('available', 'green', 'Disponible', isAvailable: true);
+        return $this->plannerState(
+            'available',
+            'green',
+            'Disponible',
+            quotes: $quotePayloads,
+            isAvailable: true,
+        );
     }
 
     private function plannerState(
@@ -465,6 +503,7 @@ class AvailabilityService
         string $tone,
         string $label,
         ?array $reservation = null,
+        array $quotes = [],
         ?array $block = null,
         bool $isAvailable = false,
     ): array {
@@ -474,6 +513,7 @@ class AvailabilityService
             'label' => $label,
             'is_available' => $isAvailable,
             'reservation' => $reservation,
+            'quotes' => $quotes,
             'block' => $block,
         ];
     }
@@ -486,6 +526,17 @@ class AvailabilityService
             }
 
             return $this->reservationCabinIds($reservation)->contains((int) $cabin->id);
+        });
+    }
+
+    private function quotesForCabinOnDate(Collection $quotes, Cabin $cabin, Carbon $date): Collection
+    {
+        return $quotes->filter(function (Reservation $quote) use ($cabin, $date): bool {
+            if (! ($date->gte($quote->check_in) && $date->lt($quote->check_out))) {
+                return false;
+            }
+
+            return $this->reservationCabinIds($quote)->contains((int) $cabin->id);
         });
     }
 
@@ -502,6 +553,11 @@ class AvailabilityService
 
     private function plannerReservationPayload(Reservation $reservation): array
     {
+        $cabinIds = $this->reservationCabinIds($reservation);
+        $cabins = $reservation->relationLoaded('cabins') && $reservation->cabins->isNotEmpty()
+            ? $reservation->cabins
+            : collect([$reservation->cabin])->filter();
+
         return [
             'id' => $reservation->id,
             'status' => $reservation->status->value,
@@ -512,6 +568,12 @@ class AvailabilityService
             'check_out' => $reservation->check_out->format('Y-m-d'),
             'guests_count' => $reservation->guests_count,
             'total_price' => $reservation->total_price !== null ? (float) $reservation->total_price : null,
+            'notes' => $reservation->notes,
+            'source' => $reservation->source,
+            'expires_at' => $reservation->expires_at?->toISOString(),
+            'confirmed_at' => $reservation->confirmed_at?->toISOString(),
+            'cabin_ids' => $cabinIds->values(),
+            'cabin_names' => $cabins->pluck('name')->values(),
             'assigned_to' => $reservation->assigned_to,
             'assigned_staff' => $reservation->relationLoaded('assignedStaff') && $reservation->assignedStaff
                 ? [
@@ -530,6 +592,7 @@ class AvailabilityService
             $state['state'],
             $state['reservation']['id'] ?? 'none',
             $state['block']['id'] ?? 'none',
+            collect($state['quotes'])->pluck('id')->sort()->implode(','),
         ]);
     }
 
@@ -806,16 +869,7 @@ class AvailabilityService
 
     private function reservationBlocksAvailability(Reservation $reservation): bool
     {
-        if (in_array($reservation->status, [
-            ReservationStatus::Confirmed,
-            ReservationStatus::CheckedIn,
-        ], true)) {
-            return true;
-        }
-
-        return $reservation->status === ReservationStatus::Pending
-            && $reservation->expires_at !== null
-            && $reservation->expires_at->isFuture();
+        return $reservation->status->blocksAvailability();
     }
 
     private function reservationLabel(Reservation $reservation): string

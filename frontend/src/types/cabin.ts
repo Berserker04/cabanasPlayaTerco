@@ -153,6 +153,80 @@ export interface AvailabilityResult {
   message: string;
 }
 
+export interface PlannerReservation {
+  id: number;
+  status: import('./reservation').ReservationStatus;
+  status_label: string;
+  leader_name: string | null;
+  display_color: string | null;
+  check_in: string;
+  check_out: string;
+  guests_count: number;
+  total_price: number | null;
+  notes: string | null;
+  source: string | null;
+  expires_at: string | null;
+  confirmed_at: string | null;
+  cabin_ids: number[];
+  cabin_names: string[];
+  assigned_to: number | null;
+  assigned_staff: {
+    id: number;
+    full_name: string;
+    role: string;
+    role_label: string;
+  } | null;
+}
+
+export interface PlannerBlock {
+  id: number;
+  reason: string;
+  notes: string | null;
+  applies_to_all: boolean;
+}
+
+export interface PlannerSegment {
+  check_in: string;
+  check_out: string;
+  state: AvailabilityState;
+  tone: AvailabilityTone;
+  label: string;
+  is_available: boolean;
+  reservation: PlannerReservation | null;
+  quotes: PlannerReservation[];
+  block: PlannerBlock | null;
+}
+
+export interface PlannerCabin {
+  cabin_id: number;
+  name: string;
+  map_slot: MapSlot | null;
+  max_guests: number;
+  fits_guests: boolean;
+  available_for_range: boolean;
+  segments: PlannerSegment[];
+  cabin: Cabin;
+}
+
+export interface PlannerSuggestion {
+  cabin_ids: number[];
+  capacity: number;
+  capacity_extra: number;
+  cabins_count: number;
+  cabins: Array<Pick<Cabin, 'id' | 'name' | 'map_slot' | 'max_guests'>>;
+}
+
+export interface PlannerResult {
+  check_in: string;
+  check_out: string;
+  guests: number | null;
+  cabins: PlannerCabin[];
+  suggestions: PlannerSuggestion[];
+  summary: AvailabilitySummary & {
+    maintenance_count: number;
+  };
+}
+
 export interface AvailabilityBlock {
   id: number;
   check_in: string;

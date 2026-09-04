@@ -147,7 +147,10 @@ class PlannerSegment {
     required this.state,
     required this.tone,
     required this.label,
+    required this.isAvailable,
     required this.reservation,
+    required this.quotes,
+    required this.block,
   });
 
   factory PlannerSegment.fromJson(JsonMap json) => PlannerSegment(
@@ -156,9 +159,12 @@ class PlannerSegment {
         state: json['state']?.toString() ?? 'available',
         tone: json['tone']?.toString() ?? 'green',
         label: json['label']?.toString() ?? 'Disponible',
+        isAvailable: json['is_available'] == true,
         reservation: json['reservation'] == null
             ? null
             : PlannerReservation.fromJson(asMap(json['reservation'])),
+        quotes: asList(json['quotes']).map(PlannerReservation.fromJson).toList(),
+        block: json['block'] == null ? null : PlannerBlock.fromJson(asMap(json['block'])),
       );
 
   final String checkIn;
@@ -166,15 +172,27 @@ class PlannerSegment {
   final String state;
   final String tone;
   final String label;
+  final bool isAvailable;
   final PlannerReservation? reservation;
+  final List<PlannerReservation> quotes;
+  final PlannerBlock? block;
 }
 
 class PlannerReservation {
   const PlannerReservation({
     required this.id,
+    required this.status,
     required this.leaderName,
     required this.statusLabel,
     required this.guestsCount,
+    required this.checkIn,
+    required this.checkOut,
+    required this.notes,
+    required this.source,
+    required this.expiresAt,
+    required this.confirmedAt,
+    required this.cabinIds,
+    required this.cabinNames,
     required this.assignedName,
   });
 
@@ -182,18 +200,69 @@ class PlannerReservation {
     final staff = asMap(json['assigned_staff']);
     return PlannerReservation(
       id: asInt(json['id']),
+      status: json['status']?.toString() ?? '',
       leaderName: json['leader_name']?.toString(),
       statusLabel: json['status_label']?.toString() ?? '',
       guestsCount: asInt(json['guests_count']),
+      checkIn: json['check_in']?.toString() ?? '',
+      checkOut: json['check_out']?.toString() ?? '',
+      notes: json['notes']?.toString(),
+      source: json['source']?.toString(),
+      expiresAt: json['expires_at']?.toString(),
+      confirmedAt: json['confirmed_at']?.toString(),
+      cabinIds: (json['cabin_ids'] as List? ?? const []).map(asInt).toList(),
+      cabinNames: (json['cabin_names'] as List? ?? const []).map((item) => item.toString()).toList(),
       assignedName: staff['full_name']?.toString(),
     );
   }
 
   final int id;
+  final String status;
   final String? leaderName;
   final String statusLabel;
   final int guestsCount;
+  final String checkIn;
+  final String checkOut;
+  final String? notes;
+  final String? source;
+  final String? expiresAt;
+  final String? confirmedAt;
+  final List<int> cabinIds;
+  final List<String> cabinNames;
   final String? assignedName;
+}
+
+class PlannerBlock {
+  const PlannerBlock({
+    required this.id,
+    required this.reason,
+    required this.notes,
+    required this.appliesToAll,
+    required this.checkIn,
+    required this.checkOut,
+    required this.cabinIds,
+    required this.cabinNames,
+  });
+
+  factory PlannerBlock.fromJson(JsonMap json) => PlannerBlock(
+        id: asInt(json['id']),
+        reason: json['reason']?.toString() ?? 'Bloqueo',
+        notes: json['notes']?.toString(),
+        appliesToAll: json['applies_to_all'] == true,
+        checkIn: json['check_in']?.toString() ?? '',
+        checkOut: json['check_out']?.toString() ?? '',
+        cabinIds: (json['cabin_ids'] as List? ?? const []).map(asInt).toList(),
+        cabinNames: (json['cabin_names'] as List? ?? const []).map((item) => item.toString()).toList(),
+      );
+
+  final int id;
+  final String reason;
+  final String? notes;
+  final bool appliesToAll;
+  final String checkIn;
+  final String checkOut;
+  final List<int> cabinIds;
+  final List<String> cabinNames;
 }
 
 class PlannerSuggestion {
