@@ -3,13 +3,13 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Bath, BedDouble, MessageCircle, Users } from 'lucide-react';
 import { CabinMap } from '@/components/cabins/cabin-map';
+import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import {
   MAP_SLOT_LABELS,
   buildCabinWhatsAppHref,
-  formatCurrencyCOP,
   getCabinCover,
 } from '@/lib/cabin-utils';
 import type { ApiResponse } from '@/types/api';
@@ -183,14 +183,7 @@ export default async function CabinDetailPage({ params }: Props) {
               <div className="mt-4 space-y-4">
                 {tariffs.map((tariff) => (
                   <div key={tariff.id} className="border-b pb-4 last:border-b-0 last:pb-0">
-                    <p className="font-semibold text-neutral-950">{tariff.title}</p>
-                    <p className="mt-1 text-2xl font-bold text-neutral-950">
-                      {formatCurrencyCOP(tariff.price_cop)}
-                    </p>
-                    <p className="text-sm text-neutral-600">{tariff.unit_label}</p>
-                    {tariff.public_notes ? (
-                      <p className="mt-2 text-sm leading-6 text-neutral-600">{tariff.public_notes}</p>
-                    ) : null}
+                    <LodgingTariffDetails tariff={tariff} defaultExpanded />
                   </div>
                 ))}
               </div>

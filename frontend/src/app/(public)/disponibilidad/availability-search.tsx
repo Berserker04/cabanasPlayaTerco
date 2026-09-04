@@ -14,12 +14,13 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type FormEvent } from 'react';
 import { CabinMap, type CabinMapSlotState } from '@/components/cabins/cabin-map';
+import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
-import { buildCabinWhatsAppHref, formatCurrencyCOP, getCabinCover } from '@/lib/cabin-utils';
+import { buildCabinWhatsAppHref, getCabinCover } from '@/lib/cabin-utils';
 import type { ApiResponse } from '@/types/api';
 import type {
   AvailabilityResult,
@@ -191,12 +192,7 @@ export function AvailabilitySearch() {
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {tariffs.map((tariff) => (
                 <article key={tariff.id} className="rounded-lg border bg-stone-50 p-4">
-                  <p className="text-sm font-semibold text-neutral-950">{tariff.title}</p>
-                  <p className="mt-2 text-2xl font-bold text-neutral-950">{formatCurrencyCOP(tariff.price_cop)}</p>
-                  <p className="text-sm text-neutral-600">{tariff.unit_label}</p>
-                  {tariff.public_notes ? (
-                    <p className="mt-2 text-sm leading-6 text-neutral-600">{tariff.public_notes}</p>
-                  ) : null}
+                  <LodgingTariffDetails tariff={tariff} />
                 </article>
               ))}
             </div>

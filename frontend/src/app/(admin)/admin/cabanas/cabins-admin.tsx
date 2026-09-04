@@ -18,6 +18,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CabinMap } from '@/components/cabins/cabin-map';
+import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,7 +51,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { ApiError, api } from '@/lib/api';
 import {
   MAP_SLOT_LABELS,
-  formatCurrencyCOP,
   getCabinCover,
 } from '@/lib/cabin-utils';
 import type { ApiListResponse, ApiResponse } from '@/types/api';
@@ -555,31 +555,17 @@ export function CabinsAdmin() {
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {tariffs.map((tariff) => (
                 <article key={tariff.id} className="rounded-lg border bg-white p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{tariff.title}</p>
-                      <p className="mt-2 text-2xl font-bold">{formatCurrencyCOP(tariff.price_cop)}</p>
-                      <p className="text-sm text-muted-foreground">{tariff.unit_label}</p>
-                    </div>
-                    <Badge variant={tariff.is_active ? 'default' : 'outline'}>
-                      {tariff.is_active ? 'Publica' : 'Oculta'}
-                    </Badge>
-                  </div>
-                  {tariff.description ? (
-                    <p className="mt-4 text-sm leading-6 text-muted-foreground">{tariff.description}</p>
-                  ) : null}
-                  <div className="mt-4 grid gap-2 text-sm">
-                    {tariff.includes.slice(0, 3).map((item) => (
-                      <span key={item} className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-800">
-                        Incluye: {item}
-                      </span>
-                    ))}
-                    {tariff.excludes.slice(0, 2).map((item) => (
-                      <span key={item} className="rounded-full bg-stone-100 px-3 py-1 text-neutral-700">
-                        No incluye: {item}
-                      </span>
-                    ))}
-                  </div>
+                  <LodgingTariffDetails
+                    tariff={tariff}
+                    headerAccessory={(
+                      <>
+                        <Badge variant="outline">Orden {tariff.sort_order}</Badge>
+                        <Badge variant={tariff.is_active ? 'default' : 'outline'}>
+                          {tariff.is_active ? 'Publica' : 'Oculta'}
+                        </Badge>
+                      </>
+                    )}
+                  />
                   <div className="mt-5 flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => openEditTariff(tariff)}>
                       <Edit className="h-4 w-4" />

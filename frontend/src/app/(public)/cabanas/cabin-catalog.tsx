@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Bath, BedDouble, Images, MessageCircle, Search, Users, Waves } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CabinMap } from '@/components/cabins/cabin-map';
+import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +19,6 @@ import {
   CABIN_FALLBACK_IMAGES,
   MAP_SLOT_LABELS,
   buildCabinWhatsAppHref,
-  formatCurrencyCOP,
   getCabinCover,
 } from '@/lib/cabin-utils';
 import { MAP_FEATURE_LABELS } from '@/lib/map-features';
@@ -131,12 +131,7 @@ export function CabinCatalog({
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {tariffs.map((tariff) => (
                   <article key={tariff.id} className="rounded-lg border border-white/15 bg-white/10 p-4">
-                    <p className="text-sm font-semibold text-cyan-50">{tariff.title}</p>
-                    <p className="mt-2 text-2xl font-bold">{formatCurrencyCOP(tariff.price_cop)}</p>
-                    <p className="text-sm text-cyan-100">{tariff.unit_label}</p>
-                    {tariff.description ? (
-                      <p className="mt-3 text-sm leading-6 text-cyan-50">{tariff.description}</p>
-                    ) : null}
+                    <LodgingTariffDetails tariff={tariff} tone="dark" />
                   </article>
                 ))}
               </div>
