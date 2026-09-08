@@ -27,6 +27,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
+import { useAuth } from '@/hooks/use-auth';
+import { panelPermissions } from '@/lib/panel-access';
 import { cn } from '@/lib/utils';
 import type { ApiResponse } from '@/types/api';
 import type {
@@ -84,6 +86,8 @@ type Confirmation =
   | { type: 'delete'; block: AvailabilityAgendaBlock };
 
 export function AvailabilityWorkspace() {
+  const { user } = useAuth();
+  const { canOperate } = panelPermissions(user);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -423,7 +427,7 @@ export function AvailabilityWorkspace() {
             Disponibilidad
           </h1>
         </div>
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+        {canOperate && <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <Button
             type="button"
             variant="outline"
@@ -442,7 +446,7 @@ export function AvailabilityWorkspace() {
             <Plus className="size-4" />
             Nuevo registro
           </Button>
-        </div>
+        </div>}
       </header>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b pb-2">
         <div
@@ -652,6 +656,7 @@ export function AvailabilityWorkspace() {
           ) : (
             planner && (
               <AvailabilityResults
+                canSelect={canOperate}
                 planner={planner}
                 filters={filters}
                 view={view}
@@ -687,7 +692,7 @@ export function AvailabilityWorkspace() {
           Cargando detalle del bloqueo…
         </p>
       )}
-      {mode === 'availability' && selectedIds.length > 0 && (
+      {canOperate && mode === 'availability' && selectedIds.length > 0 && (
         <div className="fixed inset-x-3 bottom-3 z-30 ml-auto max-w-xl rounded-xl border bg-neutral-950 p-3 text-white shadow-xl md:left-auto md:right-6">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
@@ -736,7 +741,7 @@ export function AvailabilityWorkspace() {
           )}
         </div>
       )}
-      {recordDraft && (
+      {canOperate && recordDraft && (
         <AvailabilityRecordForm
           draft={recordDraft}
           onClose={() => {
@@ -749,7 +754,7 @@ export function AvailabilityWorkspace() {
           }}
         />
       )}
-      {blockOpen && (
+      {canOperate && blockOpen && (
         <BlockSheet
           open
           onOpenChange={(open) => {
@@ -784,6 +789,7 @@ export function AvailabilityWorkspace() {
       )}
       {cabinDetail && (
         <CabinAvailabilityDetail
+          canSelect={canOperate}
           {...cabinDetail}
           filters={filters}
           selected={selectedIds.includes(cabinDetail.cabin.cabin_id)}
@@ -808,7 +814,7 @@ export function AvailabilityWorkspace() {
             setCabinDetail(null);
             setSelection({
               range: `${from}/${to}/${filters.guests}`,
-              ids: [id],
+              ids: canOperate ? [id] : [],
             });
             updateUrl({ mode: 'availability', from, to, period: undefined });
             restoreFocus();
@@ -816,6 +822,7 @@ export function AvailabilityWorkspace() {
         />
       )}
       <AvailabilityAgendaDetail
+        canOperate={canOperate}
         selection={agendaDetail}
         onClose={() => {
           setAgendaDetail(null);
@@ -844,7 +851,7 @@ export function AvailabilityWorkspace() {
         }
       />
       <Dialog
-        open={Boolean(confirmation)}
+        open={canOperate && Boolean(confirmation)}
         onOpenChange={(open) => {
           if (!open && !recordAction.isPending && !deleteBlock.isPending)
             setConfirmation(null);

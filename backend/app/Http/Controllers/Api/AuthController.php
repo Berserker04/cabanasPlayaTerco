@@ -217,10 +217,10 @@ class AuthController extends Controller
 
         $next = $this->sanitizeFrontendPath(
             $request->session()->pull('auth.google_next'),
-            $user->isAdmin(),
+            $user->canAccessPanel(),
         );
 
-        if ($next === '/' && $user->isAdmin()) {
+        if ($next === '/' && $user->canAccessPanel()) {
             $next = '/admin';
         }
 

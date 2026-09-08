@@ -28,6 +28,7 @@ class UserResource extends JsonResource
             'role_ids'          => $this->whenLoaded('roles', fn () => $this->roles->pluck('id')->values()),
             'status'            => $status->value,
             'status_label'      => $status->label(),
+            'can_access_panel'  => $this->canAccessPanel(),
             'is_admin'          => $this->relationLoaded('roles')
                 ? $roleNames->intersect(['admin', 'super-admin'])->isNotEmpty()
                 : $this->isAdmin(),

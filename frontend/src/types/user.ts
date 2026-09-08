@@ -20,6 +20,7 @@ export interface User {
   status_label: string;
   is_admin: boolean;
   is_staff: boolean;
+  can_access_panel?: boolean;
   created_at: string;
 }
 

@@ -19,6 +19,8 @@ import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/use-auth';
+import { panelPermissions } from '@/lib/panel-access';
 import {
   Select,
   SelectContent,
@@ -291,6 +293,8 @@ function KpiCard({
 }
 
 function AlertsSection({ dashboard }: { dashboard: DashboardOperations }) {
+  const { user } = useAuth();
+  const { canAdminister } = panelPermissions(user);
   const pendingReviews = dashboard.alerts.pending_reviews;
   const unansweredLeads = dashboard.alerts.unanswered_leads;
 
@@ -303,7 +307,7 @@ function AlertsSection({ dashboard }: { dashboard: DashboardOperations }) {
         </h2>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        <Link
+        {canAdminister && <Link
           href="/admin/resenas"
           className="group flex min-h-24 items-center gap-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 transition hover:border-amber-300 hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
         >
@@ -319,7 +323,7 @@ function AlertsSection({ dashboard }: { dashboard: DashboardOperations }) {
             </span>
           </span>
           <ArrowRight className="size-5 shrink-0 text-amber-700 transition group-hover:translate-x-0.5" aria-hidden="true" />
-        </Link>
+        </Link>}
 
         <div className="flex min-h-24 items-center gap-4 rounded-xl border border-cyan-200 bg-cyan-50/70 p-4">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-cyan-700 shadow-sm">

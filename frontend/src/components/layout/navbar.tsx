@@ -18,13 +18,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 import { NAV_LINKS, SITE_NAME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { panelPermissions } from '@/lib/panel-access';
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  const isAdmin = Boolean(user?.is_admin);
+  const { canEnter } = panelPermissions(user);
   const isActiveLink = (href: string) =>
     href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
@@ -96,7 +97,7 @@ export function Navbar() {
                     Mi perfil
                   </Link>
                 </DropdownMenuItem>
-                {isAdmin && (
+                {canEnter && (
                   <DropdownMenuItem asChild>
                     <Link href="/admin">Panel admin</Link>
                   </DropdownMenuItem>

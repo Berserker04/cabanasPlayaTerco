@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AuthContext } from '@/hooks/use-auth';
 import { api, fetchCsrfCookie } from '@/lib/api';
 import type { User } from '@/types/user';
@@ -15,6 +16,7 @@ type GoogleRedirectResponse = {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     await fetchCsrfCookie();
     const response = await api.post<AuthResponse>('/auth/login', { email, password });
+    queryClient.clear();
     setUser(response.data);
     setIsLoading(false);
 
@@ -57,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchCsrfCookie();
       await api.post('/auth/logout');
     } finally {
+      queryClient.clear();
       setUser(null);
       setIsLoading(false);
     }
@@ -79,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }) => {
     await fetchCsrfCookie();
     const response = await api.post<AuthResponse>('/auth/register', data);
+    queryClient.clear();
     setUser(response.data);
     setIsLoading(false);
 

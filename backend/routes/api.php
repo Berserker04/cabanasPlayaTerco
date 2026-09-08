@@ -101,7 +101,7 @@ Route::post('/contact', [Api\ContactController::class, 'store'])
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')
-    ->middleware(['auth:sanctum', 'active', 'staff'])
+    ->middleware(['auth:sanctum', 'active', 'panel'])
     ->group(function () {
 
         // ── Dashboard ────────────────────────────────────────
@@ -110,17 +110,25 @@ Route::prefix('admin')
 
         // ── Cabin Types ──────────────────────────────────────
         Route::apiResource('cabin-types', Admin\CabinTypeController::class)
+            ->only(['index', 'show']);
+        Route::apiResource('cabin-types', Admin\CabinTypeController::class)
+            ->except(['index', 'show'])
             ->middleware('admin');
 
         // ── Cabins ───────────────────────────────────────────
         Route::apiResource('cabins', Admin\CabinController::class)
+            ->only(['index', 'show']);
+        Route::apiResource('cabins', Admin\CabinController::class)
+            ->except(['index', 'show'])
             ->middleware('admin');
         Route::post('/cabins/{cabin}/cover', [Admin\CabinController::class, 'uploadCover'])
             ->middleware('admin');
 
         // ── Lodging Tariffs ──────────────────────────────────
         Route::apiResource('lodging-tariffs', Admin\LodgingTariffController::class)
-            ->except(['show'])
+            ->only(['index']);
+        Route::apiResource('lodging-tariffs', Admin\LodgingTariffController::class)
+            ->except(['index', 'show'])
             ->parameter('lodging-tariffs', 'lodgingTariff')
             ->middleware('admin');
 
@@ -130,7 +138,7 @@ Route::prefix('admin')
         Route::delete('/cabin-media/{cabinMedia}', [Admin\CabinMediaController::class, 'destroy'])->middleware('admin');
 
         // ── Amenities ────────────────────────────────────────
-        Route::get('/amenities', [Admin\AmenityController::class, 'index'])->middleware('admin');
+        Route::get('/amenities', [Admin\AmenityController::class, 'index']);
         Route::post('/amenities', [Admin\AmenityController::class, 'store'])->middleware('admin');
         Route::put('/amenities/{amenity}', [Admin\AmenityController::class, 'update'])->middleware('admin');
         Route::delete('/amenities/{amenity}', [Admin\AmenityController::class, 'destroy'])->middleware('admin');

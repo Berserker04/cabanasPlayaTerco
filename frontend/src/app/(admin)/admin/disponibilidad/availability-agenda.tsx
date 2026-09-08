@@ -490,6 +490,7 @@ function AgendaSkeleton() {
 }
 
 export function AvailabilityAgendaDetail({
+  canOperate,
   selection,
   onClose,
   onEditReservation,
@@ -500,6 +501,7 @@ export function AvailabilityAgendaDetail({
   onDeleteBlock,
   isPending,
 }: {
+  canOperate: boolean;
   selection: AgendaSelection | null;
   onClose: () => void;
   onEditReservation: (reservation: AvailabilityAgendaReservation) => void;
@@ -532,7 +534,7 @@ export function AvailabilityAgendaDetail({
           ]}
         />
         {block.notes ? <DetailNotes>{block.notes}</DetailNotes> : null}
-        <div className="flex flex-wrap gap-2 border-t pt-4">
+        {canOperate && <div className="flex flex-wrap gap-2 border-t pt-4">
           <Button
             type="button"
             variant="outline"
@@ -553,7 +555,7 @@ export function AvailabilityAgendaDetail({
             )}{' '}
             Eliminar
           </Button>
-        </div>
+        </div>}
       </AgendaSheet>
     );
   }
@@ -623,7 +625,7 @@ export function AvailabilityAgendaDetail({
           {reservation.status === 'checked_in' ? 'check-in' : 'check-out'} y
           está disponible solo para consulta.
         </div>
-      ) : (
+      ) : canOperate ? (
         <div className="flex flex-wrap gap-2 border-t pt-4">
           <Button
             type="button"
@@ -665,7 +667,7 @@ export function AvailabilityAgendaDetail({
             Cancelar
           </Button>
         </div>
-      )}
+      ) : null}
     </AgendaSheet>
   );
 }

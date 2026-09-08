@@ -21,6 +21,8 @@ import { CabinMap } from '@/components/cabins/cabin-map';
 import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/use-auth';
+import { panelPermissions } from '@/lib/panel-access';
 import {
   Dialog,
   DialogContent,
@@ -146,6 +148,8 @@ function joinLines(value?: string[]) {
 }
 
 export function CabinsAdmin() {
+  const { user } = useAuth();
+  const { canAdminister } = panelPermissions(user);
   const queryClient = useQueryClient();
   const [cabinSearch, setCabinSearch] = useState('');
   const [cabinStatus, setCabinStatus] = useState('all');
@@ -331,17 +335,17 @@ export function CabinsAdmin() {
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-normal">Cabañas</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Gestiona cabañas reales, ubicacion interna, tarifas globales y amenidades.
+            {canAdminister ? 'Gestiona cabañas reales, ubicación interna, tarifas globales y amenidades.' : 'Consulta las cabañas, su ubicación, tarifas y amenidades. La edición del catálogo está reservada al Administrador.'}
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        {canAdminister && <div className="flex flex-col gap-2 sm:flex-row">
           <Button asChild>
             <Link href="/admin/cabanas/nueva">
               <Plus className="h-4 w-4" />
               Nueva cabaña
             </Link>
           </Button>
-        </div>
+        </div>}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -384,12 +388,12 @@ export function CabinsAdmin() {
                 <SelectItem value="inactive">Ocultas</SelectItem>
               </SelectContent>
             </Select>
-            <Button asChild>
+            {canAdminister && <Button asChild>
               <Link href="/admin/cabanas/nueva">
                 <Plus className="h-4 w-4" />
                 Cabaña
               </Link>
-            </Button>
+            </Button>}
           </div>
 
           {cabinsQuery.isLoading ? (
@@ -405,7 +409,7 @@ export function CabinsAdmin() {
                     <TableHead>Mapa</TableHead>
                     <TableHead>Capacidad</TableHead>
                     <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
+                    {canAdminister && <TableHead className="text-right">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -448,7 +452,7 @@ export function CabinsAdmin() {
                           {!cabin.is_active ? <Badge variant="outline">Oculta</Badge> : null}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      {canAdminister && <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="outline" asChild>
                             <Link href={`/admin/cabanas/${cabin.id}/editar`} aria-label={`Editar ${cabin.name}`}>
@@ -464,14 +468,14 @@ export function CabinsAdmin() {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      </TableCell>
+                      </TableCell>}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
           ) : (
-            <EmptyState title="No hay cabañas registradas" actionLabel="Crear cabaña" href="/admin/cabanas/nueva" />
+            <EmptyState title="No hay cabañas registradas" actionLabel="Crear cabaña" href={canAdminister ? '/admin/cabanas/nueva' : undefined} />
           )}
         </TabsContent>
 
@@ -512,22 +516,22 @@ export function CabinsAdmin() {
                         {selectedSlotCabin.bathrooms_count}
                       </span>
                     </div>
-                    <Button asChild className="w-full">
+                    {canAdminister && <Button asChild className="w-full">
                       <Link href={`/admin/cabanas/${selectedSlotCabin.id}/editar`}>
                         <Edit className="h-4 w-4" />
                         Editar cabaña
                       </Link>
-                    </Button>
+                    </Button>}
                   </div>
                 ) : (
                   <div className="mt-4">
                     <p className="text-sm text-muted-foreground">Punto disponible para asignar.</p>
-                    <Button asChild className="mt-4 w-full">
+                    {canAdminister && <Button asChild className="mt-4 w-full">
                       <Link href={`/admin/cabanas/nueva?map_slot=${selectedSlot}`}>
                         <Plus className="h-4 w-4" />
                         Crear en este punto
                       </Link>
-                    </Button>
+                    </Button>}
                   </div>
                 )
               ) : (
@@ -540,12 +544,12 @@ export function CabinsAdmin() {
         </TabsContent>
 
         <TabsContent value="tariffs" className="space-y-5">
-          <div className="flex justify-end">
+          {canAdminister && <div className="flex justify-end">
             <Button onClick={openCreateTariff}>
               <DollarSign className="h-4 w-4" />
               Nueva tarifa
             </Button>
-          </div>
+          </div>}
 
           {tariffsQuery.isLoading ? (
             <LoadingState />
@@ -566,7 +570,7 @@ export function CabinsAdmin() {
                       </>
                     )}
                   />
-                  <div className="mt-5 flex gap-2">
+                  {canAdminister && <div className="mt-5 flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => openEditTariff(tariff)}>
                       <Edit className="h-4 w-4" />
                       Editar
@@ -580,22 +584,22 @@ export function CabinsAdmin() {
                       <Trash2 className="h-4 w-4" />
                       Eliminar
                     </Button>
-                  </div>
+                  </div>}
                 </article>
               ))}
             </div>
           ) : (
-            <EmptyState title="No hay tarifas registradas" actionLabel="Crear tarifa" onAction={openCreateTariff} />
+            <EmptyState title="No hay tarifas registradas" actionLabel="Crear tarifa" onAction={canAdminister ? openCreateTariff : undefined} />
           )}
         </TabsContent>
 
         <TabsContent value="amenities" className="space-y-5">
-          <div className="flex justify-end">
+          {canAdminister && <div className="flex justify-end">
             <Button onClick={openCreateAmenity}>
               <Plus className="h-4 w-4" />
               Nueva amenidad
             </Button>
-          </div>
+          </div>}
 
           {amenities.length > 0 ? (
             <div className="overflow-hidden rounded-lg border bg-white">
@@ -605,7 +609,7 @@ export function CabinsAdmin() {
                     <TableHead>Nombre</TableHead>
                     <TableHead>Icono</TableHead>
                     <TableHead>Categoria</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
+                    {canAdminister && <TableHead className="text-right">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -614,7 +618,7 @@ export function CabinsAdmin() {
                       <TableCell className="font-medium">{amenity.name}</TableCell>
                       <TableCell>{amenity.icon ?? 'Sin icono'}</TableCell>
                       <TableCell>{amenity.category ?? 'General'}</TableCell>
-                      <TableCell className="text-right">
+                      {canAdminister && <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="outline" onClick={() => openEditAmenity(amenity)}>
                             <Edit className="h-4 w-4" />
@@ -628,19 +632,19 @@ export function CabinsAdmin() {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      </TableCell>
+                      </TableCell>}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
           ) : (
-            <EmptyState title="No hay amenidades registradas" actionLabel="Crear amenidad" onAction={openCreateAmenity} />
+            <EmptyState title="No hay amenidades registradas" actionLabel="Crear amenidad" onAction={canAdminister ? openCreateAmenity : undefined} />
           )}
         </TabsContent>
       </Tabs>
 
-      <Dialog open={tariffDialogOpen} onOpenChange={setTariffDialogOpen}>
+      <Dialog open={canAdminister && tariffDialogOpen} onOpenChange={setTariffDialogOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <form onSubmit={handleTariffSubmit}>
             <DialogHeader>
@@ -729,7 +733,7 @@ export function CabinsAdmin() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={amenityDialogOpen} onOpenChange={setAmenityDialogOpen}>
+      <Dialog open={canAdminister && amenityDialogOpen} onOpenChange={setAmenityDialogOpen}>
         <DialogContent>
           <form onSubmit={handleAmenitySubmit}>
             <DialogHeader>
@@ -854,12 +858,12 @@ function EmptyState({
             {actionLabel}
           </Link>
         </Button>
-      ) : (
+      ) : onAction ? (
         <Button onClick={onAction} className="mt-5">
           <Plus className="h-4 w-4" />
           {actionLabel}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }

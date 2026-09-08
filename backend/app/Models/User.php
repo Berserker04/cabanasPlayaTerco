@@ -84,6 +84,10 @@ class User extends Authenticatable
 
     public function hasRole(string $role): bool
     {
+        if ($this->relationLoaded('roles')) {
+            return $this->roles->contains('name', $role);
+        }
+
         return $this->roles()->where('name', $role)->exists();
     }
 
@@ -95,6 +99,11 @@ class User extends Authenticatable
     public function isStaff(): bool
     {
         return $this->hasRole('staff') || $this->isAdmin();
+    }
+
+    public function canAccessPanel(): bool
+    {
+        return $this->isActive() && ($this->isStaff() || $this->hasRole('viewer'));
     }
 
     public function isActive(): bool

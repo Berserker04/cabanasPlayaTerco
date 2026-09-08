@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active' => \App\Http\Middleware\EnsureAccountIsActive::class,
             'admin' => \App\Http\Middleware\EnsureIsAdmin::class,
             'staff' => \App\Http\Middleware\EnsureIsStaff::class,
+            'panel' => \App\Http\Middleware\EnsurePanelAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

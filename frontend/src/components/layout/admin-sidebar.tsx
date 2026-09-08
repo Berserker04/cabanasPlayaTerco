@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
+import { canAccessPanelPath, panelRoleLabel } from '@/lib/panel-access';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
@@ -70,7 +71,7 @@ export function AdminSidebar() {
           />
           <span className="min-w-0 leading-tight">
             <span className="block truncate text-sm">Cabañas Playa Terco</span>
-            <span className="block text-xs font-medium text-muted-foreground">Admin</span>
+            <span className="block text-xs font-medium text-muted-foreground">{panelRoleLabel(user)}</span>
           </span>
         </Link>
         <span className="ml-auto">
@@ -85,7 +86,7 @@ export function AdminSidebar() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
-          {ADMIN_LINKS.map((link) => {
+          {ADMIN_LINKS.filter((link) => canAccessPanelPath(user, link.href)).map((link) => {
             const Icon = ICON_MAP[link.icon];
             const isActive =
               link.href === '/admin'
@@ -161,11 +162,11 @@ export function AdminMobileHeader() {
         <SheetContent side="left" className="w-[min(86vw,320px)] gap-0 p-0 text-sidebar-foreground">
           <SheetHeader className="border-b text-left">
             <SheetTitle>Cabañas Playa Terco</SheetTitle>
-            <SheetDescription>Panel de administracion</SheetDescription>
+            <SheetDescription>{panelRoleLabel(user)}</SheetDescription>
           </SheetHeader>
           <nav className="flex-1 overflow-y-auto px-3 py-4">
             <ul className="space-y-1">
-              {ADMIN_LINKS.map((link) => {
+              {ADMIN_LINKS.filter((link) => canAccessPanelPath(user, link.href)).map((link) => {
                 const Icon = ICON_MAP[link.icon];
                 const isActive = link.href === '/admin'
                   ? pathname === '/admin'

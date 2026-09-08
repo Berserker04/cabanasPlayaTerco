@@ -63,6 +63,7 @@ const stateLabels = {
 };
 
 type ResultsProps = {
+  canSelect: boolean;
   planner: PlannerResult;
   filters: AvailabilityFilters;
   view: AvailabilityView;
@@ -81,6 +82,7 @@ const desktopSnapshot = () => window.matchMedia('(min-width: 1024px)').matches;
 const serverDesktop = () => false;
 
 export function AvailabilityResults({
+  canSelect,
   planner,
   filters,
   view,
@@ -203,7 +205,7 @@ export function AvailabilityResults({
           Solo libres
         </label>
       </div>
-      {planner.suggestions.length > 0 && (
+      {canSelect && planner.suggestions.length > 0 && (
         <div className="rounded-lg border border-cyan-100 bg-cyan-50/60 px-3 py-2">
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-2 text-xs font-semibold text-cyan-950">
@@ -306,7 +308,7 @@ export function AvailabilityResults({
                     </p>
                   )}
                   <div className="mt-2 flex gap-2">
-                    <Button
+                    {canSelect && <Button
                       type="button"
                       className="min-h-11 flex-1"
                       variant={
@@ -327,7 +329,7 @@ export function AvailabilityResults({
                       ) : (
                         'Seleccionar'
                       )}
-                    </Button>
+                    </Button>}
                     <Button
                       type="button"
                       className="min-h-11"
@@ -344,6 +346,7 @@ export function AvailabilityResults({
           {(view === 'matrix' || view === 'auto') && (
             <div className={cn(view === 'auto' && 'hidden lg:block')}>
               <AvailabilityMatrix
+                canSelect={canSelect}
                 cabins={cabins}
                 filters={filters}
                 selected={selected}
@@ -355,7 +358,7 @@ export function AvailabilityResults({
           {view === 'map' && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Toca una cabaña para revisar sus fechas, registros y selección.
+                Toca una cabaña para revisar sus fechas y registros.
               </p>
               <div className="overflow-auto rounded-xl">
                 <CabinMap
@@ -379,12 +382,14 @@ export function AvailabilityResults({
 }
 
 function AvailabilityMatrix({
+  canSelect,
   cabins,
   filters,
   selected,
   onToggle,
   onInspect,
 }: {
+  canSelect: boolean;
   cabins: PlannerCabin[];
   filters: AvailabilityFilters;
   selected: number[];
@@ -473,12 +478,12 @@ function AvailabilityMatrix({
                       selected.includes(cabin.cabin_id) &&
                         'bg-cyan-50 text-cyan-950',
                     )}
-                    aria-label={`Seleccionar ${cabin.name} para toda la estancia`}
-                    aria-pressed={selected.includes(cabin.cabin_id)}
-                    disabled={!cabin.available_for_range}
-                    onClick={() => onToggle(cabin)}
+                    aria-label={canSelect ? `Seleccionar ${cabin.name} para toda la estancia` : `Ver detalle de ${cabin.name}`}
+                    aria-pressed={canSelect ? selected.includes(cabin.cabin_id) : undefined}
+                    disabled={canSelect && !cabin.available_for_range}
+                    onClick={() => canSelect ? onToggle(cabin) : onInspect(cabin)}
                   >
-                    <span
+                    {canSelect && <span
                       className={cn(
                         'grid size-5 shrink-0 place-items-center rounded border',
                         selected.includes(cabin.cabin_id) &&
@@ -489,7 +494,7 @@ function AvailabilityMatrix({
                       {selected.includes(cabin.cabin_id) && (
                         <Check className="size-4" />
                       )}
-                    </span>
+                    </span>}
                     <span>
                       <span className="block">{cabin.name}</span>
                       <span className="block font-normal text-muted-foreground">
@@ -553,14 +558,14 @@ function AvailabilityMatrix({
         </table>
       </div>
       <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-        Selecciona una cabaña para toda la estancia o abre una fecha para ver su
-        detalle. La salida no ocupa esa noche.
+        {canSelect ? 'Selecciona una cabaña para toda la estancia o abre una fecha para ver su detalle.' : 'Abre una cabaña o una fecha para consultar su detalle.'} La salida no ocupa esa noche.
       </p>
     </div>
   );
 }
 
 export function CabinAvailabilityDetail({
+  canSelect,
   cabin,
   date,
   filters,
@@ -571,6 +576,7 @@ export function CabinAvailabilityDetail({
   onRecord,
   onBlock,
 }: {
+  canSelect: boolean;
   cabin: PlannerCabin;
   date?: string;
   filters: AvailabilityFilters;
@@ -629,7 +635,7 @@ export function CabinAvailabilityDetail({
                 ? 'Libre durante toda la estancia consultada'
                 : 'No está libre durante toda la estancia consultada'}
             </p>
-            {cabin.available_for_range && (
+            {canSelect && cabin.available_for_range && (
               <Button
                 className="mt-3 min-h-11 w-full"
                 type="button"
@@ -648,7 +654,7 @@ export function CabinAvailabilityDetail({
                 Tramos libres dentro del período
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Usa estas fechas para consultar y preparar un nuevo registro.
+                {canSelect ? 'Usa estas fechas para consultar y preparar un nuevo registro.' : 'Usa estas fechas para consultar la disponibilidad.'}
               </p>
               <div className="mt-2 space-y-2">
                 {ranges.map((range) => (
