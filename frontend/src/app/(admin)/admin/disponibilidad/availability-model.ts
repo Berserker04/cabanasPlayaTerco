@@ -36,6 +36,17 @@ export type AgendaEvent =
     };
 
 export const MAX_RANGE_DAYS = 31;
+export const reservationSources: Record<string, string> = {
+  whatsapp: 'WhatsApp',
+  phone: 'Llamada telefónica',
+  walk_in: 'Presencial',
+  web: 'Página web',
+  social_media: 'Redes sociales',
+  referral: 'Recomendación',
+  other: 'Otro',
+};
+export const validContactPhone = (value: string) =>
+  !value.trim() || /^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/.test(value.trim());
 export const toDate = (date: string) => new Date(`${date}T00:00:00Z`);
 export const rangeLength = (from: string, to: string) =>
   Math.round((toDate(to).getTime() - toDate(from).getTime()) / 86_400_000);

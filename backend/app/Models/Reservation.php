@@ -24,6 +24,8 @@ class Reservation extends Model
         'check_out',
         'guests_count',
         'leader_name',
+        'leader_phone',
+        'leader_whatsapp',
         'display_color',
         'expires_at',
         'confirmed_at',
@@ -43,6 +45,8 @@ class Reservation extends Model
             'expires_at'   => 'datetime',
             'confirmed_at' => 'datetime',
             'status'      => ReservationStatus::class,
+            'leader_phone' => 'encrypted',
+            'leader_whatsapp' => 'encrypted',
             'total_price' => 'decimal:2',
         ];
     }

@@ -14,6 +14,8 @@ export interface Reservation {
   check_in: string;
   check_out: string;
   guests_count: number;
+  leader_phone?: string | null;
+  leader_whatsapp?: string | null;
   leader_name: string | null;
   display_color: string | null;
   expires_at: string | null;

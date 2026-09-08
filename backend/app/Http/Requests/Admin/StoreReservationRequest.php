@@ -33,6 +33,8 @@ class StoreReservationRequest extends FormRequest
             'check_out'     => ['required', 'date', 'after:check_in'],
             'guests_count'  => ['required', 'integer', 'min:1'],
             'leader_name'   => ['nullable', 'string', 'max:255'],
+            'leader_phone' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
+            'leader_whatsapp' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
             'display_color' => ['nullable', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'expires_at'    => ['nullable', 'date'],
             'status'        => ['sometimes', Rule::enum(ReservationStatus::class)],
@@ -46,6 +48,8 @@ class StoreReservationRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'leader_phone.regex' => 'El celular debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
+            'leader_whatsapp.regex' => 'El WhatsApp debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
             'cabin_ids.required'    => 'Selecciona al menos una cabana.',
             'check_in.required'     => 'La fecha de llegada es obligatoria.',
             'check_out.required'    => 'La fecha de salida es obligatoria.',

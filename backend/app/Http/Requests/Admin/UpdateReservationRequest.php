@@ -33,6 +33,8 @@ class UpdateReservationRequest extends FormRequest
             'check_out'     => ['sometimes', 'date'],
             'guests_count'  => ['sometimes', 'integer', 'min:1'],
             'leader_name'   => ['nullable', 'string', 'max:255'],
+            'leader_phone' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
+            'leader_whatsapp' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
             'display_color' => ['nullable', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'expires_at'    => ['nullable', 'date'],
             'status'        => ['sometimes', Rule::enum(ReservationStatus::class)],
@@ -46,6 +48,8 @@ class UpdateReservationRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'leader_phone.regex' => 'El celular debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
+            'leader_whatsapp.regex' => 'El WhatsApp debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
             'check_out.after'     => 'La fecha de salida debe ser posterior a la llegada.',
             'display_color.regex' => 'El color debe estar en formato hexadecimal, por ejemplo #0ea5e9.',
         ];

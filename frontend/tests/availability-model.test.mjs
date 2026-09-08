@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   agendaEvents,
+  validContactPhone,
   freeRanges,
   matrixSegments,
   initialFilters,
@@ -176,4 +177,22 @@ test('matrix keeps one bar per reservation across overlapping quotes and separat
   assert.equal(result[1].reservation.id, 2);
   assert.deepEqual(result[0].quotes, [{ id: 3 }]);
   assert.equal(segments[0].check_out, '2026-09-09');
+});
+
+test('contact numbers accept optional international formatting and reject invalid values', () => {
+  for (const value of [
+    '',
+    '3005550100',
+    '+57 300 555 0100',
+    '+1 (202) 555-0100',
+  ])
+    assert.equal(validContactPhone(value), true, value);
+  for (const value of [
+    '123',
+    '1234567890123456',
+    'whatsapp',
+    '+57+3005550100',
+    '<script>',
+  ])
+    assert.equal(validContactPhone(value), false, value);
 });

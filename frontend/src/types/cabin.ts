@@ -165,6 +165,8 @@ export interface PlannerReservation {
   total_price: number | null;
   notes: string | null;
   source: string | null;
+  leader_phone?: string | null;
+  leader_whatsapp?: string | null;
   expires_at: string | null;
   confirmed_at: string | null;
   cabin_ids: number[];
@@ -205,6 +207,8 @@ export interface AvailabilityAgendaReservation {
   guests_count: number;
   notes: string | null;
   source: string | null;
+  leader_phone?: string | null;
+  leader_whatsapp?: string | null;
   expires_at: string | null;
   confirmed_at: string | null;
   cabin_ids: number[];

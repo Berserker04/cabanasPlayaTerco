@@ -37,6 +37,8 @@ import {
   MAX_RANGE_DAYS,
   rangeLength,
   validRange,
+  validContactPhone,
+  reservationSources,
   type AvailabilityFilters,
 } from './availability-model';
 
@@ -139,6 +141,15 @@ export function AvailabilityRecordForm({
     String(record?.guests_count ?? draft.filters.guests),
   );
   const [leader, setLeader] = useState(record?.leader_name ?? '');
+  const [phone, setPhone] = useState(record?.leader_phone ?? '');
+  const [whatsapp, setWhatsapp] = useState(record?.leader_whatsapp ?? '');
+  const [sameWhatsapp, setSameWhatsapp] = useState(
+    (record?.leader_phone ?? '').replace(/\D/g, '') ===
+      (record?.leader_whatsapp ?? '').replace(/\D/g, ''),
+  );
+  const [source, setSource] = useState(
+    record ? (record.source ?? '') : 'whatsapp',
+  );
   const [notes, setNotes] = useState(record?.notes ?? '');
   const [expires, setExpires] = useState(
     dateTimeBogota(
@@ -227,15 +238,26 @@ export function AvailabilityRecordForm({
       return;
     }
     setError('');
+    if (
+      !validContactPhone(phone) ||
+      !validContactPhone(sameWhatsapp ? phone : whatsapp)
+    ) {
+      setError(
+        'Revisa el celular y WhatsApp: deben contener entre 7 y 15 dígitos, con indicativo de país opcional.',
+      );
+      return;
+    }
     save.mutate({
       cabin_ids: cabinIds,
       check_in: checkIn,
       check_out: checkOut,
       guests_count: Number(guests),
       leader_name: leader.trim(),
+      leader_phone: phone.trim() || null,
+      leader_whatsapp: (sameWhatsapp ? phone : whatsapp).trim() || null,
       status: kind,
       expires_at: expiry?.toISOString() ?? null,
-      source: record?.source ?? 'whatsapp',
+      source: source || null,
       notes: notes.trim() || null,
     });
   }
@@ -254,7 +276,7 @@ export function AvailabilityRecordForm({
             {record ? 'Editar registro' : 'Nuevo registro'}
           </SheetTitle>
           <SheetDescription>
-            Cotización o reserva acordada por WhatsApp.
+            Datos del encargado, contacto y estancia.
           </SheetDescription>
         </SheetHeader>
         <div
@@ -317,7 +339,32 @@ export function AvailabilityRecordForm({
                 ? 'La cotización no bloquea disponibilidad.'
                 : 'La reserva confirmada bloqueará las noches seleccionadas.'}
             </p>
-            <Field id="record-leader" label="Turista o grupo">
+            <Field id="record-source" label="Origen de la reserva">
+              <select
+                id="record-source"
+                value={source}
+                onChange={(event) => setSource(event.target.value)}
+                className="h-11 w-full min-w-0 rounded-md border border-input bg-transparent px-3 text-base focus-visible:outline-2 focus-visible:outline-ring"
+                aria-describedby="record-source-help"
+              >
+                <option value="">Sin especificar</option>
+                {source && !reservationSources[source] && (
+                  <option value={source}>{source}</option>
+                )}
+                {Object.entries(reservationSources).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <p
+                id="record-source-help"
+                className="text-xs text-muted-foreground"
+              >
+                Canal por el que llegó la reserva.
+              </p>
+            </Field>
+            <Field id="record-leader" label="Nombre del encargado o titular">
               <Input
                 id="record-leader"
                 required
@@ -327,6 +374,59 @@ export function AvailabilityRecordForm({
                 placeholder="Nombre del titular"
               />
             </Field>
+            <Field id="record-phone" label="Celular del encargado (opcional)">
+              <Input
+                id="record-phone"
+                type="tel"
+                autoComplete="tel"
+                maxLength={40}
+                value={phone}
+                onInput={(event) => setPhone(event.currentTarget.value)}
+                placeholder="Ej. +57 300 123 4567"
+                aria-describedby="record-phone-help"
+              />
+              <p
+                id="record-phone-help"
+                className="text-xs text-muted-foreground"
+              >
+                Incluye el indicativo del país para números internacionales.
+              </p>
+            </Field>
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 accent-cyan-700"
+                checked={sameWhatsapp}
+                onChange={(event) => setSameWhatsapp(event.target.checked)}
+              />
+              Usar el mismo número para WhatsApp
+            </label>
+            {!sameWhatsapp && (
+              <div id="record-whatsapp-field">
+                <Field
+                  id="record-whatsapp"
+                  label="WhatsApp del encargado (opcional)"
+                >
+                  <Input
+                    id="record-whatsapp"
+                    type="tel"
+                    autoComplete="off"
+                    maxLength={40}
+                    value={whatsapp}
+                    onInput={(event) => setWhatsapp(event.currentTarget.value)}
+                    placeholder="Ej. +57 310 123 4567"
+                    aria-describedby="record-whatsapp-help"
+                  />
+                  <p
+                    id="record-whatsapp-help"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Indica el número diferente o déjalo vacío si no usa
+                    WhatsApp.
+                  </p>
+                </Field>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <Field id="record-check-in" label="Llegada">
                 <Input

@@ -26,6 +26,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   agendaEvents,
+  reservationSources,
   type AgendaEvent,
   type AgendaFilter,
   type ReservationEventKind,
@@ -600,9 +601,17 @@ export function AvailabilityAgendaDetail({
                 ] as [string, string],
               ]
             : []),
-          ...(reservation.source
-            ? [['Origen', reservation.source] as [string, string]]
-            : []),
+          [
+            'Celular del encargado',
+            reservation.leader_phone || 'Sin registrar',
+          ],
+          ['WhatsApp', reservation.leader_whatsapp || 'Sin registrar'],
+          [
+            'Origen',
+            reservation.source
+              ? (reservationSources[reservation.source] ?? reservation.source)
+              : 'Sin especificar',
+          ],
         ]}
       />
       {reservation.notes ? (

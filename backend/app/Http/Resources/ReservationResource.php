@@ -17,6 +17,8 @@ class ReservationResource extends JsonResource
             'check_out'    => $this->check_out->format('Y-m-d'),
             'guests_count' => $this->guests_count,
             'leader_name'  => $this->leader_name,
+            'leader_phone' => $this->leader_phone,
+            'leader_whatsapp' => $this->leader_whatsapp,
             'display_color'=> $this->display_color,
             'expires_at'   => $this->expires_at?->toISOString(),
             'confirmed_at' => $this->confirmed_at?->toISOString(),
