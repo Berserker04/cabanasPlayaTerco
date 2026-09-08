@@ -174,6 +174,55 @@ class MobileAdminApiTest extends TestCase
             ->assertJsonPath('message', 'Token inválido.');
     }
 
+    public function test_mobile_google_login_rejects_identity_conflicts(): void
+    {
+        $googleOwner = User::factory()->create([
+            'email' => 'google-owner@example.com',
+            'google_id' => 'google-conflict',
+        ]);
+        $emailOwner = User::factory()->create([
+            'email' => 'email-owner@example.com',
+        ]);
+        $this->assignUserRole($googleOwner);
+        $this->assignUserRole($emailOwner);
+
+        config(['services.google.client_id' => 'web-client-id']);
+        $this->fakeGoogleIdentity([
+            'sub' => 'google-conflict',
+            'email' => 'email-owner@example.com',
+            'name' => 'Identidad en conflicto',
+            'avatar' => null,
+        ]);
+
+        $this->postJson('/api/v1/auth/mobile/google', [
+            'id_token' => 'valid-id-token',
+        ])
+            ->assertConflict()
+            ->assertJsonPath('message', 'La cuenta de Google está asociada a otro usuario.');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $googleOwner->id,
+            'email' => 'google-owner@example.com',
+            'google_id' => 'google-conflict',
+        ]);
+        $this->assertDatabaseHas('users', [
+            'id' => $emailOwner->id,
+            'email' => 'email-owner@example.com',
+            'google_id' => null,
+        ]);
+    }
+
+    public function test_mobile_google_login_reports_missing_configuration(): void
+    {
+        config(['services.google.client_id' => '']);
+
+        $this->postJson('/api/v1/auth/mobile/google', [
+            'id_token' => 'unconfigured-id-token',
+        ])
+            ->assertServiceUnavailable()
+            ->assertJsonPath('message', 'Inicio de sesión con Google no está configurado.');
+    }
+
     public function test_mobile_google_login_rejects_suspended_user(): void
     {
         $user = User::factory()->create([

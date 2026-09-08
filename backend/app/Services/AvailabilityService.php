@@ -47,40 +47,40 @@ class AvailabilityService
             ->values();
 
         $summary = [
-            'total_cabins'       => $entries->count(),
-            'available_count'    => $available->count(),
-            'reserved_count'     => $entries->where('state', 'reserved')->count(),
-            'quoted_count'       => $entries
+            'total_cabins' => $entries->count(),
+            'available_count' => $available->count(),
+            'reserved_count' => $entries->where('state', 'reserved')->count(),
+            'quoted_count' => $entries
                 ->filter(fn (array $entry) => ($entry['reservation']['status'] ?? null) === ReservationStatus::Pending->value)
                 ->count(),
-            'confirmed_count'    => $entries
+            'confirmed_count' => $entries
                 ->filter(fn (array $entry) => in_array($entry['reservation']['status'] ?? null, [
                     ReservationStatus::Confirmed->value,
                     ReservationStatus::CheckedIn->value,
                 ], true))
                 ->count(),
-            'blocked_count'      => $entries->whereIn('state', ['blocked', 'maintenance'])->count(),
-            'inactive_count'     => $entries->where('state', 'inactive')->count(),
+            'blocked_count' => $entries->whereIn('state', ['blocked', 'maintenance'])->count(),
+            'inactive_count' => $entries->where('state', 'inactive')->count(),
             'available_capacity' => $available->sum(fn (array $entry) => $entry['cabin']->max_guests ?? 0),
-            'can_host_guests'    => $guests
+            'can_host_guests' => $guests
                 ? $available->sum(fn (array $entry) => $entry['cabin']->max_guests ?? 0) >= $guests
                 : $available->isNotEmpty(),
         ];
 
         return [
-            'check_in'         => $checkInDate->format('Y-m-d'),
-            'check_out'        => $checkOutDate->format('Y-m-d'),
-            'guests'           => $guests,
-            'cabins'           => $entries,
+            'check_in' => $checkInDate->format('Y-m-d'),
+            'check_out' => $checkOutDate->format('Y-m-d'),
+            'guests' => $guests,
+            'cabins' => $entries,
             'available_cabins' => $available,
-            'summary'          => $summary,
-            'message'          => $this->availabilityMessage($summary),
+            'summary' => $summary,
+            'message' => $this->availabilityMessage($summary),
         ];
     }
 
     public function getCalendar(string $month, ?int $cabinTypeId = null): array
     {
-        $start = Carbon::parse($month . '-01')->startOfMonth();
+        $start = Carbon::parse($month.'-01')->startOfMonth();
         $end = $start->copy()->endOfMonth();
         $endExclusive = $end->copy()->addDay();
         $calendar = [];
@@ -124,17 +124,17 @@ class AvailabilityService
             $available = max(0, $totalCabins - $bookedCount);
 
             $calendar[] = [
-                'date'      => $date->format('Y-m-d'),
+                'date' => $date->format('Y-m-d'),
                 'available' => $available,
-                'total'     => $totalCabins,
-                'status'    => $available === 0 ? 'full' : ($available <= 2 ? 'limited' : 'available'),
+                'total' => $totalCabins,
+                'status' => $available === 0 ? 'full' : ($available <= 2 ? 'limited' : 'available'),
             ];
         }
 
         return $calendar;
     }
 
-    public function getPlanner(string $checkIn, string $checkOut, ?int $guests = null): array
+    public function getPlanner(string $checkIn, string $checkOut, ?int $guests = null, ?int $excludeReservationId = null): array
     {
         $checkInDate = Carbon::parse($checkIn)->startOfDay();
         $checkOutDate = Carbon::parse($checkOut)->startOfDay();
@@ -151,12 +151,14 @@ class AvailabilityService
 
         $reservations = Reservation::query()
             ->with(['cabins:id,name', 'cabin:id,name', 'guestGroup', 'assignedStaff'])
+            ->when($excludeReservationId, fn ($query) => $query->whereKeyNot($excludeReservationId))
             ->blockingAvailability()
             ->overlapping($checkInDate, $checkOutDate)
             ->get();
 
         $quotes = Reservation::query()
             ->with(['cabins:id,name', 'cabin:id,name', 'guestGroup', 'assignedStaff'])
+            ->when($excludeReservationId, fn ($query) => $query->whereKeyNot($excludeReservationId))
             ->where('status', ReservationStatus::Pending->value)
             ->where(function ($query): void {
                 $query
@@ -214,10 +216,97 @@ class AvailabilityService
         ];
     }
 
+    public function getAdminAgenda(string $from, string $to): array
+    {
+        $start = Carbon::parse($from)->startOfDay();
+        $end = Carbon::parse($to)->startOfDay();
+
+        $stays = Reservation::query()
+            ->with(['cabins:id,name', 'cabin:id,name', 'assignedStaff'])
+            ->whereIn('status', [
+                ReservationStatus::Confirmed->value,
+                ReservationStatus::CheckedIn->value,
+                ReservationStatus::CheckedOut->value,
+            ])
+            ->where('check_in', '<=', $end)
+            ->where('check_out', '>=', $start)
+            ->orderBy('check_in')
+            ->orderBy('id')
+            ->get();
+
+        $quotes = Reservation::query()
+            ->with(['cabins:id,name', 'cabin:id,name', 'assignedStaff'])
+            ->where('status', ReservationStatus::Pending->value)
+            ->where(function ($query): void {
+                $query
+                    ->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            })
+            ->overlapping($start, $end)
+            ->orderBy('check_in')
+            ->orderBy('id')
+            ->get();
+
+        $reservations = $stays
+            ->concat($quotes)
+            ->unique('id')
+            ->sortBy([
+                ['check_in', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->values();
+
+        $cabins = Cabin::query()
+            ->select(['id', 'name'])
+            ->whereNotNull('map_slot')
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        $blocks = AvailabilityBlock::query()
+            ->with('cabins:id,name')
+            ->overlapping($start, $end)
+            ->orderBy('check_in')
+            ->orderBy('id')
+            ->get();
+
+        $arrivals = $stays->filter(
+            fn (Reservation $reservation): bool => $reservation->check_in->gte($start)
+                && $reservation->check_in->lte($end)
+        );
+        $departures = $stays->filter(
+            fn (Reservation $reservation): bool => $reservation->check_out->gte($start)
+                && $reservation->check_out->lte($end)
+        );
+
+        return [
+            'period' => [
+                'from' => $start->format('Y-m-d'),
+                'to' => $end->format('Y-m-d'),
+                'nights' => $start->diffInDays($end),
+            ],
+            'summary' => [
+                'records_count' => $reservations->count() + $blocks->count(),
+                'arrivals_count' => $arrivals->count(),
+                'departures_count' => $departures->count(),
+                'arriving_guests_count' => (int) $arrivals->sum('guests_count'),
+                'departing_guests_count' => (int) $departures->sum('guests_count'),
+                'active_quotes_count' => $quotes->count(),
+                'blocks_count' => $blocks->count(),
+            ],
+            'reservations' => $reservations
+                ->map(fn (Reservation $reservation): array => $this->agendaReservationPayload($reservation))
+                ->all(),
+            'blocks' => $blocks
+                ->map(fn (AvailabilityBlock $block): array => $this->agendaBlockPayload($block, $cabins))
+                ->all(),
+        ];
+    }
+
     public function getAdminCalendar(?string $month = null, ?int $year = null): array
     {
         if ($month) {
-            $start = Carbon::parse($month . '-01')->startOfMonth();
+            $start = Carbon::parse($month.'-01')->startOfMonth();
             $end = $start->copy()->endOfMonth();
             $mode = 'month';
         } else {
@@ -257,10 +346,10 @@ class AvailabilityService
             $available = max(0, $totalCabins - $unavailableCabinIds->intersect($cabinIds)->unique()->count());
 
             $days[] = [
-                'date'      => $date->format('Y-m-d'),
+                'date' => $date->format('Y-m-d'),
                 'available' => $available,
-                'total'     => $totalCabins,
-                'status'    => $available === 0 ? 'full' : ($available <= 2 ? 'limited' : 'available'),
+                'total' => $totalCabins,
+                'status' => $available === 0 ? 'full' : ($available <= 2 ? 'limited' : 'available'),
             ];
         }
 
@@ -277,26 +366,26 @@ class AvailabilityService
 
         return [
             'period' => [
-                'mode'  => $mode,
+                'mode' => $mode,
                 'month' => $month,
-                'year'  => (int) $start->year,
+                'year' => (int) $start->year,
                 'start' => $start->format('Y-m-d'),
-                'end'   => $end->format('Y-m-d'),
+                'end' => $end->format('Y-m-d'),
             ],
             'cabins' => $cabins->map(fn (Cabin $cabin) => [
-                'id'         => $cabin->id,
-                'name'       => $cabin->name,
-                'map_slot'   => $cabin->map_slot,
+                'id' => $cabin->id,
+                'name' => $cabin->name,
+                'map_slot' => $cabin->map_slot,
                 'max_guests' => $cabin->max_guests,
             ])->values(),
             'days' => $days,
             'events' => $events,
             'summary' => [
-                'total_days'     => $daysCollection->count(),
+                'total_days' => $daysCollection->count(),
                 'available_days' => $daysCollection->where('status', 'available')->count(),
-                'limited_days'   => $daysCollection->where('status', 'limited')->count(),
-                'full_days'      => $daysCollection->where('status', 'full')->count(),
-                'events_count'   => $events->count(),
+                'limited_days' => $daysCollection->where('status', 'limited')->count(),
+                'full_days' => $daysCollection->where('status', 'full')->count(),
+                'events_count' => $events->count(),
             ],
         ];
     }
@@ -403,6 +492,7 @@ class AvailabilityService
 
             if ($current && $current['signature'] === $signature) {
                 $current['check_out'] = $date->copy()->addDay()->format('Y-m-d');
+
                 continue;
             }
 
@@ -439,8 +529,7 @@ class AvailabilityService
         Collection $quotes,
         Collection $blocks,
         Carbon $date,
-    ): array
-    {
+    ): array {
         $quotePayloads = $this->quotesForCabinOnDate($quotes, $cabin, $date)
             ->map(fn (Reservation $quote) => $this->plannerReservationPayload($quote))
             ->values()
@@ -583,6 +672,58 @@ class AvailabilityService
                     'role_label' => $reservation->assignedStaff->role->label(),
                 ]
                 : null,
+        ];
+    }
+
+    private function agendaReservationPayload(Reservation $reservation): array
+    {
+        $cabinIds = $this->reservationCabinIds($reservation);
+        $cabins = $reservation->relationLoaded('cabins') && $reservation->cabins->isNotEmpty()
+            ? $reservation->cabins
+            : collect([$reservation->cabin])->filter();
+
+        return [
+            'id' => $reservation->id,
+            'status' => $reservation->status->value,
+            'status_label' => $reservation->status->label(),
+            'leader_name' => $reservation->leader_name,
+            'display_color' => $reservation->display_color,
+            'check_in' => $reservation->check_in->format('Y-m-d'),
+            'check_out' => $reservation->check_out->format('Y-m-d'),
+            'guests_count' => (int) $reservation->guests_count,
+            'notes' => $reservation->notes,
+            'source' => $reservation->source,
+            'expires_at' => $reservation->expires_at?->toISOString(),
+            'confirmed_at' => $reservation->confirmed_at?->toISOString(),
+            'cabin_ids' => $cabinIds->values()->all(),
+            'cabin_names' => $cabins->pluck('name')->values()->all(),
+            'assigned_to' => $reservation->assigned_to,
+            'assigned_staff' => $reservation->relationLoaded('assignedStaff') && $reservation->assignedStaff
+                ? [
+                    'id' => $reservation->assignedStaff->id,
+                    'full_name' => $reservation->assignedStaff->full_name,
+                    'role' => $reservation->assignedStaff->role->value,
+                    'role_label' => $reservation->assignedStaff->role->label(),
+                ]
+                : null,
+        ];
+    }
+
+    private function agendaBlockPayload(AvailabilityBlock $block, Collection $allCabins): array
+    {
+        return [
+            'id' => $block->id,
+            'check_in' => $block->check_in->format('Y-m-d'),
+            'check_out' => $block->check_out->format('Y-m-d'),
+            'reason' => $block->reason,
+            'notes' => $block->notes,
+            'applies_to_all' => $block->applies_to_all,
+            'cabin_ids' => $block->applies_to_all
+                ? $allCabins->pluck('id')->map(fn ($id): int => (int) $id)->values()->all()
+                : $block->cabins->pluck('id')->map(fn ($id): int => (int) $id)->values()->all(),
+            'cabin_names' => $block->applies_to_all
+                ? ['Todas las cabanas']
+                : $block->cabins->pluck('name')->values()->all(),
         ];
     }
 
@@ -770,41 +911,41 @@ class AvailabilityService
         }
 
         return [
-            'cabin_id'      => $cabin->id,
-            'map_slot'      => $cabin->map_slot,
-            'state'         => $state,
-            'tone'          => $tone,
-            'label'         => $label,
-            'is_available'  => $isAvailable,
-            'fits_guests'   => $fitsGuests,
-            'leader_name'   => $admin ? $reservation?->leader_name : null,
+            'cabin_id' => $cabin->id,
+            'map_slot' => $cabin->map_slot,
+            'state' => $state,
+            'tone' => $tone,
+            'label' => $label,
+            'is_available' => $isAvailable,
+            'fits_guests' => $fitsGuests,
+            'leader_name' => $admin ? $reservation?->leader_name : null,
             'display_color' => $admin ? $reservation?->display_color : null,
-            'reservation'   => $admin && $reservation ? $this->reservationPayload($reservation) : null,
-            'block'         => $block ? [
-                'id'             => $block->id,
-                'reason'         => $admin ? $block->reason : 'No disponible',
-                'notes'          => $admin ? $block->notes : null,
+            'reservation' => $admin && $reservation ? $this->reservationPayload($reservation) : null,
+            'block' => $block ? [
+                'id' => $block->id,
+                'reason' => $admin ? $block->reason : 'No disponible',
+                'notes' => $admin ? $block->notes : null,
                 'applies_to_all' => $block->applies_to_all,
             ] : null,
-            'cabin'         => $cabin,
+            'cabin' => $cabin,
         ];
     }
 
     private function reservationPayload(Reservation $reservation): array
     {
         return [
-            'id'               => $reservation->id,
-            'status'           => $reservation->status->value,
-            'status_label'     => $reservation->status->label(),
-            'leader_name'      => $reservation->leader_name,
-            'display_color'    => $reservation->display_color,
-            'check_in'         => $reservation->check_in->format('Y-m-d'),
-            'check_out'        => $reservation->check_out->format('Y-m-d'),
-            'guests_count'     => $reservation->guests_count,
-            'expires_at'       => $reservation->expires_at?->toISOString(),
-            'confirmed_at'     => $reservation->confirmed_at?->toISOString(),
+            'id' => $reservation->id,
+            'status' => $reservation->status->value,
+            'status_label' => $reservation->status->label(),
+            'leader_name' => $reservation->leader_name,
+            'display_color' => $reservation->display_color,
+            'check_in' => $reservation->check_in->format('Y-m-d'),
+            'check_out' => $reservation->check_out->format('Y-m-d'),
+            'guests_count' => $reservation->guests_count,
+            'expires_at' => $reservation->expires_at?->toISOString(),
+            'confirmed_at' => $reservation->confirmed_at?->toISOString(),
             'is_expired_quote' => $reservation->isExpiredQuote(),
-            'expires_soon'     => $reservation->isQuoteExpiringSoon(),
+            'expires_soon' => $reservation->isQuoteExpiringSoon(),
         ];
     }
 
@@ -816,24 +957,24 @@ class AvailabilityService
             : collect([$reservation->cabin])->filter();
 
         return [
-            'id'               => $reservation->id,
-            'type'             => 'reservation',
-            'status'           => $reservation->status->value,
-            'status_label'     => $reservation->status->label(),
-            'leader_name'      => $reservation->leader_name,
-            'display_color'    => $reservation->display_color,
-            'check_in'         => $reservation->check_in->format('Y-m-d'),
-            'check_out'        => $reservation->check_out->format('Y-m-d'),
-            'guests_count'     => $reservation->guests_count,
-            'total_price'      => $reservation->total_price !== null ? (float) $reservation->total_price : null,
-            'notes'            => $reservation->notes,
-            'expires_at'       => $reservation->expires_at?->toISOString(),
-            'confirmed_at'     => $reservation->confirmed_at?->toISOString(),
+            'id' => $reservation->id,
+            'type' => 'reservation',
+            'status' => $reservation->status->value,
+            'status_label' => $reservation->status->label(),
+            'leader_name' => $reservation->leader_name,
+            'display_color' => $reservation->display_color,
+            'check_in' => $reservation->check_in->format('Y-m-d'),
+            'check_out' => $reservation->check_out->format('Y-m-d'),
+            'guests_count' => $reservation->guests_count,
+            'total_price' => $reservation->total_price !== null ? (float) $reservation->total_price : null,
+            'notes' => $reservation->notes,
+            'expires_at' => $reservation->expires_at?->toISOString(),
+            'confirmed_at' => $reservation->confirmed_at?->toISOString(),
             'is_expired_quote' => $reservation->isExpiredQuote(),
-            'expires_soon'     => $reservation->isQuoteExpiringSoon(),
+            'expires_soon' => $reservation->isQuoteExpiringSoon(),
             'blocks_availability' => $this->reservationBlocksAvailability($reservation),
-            'cabin_ids'        => $cabinIds->values(),
-            'cabin_names'      => $cabins->pluck('name')->values(),
+            'cabin_ids' => $cabinIds->values(),
+            'cabin_names' => $cabins->pluck('name')->values(),
         ];
     }
 
@@ -844,24 +985,24 @@ class AvailabilityService
             : $block->cabins->pluck('id')->map(fn ($id) => (int) $id)->values();
 
         return [
-            'id'               => $block->id,
-            'type'             => 'block',
-            'status'           => 'blocked',
-            'status_label'     => 'Bloqueo',
-            'leader_name'      => $block->reason,
-            'display_color'    => '#f59e0b',
-            'check_in'         => $block->check_in->format('Y-m-d'),
-            'check_out'        => $block->check_out->format('Y-m-d'),
-            'guests_count'     => null,
-            'total_price'      => null,
-            'notes'            => $block->notes,
-            'expires_at'       => null,
-            'confirmed_at'     => null,
+            'id' => $block->id,
+            'type' => 'block',
+            'status' => 'blocked',
+            'status_label' => 'Bloqueo',
+            'leader_name' => $block->reason,
+            'display_color' => '#f59e0b',
+            'check_in' => $block->check_in->format('Y-m-d'),
+            'check_out' => $block->check_out->format('Y-m-d'),
+            'guests_count' => null,
+            'total_price' => null,
+            'notes' => $block->notes,
+            'expires_at' => null,
+            'confirmed_at' => null,
             'is_expired_quote' => false,
-            'expires_soon'     => false,
+            'expires_soon' => false,
             'blocks_availability' => true,
-            'cabin_ids'        => $cabinIds,
-            'cabin_names'      => $block->applies_to_all
+            'cabin_ids' => $cabinIds,
+            'cabin_names' => $block->applies_to_all
                 ? ['Todas las cabanas']
                 : $block->cabins->pluck('name')->values(),
         ];

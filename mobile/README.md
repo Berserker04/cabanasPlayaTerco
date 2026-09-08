@@ -1,17 +1,45 @@
-# cabanas_playa_terco_admin
+# Playa Terco Admin
 
-A new Flutter project.
+Aplicación administrativa móvil de Cabañas Playa Terco.
 
-## Getting Started
+## Ejecución local
 
-This project is a starting point for a Flutter application.
+El backend debe estar disponible bajo `/api/v1`. En el emulador de Android se
+usa `10.0.2.2` por defecto. Para un dispositivo conectado por USB:
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+adb reverse tcp:8000 tcp:8000
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Acceso con Google
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Mientras no se proporcionen credenciales OAuth, la aplicación mantiene visible
+el botón de Google con el estado `Pendiente` y explica la configuración que
+falta. Para activarlo:
+
+1. Crear un cliente OAuth web para el backend y configurar su ID tanto en
+   `GOOGLE_CLIENT_ID` de Laravel como en `GOOGLE_SERVER_CLIENT_ID` de Flutter.
+2. Registrar Android con el paquete
+   `com.playaterco.cabanas_playa_terco_admin` y las huellas SHA del certificado.
+3. Para iOS, crear el cliente correspondiente, registrar el esquema de URL
+   invertido en `ios/Runner/Info.plist` y pasar `GOOGLE_IOS_CLIENT_ID`.
+
+Ejemplo de compilación Android:
+
+```powershell
+flutter build apk --debug `
+  --dart-define=GOOGLE_SERVER_CLIENT_ID=000000000000-example.apps.googleusercontent.com
+```
+
+No se deben versionar secretos ni archivos de credenciales privados. Una cuenta
+nueva, incluida una cuenta de Google, queda con rol `user` y no recibe un token
+administrativo hasta que un administrador le asigne `staff` o `admin`.
+
+## Validación
+
+```powershell
+flutter analyze
+flutter test
+flutter build apk --debug
+```

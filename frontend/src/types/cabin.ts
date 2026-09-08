@@ -178,6 +178,64 @@ export interface PlannerReservation {
   } | null;
 }
 
+export interface AvailabilityAgendaPeriod {
+  from: string;
+  to: string;
+  nights: number;
+}
+
+export interface AvailabilityAgendaSummary {
+  records_count: number;
+  arrivals_count: number;
+  departures_count: number;
+  arriving_guests_count: number;
+  departing_guests_count: number;
+  active_quotes_count: number;
+  blocks_count: number;
+}
+
+export interface AvailabilityAgendaReservation {
+  id: number;
+  status: import('./reservation').ReservationStatus;
+  status_label: string;
+  leader_name: string | null;
+  display_color: string | null;
+  check_in: string;
+  check_out: string;
+  guests_count: number;
+  notes: string | null;
+  source: string | null;
+  expires_at: string | null;
+  confirmed_at: string | null;
+  cabin_ids: number[];
+  cabin_names: string[];
+  assigned_to: number | null;
+  assigned_staff: {
+    id: number;
+    full_name: string;
+    role: string;
+    role_label: string;
+  } | null;
+}
+
+export interface AvailabilityAgendaBlock {
+  id: number;
+  check_in: string;
+  check_out: string;
+  reason: string;
+  notes: string | null;
+  applies_to_all: boolean;
+  cabin_ids: number[];
+  cabin_names: string[];
+}
+
+export interface AvailabilityAgenda {
+  period: AvailabilityAgendaPeriod;
+  summary: AvailabilityAgendaSummary;
+  reservations: AvailabilityAgendaReservation[];
+  blocks: AvailabilityAgendaBlock[];
+}
+
 export interface PlannerBlock {
   id: number;
   reason: string;

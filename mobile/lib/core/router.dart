@@ -13,14 +13,13 @@ import 'models.dart';
 import 'providers.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authControllerProvider);
-  final isLoggedIn = auth.value != null;
-  final isLoading = auth.isLoading;
+  final isLoggedIn = ref.watch(
+    authControllerProvider.select((auth) => auth.value != null),
+  );
 
   return GoRouter(
     initialLocation: '/dashboard',
     redirect: (context, state) {
-      if (isLoading) return null;
       final isAuthRoute = const {
         '/login',
         '/register',

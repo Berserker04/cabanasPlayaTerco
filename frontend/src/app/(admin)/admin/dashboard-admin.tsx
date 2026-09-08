@@ -473,7 +473,7 @@ function ArrivalsSection({ dashboard }: { dashboard: DashboardOperations }) {
         </div>
         <Button asChild variant="outline" size="sm">
           <Link
-            href={`/admin/disponibilidad?from=${dashboard.next_7_days.from}&to=${dashboard.next_7_days.to}`}
+            href={`/admin/disponibilidad?from=${dashboard.next_7_days.from}&to=${dashboard.next_7_days.to}#agenda`}
           >
             Ver en disponibilidad
             <ArrowRight aria-hidden="true" />
@@ -516,7 +516,7 @@ function ArrivalRow({ arrival }: { arrival: DashboardArrival }) {
 
   return (
     <Link
-      href={`/admin/disponibilidad?from=${arrival.check_in}&to=${arrival.check_out}`}
+      href={`/admin/disponibilidad?from=${arrival.check_in}&to=${arrival.check_out}#agenda`}
       className="group grid gap-4 px-4 py-4 transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-600 sm:grid-cols-[64px_minmax(0,1fr)_auto] sm:items-center sm:px-6"
       aria-label={`Ver llegada de ${arrival.leader_name ?? 'titular sin nombre'} en disponibilidad`}
     >

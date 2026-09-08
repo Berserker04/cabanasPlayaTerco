@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cabanas_playa_terco_admin/core/google_authenticator.dart';
 import 'package:cabanas_playa_terco_admin/core/models.dart';
 import 'package:cabanas_playa_terco_admin/core/providers.dart';
@@ -5,6 +7,7 @@ import 'package:cabanas_playa_terco_admin/features/auth/auth_widgets.dart';
 import 'package:cabanas_playa_terco_admin/features/auth/login_page.dart';
 import 'package:cabanas_playa_terco_admin/features/auth/pending_approval_page.dart';
 import 'package:cabanas_playa_terco_admin/features/auth/register_page.dart';
+import 'package:cabanas_playa_terco_admin/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,6 +99,60 @@ void main() {
 
     expect(find.byKey(const Key('auth-loading-indicator')), findsOneWidget);
   });
+
+  testWidgets('registration stays mounted while loading and opens pending', (
+    tester,
+  ) async {
+    late _ControlledAuthController controller;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authControllerProvider.overrideWith(() {
+            controller = _ControlledAuthController();
+            return controller;
+          }),
+          googleAuthenticatorProvider.overrideWithValue(
+            _FakeGoogleAuthenticator(),
+          ),
+        ],
+        child: const PlayaTercoAdminApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('open-register-button')));
+    await tester.tap(find.byKey(const Key('open-register-button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('register-name-field')),
+      'Validación ADB',
+    );
+    await tester.enterText(
+      find.byKey(const Key('register-email-field')),
+      'registro@example.com',
+    );
+    await tester.enterText(
+      find.byKey(const Key('register-password-field')),
+      'Terco2026a',
+    );
+    await tester.enterText(
+      find.byKey(const Key('register-confirmation-field')),
+      'Terco2026a',
+    );
+    await tester.ensureVisible(find.byKey(const Key('register-submit-button')));
+    await tester.tap(find.byKey(const Key('register-submit-button')));
+    await tester.pump();
+
+    expect(find.text('Crea tu cuenta'), findsOneWidget);
+    expect(find.byKey(const Key('auth-loading-indicator')), findsOneWidget);
+
+    controller.completeRegistration();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tu acceso está pendiente'), findsOneWidget);
+    expect(find.text('registro@example.com'), findsOneWidget);
+  });
 }
 
 Widget _testApp(Widget child) {
@@ -122,4 +179,38 @@ class _FakeGoogleAuthenticator implements GoogleAuthenticator {
 
   @override
   Future<void> signOut() async {}
+}
+
+class _ControlledAuthController extends AuthController {
+  final _registration = Completer<AuthResult>();
+
+  @override
+  Future<AuthSession?> build() async => null;
+
+  @override
+  Future<AuthResult> register(
+    String name,
+    String email,
+    String password,
+  ) async {
+    state = const AsyncLoading();
+    final result = await _registration.future;
+    state = const AsyncData(null);
+    return result;
+  }
+
+  void completeRegistration() {
+    _registration.complete(
+      const AuthResult(
+        user: UserProfile(
+          id: 12,
+          name: 'Validación ADB',
+          email: 'registro@example.com',
+          isAdmin: false,
+          isStaff: false,
+        ),
+        approvalRequired: true,
+      ),
+    );
+  }
 }

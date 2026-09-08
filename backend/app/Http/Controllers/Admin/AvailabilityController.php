@@ -19,9 +19,9 @@ class AvailabilityController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $request->validate([
-            'check_in'  => ['required', 'date'],
+            'check_in' => ['required', 'date'],
             'check_out' => ['required', 'date', 'after:check_in'],
-            'guests'    => ['nullable', 'integer', 'min:1'],
+            'guests' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $availability = $this->availabilityService->checkAvailability(
@@ -33,13 +33,13 @@ class AvailabilityController extends Controller
 
         return response()->json([
             'data' => [
-                'check_in'         => $availability['check_in'],
-                'check_out'        => $availability['check_out'],
-                'guests'           => $availability['guests'],
-                'cabins'           => CabinAvailabilityResource::collection($availability['cabins']),
+                'check_in' => $availability['check_in'],
+                'check_out' => $availability['check_out'],
+                'guests' => $availability['guests'],
+                'cabins' => CabinAvailabilityResource::collection($availability['cabins']),
                 'available_cabins' => CabinAvailabilityResource::collection($availability['available_cabins']),
-                'summary'          => $availability['summary'],
-                'message'          => $availability['message'],
+                'summary' => $availability['summary'],
+                'message' => $availability['message'],
             ],
         ]);
     }
@@ -48,7 +48,7 @@ class AvailabilityController extends Controller
     {
         $request->validate([
             'month' => ['nullable', 'date_format:Y-m'],
-            'year'  => ['nullable', 'integer', 'min:2020', 'max:2100'],
+            'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
         ]);
 
         $calendar = $this->availabilityService->getAdminCalendar(
@@ -61,12 +61,34 @@ class AvailabilityController extends Controller
         ]);
     }
 
+    public function agenda(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date', 'after:from'],
+        ]);
+
+        if (Carbon::parse($validated['from'])->diffInDays(Carbon::parse($validated['to'])) > 31) {
+            throw ValidationException::withMessages([
+                'to' => ['El rango de consulta no puede superar 31 dias.'],
+            ]);
+        }
+
+        return response()->json([
+            'data' => $this->availabilityService->getAdminAgenda(
+                $validated['from'],
+                $validated['to'],
+            ),
+        ]);
+    }
+
     public function planner(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'check_in'  => ['required', 'date'],
+            'check_in' => ['required', 'date'],
             'check_out' => ['required', 'date', 'after:check_in'],
-            'guests'    => ['nullable', 'integer', 'min:1'],
+            'guests' => ['nullable', 'integer', 'min:1'],
+            'exclude_reservation_id' => ['nullable', 'integer', 'min:1', 'exists:reservations,id'],
         ]);
 
         if (Carbon::parse($validated['check_in'])->diffInDays(Carbon::parse($validated['check_out'])) > 31) {
@@ -80,6 +102,7 @@ class AvailabilityController extends Controller
                 $validated['check_in'],
                 $validated['check_out'],
                 $request->integer('guests') ?: null,
+                $request->integer('exclude_reservation_id') ?: null,
             ),
         ]);
     }

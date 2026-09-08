@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api;
 use App\Http\Controllers\Admin;
+use App\Http\Controllers\Api;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -137,6 +137,7 @@ Route::prefix('admin')
 
         // ── Availability & Reservations ──────────────────────
         Route::get('/availability/calendar', [Admin\AvailabilityController::class, 'calendar']);
+        Route::get('/availability/agenda', [Admin\AvailabilityController::class, 'agenda']);
         Route::get('/availability/planner', [Admin\AvailabilityController::class, 'planner']);
         Route::get('/availability', Admin\AvailabilityController::class);
         Route::apiResource('availability-blocks', Admin\AvailabilityBlockController::class)
