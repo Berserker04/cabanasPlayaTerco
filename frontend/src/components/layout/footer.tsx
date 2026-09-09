@@ -46,6 +46,12 @@ export function Footer() {
                   {link.label}
                 </Link>
               ))}
+              <Link
+                href="/privacidad"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Política de privacidad
+              </Link>
             </nav>
           </div>
 

@@ -25,6 +25,12 @@ class CabinModuleTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['filesystems.uploads_disk' => 'public']);
+    }
+
     public function test_cabin_seeder_creates_eight_demo_cabins_with_images(): void
     {
         $this->seed([
@@ -202,7 +208,7 @@ class CabinModuleTest extends TestCase
 
     public function test_admin_can_upload_video_media_for_cabin(): void
     {
-        Storage::fake('s3');
+        Storage::fake('public');
         Sanctum::actingAs($this->createAdmin());
 
         $cabinType = $this->createCabinType();
@@ -220,12 +226,12 @@ class CabinModuleTest extends TestCase
             ->assertJsonPath('data.type', 'video')
             ->assertJsonPath('data.sort_order', 2);
 
-        Storage::disk('s3')->assertExists(CabinMedia::firstOrFail()->path);
+        Storage::disk('public')->assertExists(CabinMedia::firstOrFail()->path);
     }
 
     public function test_admin_can_upload_multiple_media_files_for_cabin(): void
     {
-        Storage::fake('s3');
+        Storage::fake('public');
         Sanctum::actingAs($this->createAdmin());
 
         $cabinType = $this->createCabinType();
