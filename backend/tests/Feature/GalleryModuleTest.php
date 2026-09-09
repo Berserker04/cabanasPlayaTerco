@@ -17,6 +17,12 @@ class GalleryModuleTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['filesystems.uploads_disk' => 'public']);
+    }
+
     public function test_public_gallery_defaults_to_standalone_items_and_filters_album_items_by_album(): void
     {
         $activeAlbum = GalleryAlbum::create([
@@ -133,7 +139,7 @@ class GalleryModuleTest extends TestCase
 
     public function test_admin_can_create_album_upload_media_and_set_cover(): void
     {
-        Storage::fake('s3');
+        Storage::fake('public');
         Sanctum::actingAs($this->createAdmin());
 
         $albumResponse = $this->postJson('/api/v1/admin/gallery-albums', [
@@ -166,7 +172,7 @@ class GalleryModuleTest extends TestCase
             ->assertJsonPath('data.album.slug', 'naturaleza');
 
         $path = $uploadResponse->json('data.path');
-        Storage::disk('s3')->assertExists($path);
+        Storage::disk('public')->assertExists($path);
 
         $itemId = $uploadResponse->json('data.id');
 
@@ -179,7 +185,7 @@ class GalleryModuleTest extends TestCase
 
     public function test_admin_can_upload_standalone_media_and_create_album_with_multiple_files(): void
     {
-        Storage::fake('s3');
+        Storage::fake('public');
         Sanctum::actingAs($this->createAdmin());
 
         $this
@@ -225,7 +231,7 @@ class GalleryModuleTest extends TestCase
 
     public function test_admin_can_upload_gallery_media_for_map_points(): void
     {
-        Storage::fake('s3');
+        Storage::fake('public');
         Sanctum::actingAs($this->createAdmin());
 
         $response = $this
@@ -245,7 +251,7 @@ class GalleryModuleTest extends TestCase
             ->assertJsonPath('data.gallery_album_id', null)
             ->assertJsonPath('data.category', 'general');
 
-        Storage::disk('s3')->assertExists($response->json('data.path'));
+        Storage::disk('public')->assertExists($response->json('data.path'));
     }
 
     public function test_gallery_map_point_filter_returns_only_active_matching_media(): void
@@ -284,7 +290,7 @@ class GalleryModuleTest extends TestCase
 
     public function test_admin_gallery_rejects_invalid_map_point(): void
     {
-        Storage::fake('s3');
+        Storage::fake('public');
         Sanctum::actingAs($this->createAdmin());
 
         $this

@@ -22,10 +22,12 @@ jobs:
           coverage: none
       - name: Install backend dependencies
         working-directory: backend
-        run: composer install --no-interaction --prefer-dist
+        run: |
+          cp .env.example .env
+          composer install --no-interaction --prefer-dist
       - name: Backend tests
         working-directory: backend
-        run: php artisan test --compact
+        run: php artisan test --compact --display-warnings
       - uses: pnpm/action-setup@v4
         with:
           version: 10
