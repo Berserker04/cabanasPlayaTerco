@@ -24,9 +24,14 @@ rm -rf -- "$release/storage"
 ln -s "$base/shared/storage" "$release/storage"
 mkdir -p "$base/shared/storage/"{app/public,app/private,framework/cache/data,framework/sessions,framework/views,logs}
 chmod -R u+rwX,g+rwX "$base/shared/storage" "$release/bootstrap/cache"
+# LiteSpeed must traverse the release path and read only its public files.
+chmod o+x "$base" "$base/releases" "$release" "$base/shared" \
+    "$base/shared/storage" "$base/shared/storage/app"
+chmod -R a+rX "$release/public" "$base/shared/storage/app/public"
 cd "$release"
 
 previous=$(readlink -f "$base/current" || true)
+[ -f "$previous/artisan" ] || previous=''
 maintenance=false
 switched=false
 recover() {
@@ -52,7 +57,8 @@ if [ -n "$previous" ] && [ -f "$previous/artisan" ]; then
 fi
 
 "$php" artisan migrate --force --no-interaction
-"$php" artisan storage:link --force
+# Hostinger disables PHP's symlink/exec functions; SSH can create this link.
+ln -s "$base/shared/storage/app/public" "$release/public/storage"
 "$php" artisan config:cache
 "$php" artisan route:cache
 "$php" artisan view:cache
