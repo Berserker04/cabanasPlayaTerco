@@ -274,7 +274,7 @@ export function RegisterForm({ nextPath, oauthError }: RegisterFormProps) {
       <CardFooter className="justify-center text-sm text-muted-foreground">
         <span>
           Ya tienes cuenta?{' '}
-          <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          <Link href={`/login?next=${encodeURIComponent(nextPath)}`} className="font-medium text-foreground underline-offset-4 hover:underline">
             Inicia sesion
           </Link>
         </span>

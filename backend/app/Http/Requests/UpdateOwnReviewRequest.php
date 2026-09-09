@@ -23,11 +23,11 @@ class UpdateOwnReviewRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'rating.required' => 'La calificacion es obligatoria.',
-            'rating.min' => 'La calificacion minima es 1.',
-            'rating.max' => 'La calificacion maxima es 5.',
+            'rating.required' => 'La calificación es obligatoria.',
+            'rating.min' => 'La calificación mínima es 1.',
+            'rating.max' => 'La calificación máxima es 5.',
             'body.required' => 'El comentario es obligatorio.',
-            'body.min' => 'La resena debe tener al menos 20 caracteres.',
+            'body.min' => 'La reseña debe tener al menos 20 caracteres.',
         ];
     }
 }

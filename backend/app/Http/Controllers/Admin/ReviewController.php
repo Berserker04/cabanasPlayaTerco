@@ -20,7 +20,7 @@ class ReviewController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $perPage = min($request->integer('per_page', 20), 100);
+        $perPage = max(1, min($request->integer('per_page', 20), 100));
 
         $reviews = Review::query()
             ->with(['media', 'author', 'responder'])
@@ -55,16 +55,19 @@ class ReviewController extends Controller
     {
         $data = $request->validated();
         $status = ReviewStatus::from($data['status']);
-        $adminResponse = array_key_exists('admin_response', $data)
-            ? trim((string) $data['admin_response'])
-            : $review->admin_response;
+        $adminResponse = trim((string) (array_key_exists('admin_response', $data)
+            ? $data['admin_response']
+            : $review->admin_response));
 
         $payload = [
             'status' => $status,
             'admin_response' => $adminResponse !== '' ? $adminResponse : null,
-            'responded_at' => $adminResponse !== '' ? now() : null,
-            'responded_by' => $adminResponse !== '' ? $request->user()->id : null,
         ];
+
+        if ($adminResponse !== (string) $review->admin_response || $adminResponse === '') {
+            $payload['responded_at'] = $adminResponse !== '' ? now() : null;
+            $payload['responded_by'] = $adminResponse !== '' ? $request->user()->id : null;
+        }
 
         if ($status === ReviewStatus::Approved) {
             $payload['approved_at'] = $review->approved_at ?? now();
@@ -78,7 +81,7 @@ class ReviewController extends Controller
 
         return response()->json([
             'data' => new ReviewResource($review->fresh()->load(['media', 'author', 'responder'])),
-            'message' => 'Resena actualizada.',
+            'message' => 'Reseña actualizada.',
         ]);
     }
 
@@ -89,7 +92,7 @@ class ReviewController extends Controller
         $review->delete();
 
         return response()->json([
-            'message' => 'Resena eliminada.',
+            'message' => 'Reseña eliminada.',
         ]);
     }
 

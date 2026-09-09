@@ -7,22 +7,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreReviewRequest;
 use App\Http\Resources\ReviewResource;
 use App\Models\Review;
-use App\Models\ReviewMedia;
-use App\Services\FileUploadService;
+use App\Services\ReviewMediaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 
 class ReviewController extends Controller
 {
     public function __construct(
-        private readonly FileUploadService $uploadService
+        private readonly ReviewMediaService $mediaService
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        $perPage = min($request->integer('per_page', 9), 30);
+        $perPage = max(1, min($request->integer('per_page', 9), 30));
 
         $reviews = Review::query()
             ->approved()
@@ -60,26 +57,21 @@ class ReviewController extends Controller
     {
         $user = $request->user();
 
-        $review = DB::transaction(function () use ($request, $user): Review {
-            $review = Review::create([
-                'user_id' => $user->id,
-                'reservation_id' => $request->validated('reservation_id'),
-                'author_name' => $user->name,
-                'author_email' => $user->email,
-                'rating' => $request->integer('rating'),
-                'title' => $request->string('title')->toString() ?: null,
-                'body' => $request->string('body')->toString(),
-                'status' => ReviewStatus::Pending,
-            ]);
-
-            $this->storeImages($review, $request->file('images', []));
-
-            return $review;
-        });
+        $review = $this->mediaService->create([
+            'user_id' => $user->id,
+            'reservation_id' => $request->validated('reservation_id'),
+            'author_name' => $user->name,
+            'author_email' => $user->email,
+            'rating' => $request->integer('rating'),
+            'title' => $request->string('title')->toString() ?: null,
+            'body' => $request->string('body')->toString(),
+            'status' => ReviewStatus::Approved,
+            'approved_at' => now(),
+        ], $request->file('images', []));
 
         return response()->json([
             'data' => new ReviewResource($review->load(['author', 'media'])),
-            'message' => 'Resena enviada. Sera revisada antes de publicarse.',
+            'message' => 'Reseña publicada. Gracias por compartir tu experiencia.',
         ], 201);
     }
 
@@ -97,25 +89,5 @@ class ReviewController extends Controller
                 ->mapWithKeys(fn (int $rating) => [(string) $rating => (int) ($counts[$rating] ?? 0)])
                 ->all(),
         ];
-    }
-
-    private function storeImages(Review $review, array $files): void
-    {
-        collect($files)
-            ->filter(fn ($file) => $file instanceof UploadedFile)
-            ->values()
-            ->each(function (UploadedFile $file, int $index) use ($review): void {
-                $upload = $this->uploadService->upload($file, 'reviews/media');
-
-                ReviewMedia::create([
-                    'review_id' => $review->id,
-                    'url' => $upload['url'],
-                    'path' => $upload['path'],
-                    'alt' => $review->title ?: 'Foto de resena',
-                    'mime_type' => $upload['mime_type'],
-                    'size_bytes' => $upload['size_bytes'],
-                    'sort_order' => $index,
-                ]);
-            });
     }
 }

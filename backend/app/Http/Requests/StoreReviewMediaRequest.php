@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\ValidatesMediaUploadSizes;
+use App\Models\Review;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -18,7 +19,7 @@ class StoreReviewMediaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'images' => ['required', 'array', 'max:3'],
+            'images' => ['required', 'array', 'min:1', 'max:'.Review::MAX_IMAGES],
             'images.*' => $this->mediaFileRule(maxKilobytes: 10240, mimes: 'jpg,jpeg,png,webp'),
         ];
     }
@@ -42,8 +43,8 @@ class StoreReviewMediaRequest extends FormRequest
     {
         return [
             'images.required' => 'Selecciona al menos una foto.',
-            'images.max' => 'Solo puedes subir hasta 3 fotos por resena.',
-            'images.*.mimes' => 'Solo se permiten imagenes JPG, PNG o WebP.',
+            'images.max' => 'Solo puedes subir hasta 3 fotos por reseña.',
+            'images.*.mimes' => 'Solo se permiten imágenes JPG, PNG o WebP.',
             'images.*.max' => 'Cada imagen no puede superar los 10 MB.',
         ];
     }

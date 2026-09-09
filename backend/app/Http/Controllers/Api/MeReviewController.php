@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Enums\ReviewStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreReviewMediaRequest;
 use App\Http\Requests\UpdateOwnReviewRequest;
@@ -11,16 +10,15 @@ use App\Http\Resources\ReviewResource;
 use App\Models\Review;
 use App\Models\ReviewMedia;
 use App\Services\FileUploadService;
+use App\Services\ReviewMediaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class MeReviewController extends Controller
 {
     public function __construct(
-        private readonly FileUploadService $uploadService
+        private readonly FileUploadService $uploadService,
+        private readonly ReviewMediaService $mediaService
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -52,12 +50,11 @@ class MeReviewController extends Controller
             'rating' => $request->integer('rating'),
             'title' => $request->string('title')->toString() ?: null,
             'body' => $request->string('body')->toString(),
-            ...$this->pendingModerationFields(),
         ]);
 
         return response()->json([
             'data' => new ReviewResource($review->fresh()->load(['author', 'media'])),
-            'message' => 'Resena actualizada. Volvera a revision antes de publicarse.',
+            'message' => 'Reseña actualizada.',
         ]);
     }
 
@@ -70,7 +67,7 @@ class MeReviewController extends Controller
         $review->delete();
 
         return response()->json([
-            'message' => 'Resena eliminada.',
+            'message' => 'Reseña eliminada.',
         ]);
     }
 
@@ -80,40 +77,11 @@ class MeReviewController extends Controller
 
         $files = $request->file('images', []);
         $files = is_array($files) ? $files : [];
-        $currentCount = $review->media()->count();
-
-        if ($currentCount + count($files) > 3) {
-            throw ValidationException::withMessages([
-                'images' => ['Solo puedes tener hasta 3 fotos por resena.'],
-            ]);
-        }
-
-        $mediaItems = DB::transaction(function () use ($files, $review, $currentCount) {
-            $mediaItems = collect($files)
-                ->filter(fn ($file) => $file instanceof UploadedFile)
-                ->values()
-                ->map(function (UploadedFile $file, int $index) use ($review, $currentCount): ReviewMedia {
-                    $upload = $this->uploadService->upload($file, 'reviews/media');
-
-                    return ReviewMedia::create([
-                        'review_id' => $review->id,
-                        'url' => $upload['url'],
-                        'path' => $upload['path'],
-                        'alt' => $review->title ?: 'Foto de resena',
-                        'mime_type' => $upload['mime_type'],
-                        'size_bytes' => $upload['size_bytes'],
-                        'sort_order' => $currentCount + $index,
-                    ]);
-                });
-
-            $review->update($this->pendingModerationFields());
-
-            return $mediaItems;
-        });
+        $mediaItems = $this->mediaService->add($review, $files);
 
         return response()->json([
             'data' => ReviewMediaResource::collection($mediaItems)->resolve(),
-            'message' => 'Fotos agregadas. La resena volvera a revision.',
+            'message' => 'Fotos agregadas.',
         ], 201);
     }
 
@@ -125,28 +93,16 @@ class MeReviewController extends Controller
 
         $this->deleteMediaFile($media);
         $media->delete();
-        $review->update($this->pendingModerationFields());
+        $review->touch();
 
         return response()->json([
-            'message' => 'Foto eliminada. La resena volvera a revision.',
+            'message' => 'Foto eliminada.',
         ]);
     }
 
     private function ensureOwnsReview(Request $request, Review $review): void
     {
-        abort_unless((int) $review->user_id === (int) $request->user()->id, 403, 'No puedes administrar esta resena.');
-    }
-
-    private function pendingModerationFields(): array
-    {
-        return [
-            'status' => ReviewStatus::Pending,
-            'approved_at' => null,
-            'approved_by' => null,
-            'admin_response' => null,
-            'responded_at' => null,
-            'responded_by' => null,
-        ];
+        abort_unless((int) $review->user_id === (int) $request->user()->id, 403, 'No puedes administrar esta reseña.');
     }
 
     private function deleteMediaFile(ReviewMedia $media): void

@@ -342,7 +342,7 @@ export function LoginForm({ nextPath, oauthError }: LoginFormProps) {
           <p className="mt-7 text-center text-sm text-neutral-600">
             ¿Primera vez por aquí?{' '}
             <Link
-              href="/registro"
+              href={`/registro?next=${encodeURIComponent(nextPath)}`}
               className="font-semibold text-cyan-800 underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-700/20"
             >
               Crea tu cuenta

@@ -10,6 +10,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Review extends Model
 {
+    public const MAX_IMAGES = 3;
+
+    protected $attributes = [
+        'status' => ReviewStatus::Approved->value,
+    ];
+
     protected $fillable = [
         'user_id',
         'reservation_id',
@@ -64,7 +70,7 @@ class Review extends Model
 
     public function media(): HasMany
     {
-        return $this->hasMany(ReviewMedia::class);
+        return $this->hasMany(ReviewMedia::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function scopeApproved(Builder $query): Builder

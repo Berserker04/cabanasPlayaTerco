@@ -2,10 +2,16 @@ import type { Metadata } from 'next';
 import { ReviewsPageClient } from './reviews-page-client';
 
 export const metadata: Metadata = {
-  title: 'Resenas',
-  description: 'Lee y comparte resenas de huespedes de Cabanas Playa Terco.',
+  title: 'Reseñas',
+  description:
+    'Lee y comparte reseñas y fotos de viajeros de Cabañas Playa Terco.',
 };
 
-export default function ReviewsPage() {
-  return <ReviewsPageClient />;
+export default async function ReviewsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ escribir?: string }>;
+}) {
+  const params = await searchParams;
+  return <ReviewsPageClient initiallyOpen={params.escribir === '1'} />;
 }
