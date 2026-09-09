@@ -42,15 +42,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const AuthBrandHeader(),
-            const SizedBox(height: 30),
-            const AuthIntro(
-              eyebrow: 'Panel administrativo',
-              title: 'Qué bueno tenerte de vuelta',
-              description:
-                  'Ingresa para gestionar reservas, disponibilidad y la operación de Playa Terco.',
+            AuthModeSwitch(
+              registering: false,
+              enabled: !isBusy,
+              onChanged: () => context.go('/register'),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
             if (_formError != null) ...[
               AuthErrorBanner(message: _formError!),
               const SizedBox(height: 18),
@@ -71,7 +68,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     autofillHints: const [AutofillHints.email],
                     validator: AuthValidators.email,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   AuthTextField(
                     fieldKey: const Key('login-password-field'),
                     label: 'Contraseña',
@@ -98,7 +95,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 16),
                   AuthPrimaryButton(
                     buttonKey: const Key('login-submit-button'),
                     label: 'Iniciar sesión',
@@ -109,7 +106,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               ),
             ),
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 22),
+              padding: EdgeInsets.symmetric(vertical: 10),
               child: AuthDivider(),
             ),
             GoogleAuthButton(
@@ -117,29 +114,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               loading: _googleLoading,
               onPressed: isBusy ? null : () => _submitGoogle(googleConfigured),
             ),
-            const SizedBox(height: 22),
-            Wrap(
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                const Text(
-                  '¿Primera vez por aquí?',
-                  style: TextStyle(color: authMuted),
-                ),
-                TextButton(
-                  key: const Key('open-register-button'),
-                  onPressed: isBusy ? null : () => context.go('/register'),
-                  child: const Text(
-                    'Crear cuenta',
-                    style: TextStyle(
-                      color: authPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 1, color: Color(0xFFDADDDC)),
             const AuthSecurityNote(),
           ],
         ),

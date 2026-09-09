@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertCircle,
-  Chrome,
   Eye,
   EyeOff,
   Loader2,
@@ -16,17 +15,9 @@ import {
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import { GoogleAuthButton } from '../google-auth-button';
 import { useAuth } from '@/hooks/use-auth';
 import { ApiError } from '@/lib/api';
 import { resolvePostAuthPath } from '@/lib/auth-redirect';
@@ -39,7 +30,7 @@ type RegisterFormProps = {
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google: 'No pudimos completar el registro con Google.',
-  'google-email': 'Google no devolvio un correo valido para esta cuenta.',
+  'google-email': 'Google no devolvió un correo válido para esta cuenta.',
 };
 
 export function RegisterForm({ nextPath, oauthError }: RegisterFormProps) {
@@ -98,7 +89,7 @@ export function RegisterForm({ nextPath, oauthError }: RegisterFormProps) {
         return;
       }
 
-      setFormError('No pudimos crear tu cuenta. Revisa tu conexion e intentalo de nuevo.');
+      setFormError('No pudimos crear tu cuenta. Revisa tu conexión e inténtalo de nuevo.');
     }
   };
 
@@ -121,164 +112,156 @@ export function RegisterForm({ nextPath, oauthError }: RegisterFormProps) {
   };
 
   return (
-    <Card className="rounded-lg">
-      <CardHeader className="gap-2">
-        <CardTitle className="text-2xl">Crear cuenta</CardTitle>
-        <CardDescription>Registrate para gestionar tus reservas y comentarios.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
-          {formError && (
-            <div
-              className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-              role="alert"
-            >
-              <AlertCircle className="mt-0.5 size-4 shrink-0" />
-              <p>{formError}</p>
-            </div>
+    <>
+      <header>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-700">Área de huéspedes</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-neutral-950 sm:text-4xl">Crea tu cuenta</h1>
+        <p className="mt-3 max-w-md text-sm leading-6 text-neutral-600 sm:text-base sm:leading-7">
+          Organiza tus reservas y comparte tu experiencia en Playa Terco.
+        </p>
+      </header>
+
+      <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+        {formError && (
+          <div
+            className="flex gap-3 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm leading-6 text-red-800"
+            role="alert"
+              aria-live="polite"
+          >
+            <AlertCircle className="mt-1 size-4 shrink-0" aria-hidden="true" />
+            <p>{formError}</p>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="name" className="text-sm font-semibold text-neutral-800">Nombre completo</Label>
+          <div className="group relative">
+            <UserRound className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-neutral-400 transition-colors group-focus-within:text-cyan-700" aria-hidden="true" />
+            <Input
+              id="name"
+              type="text"
+              autoComplete="name"
+              placeholder="Tu nombre"
+              className="h-12 rounded-xl border-neutral-200 bg-white pl-11 pr-4 text-base shadow-sm md:text-[15px] focus-visible:border-cyan-700 focus-visible:ring-cyan-700/15"
+              aria-invalid={Boolean(errors.name)}
+              aria-describedby={errors.name ? 'name-error' : undefined}
+              {...register('name')}
+            />
+          </div>
+          {errors.name && (
+            <p id="name-error" className="text-sm text-red-700">
+              {errors.name.message}
+            </p>
           )}
-
-          <div className="space-y-2">
-            <Label htmlFor="name">Nombre completo</Label>
-            <div className="relative">
-              <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="name"
-                type="text"
-                autoComplete="name"
-                placeholder="Tu nombre"
-                className="pl-9"
-                aria-invalid={Boolean(errors.name)}
-                aria-describedby={errors.name ? 'name-error' : undefined}
-                {...register('name')}
-              />
-            </div>
-            {errors.name && (
-              <p id="name-error" className="text-sm text-destructive">
-                {errors.name.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Correo electronico</Label>
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="tu@email.com"
-                className="pl-9"
-                aria-invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? 'email-error' : undefined}
-                {...register('email')}
-              />
-            </div>
-            {errors.email && (
-              <p id="email-error" className="text-sm text-destructive">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Contrasena</Label>
-            <div className="relative">
-              <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                placeholder="Crea una contrasena"
-                className="pl-9 pr-10"
-                aria-invalid={Boolean(errors.password)}
-                aria-describedby={errors.password ? 'password-error' : undefined}
-                {...register('password')}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2"
-                onClick={() => setShowPassword((value) => !value)}
-                aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
-              >
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </Button>
-            </div>
-            {errors.password && (
-              <p id="password-error" className="text-sm text-destructive">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password_confirmation">Confirmar contrasena</Label>
-            <div className="relative">
-              <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="password_confirmation"
-                type={showConfirmation ? 'text' : 'password'}
-                autoComplete="new-password"
-                placeholder="Repite la contrasena"
-                className="pl-9 pr-10"
-                aria-invalid={Boolean(errors.password_confirmation)}
-                aria-describedby={
-                  errors.password_confirmation ? 'password-confirmation-error' : undefined
-                }
-                {...register('password_confirmation')}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2"
-                onClick={() => setShowConfirmation((value) => !value)}
-                aria-label={showConfirmation ? 'Ocultar confirmacion' : 'Mostrar confirmacion'}
-              >
-                {showConfirmation ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </Button>
-            </div>
-            {errors.password_confirmation && (
-              <p id="password-confirmation-error" className="text-sm text-destructive">
-                {errors.password_confirmation.message}
-              </p>
-            )}
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleLoading}>
-            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            Crear cuenta
-          </Button>
-        </form>
-
-        <div className="my-6 flex items-center gap-3">
-          <Separator className="flex-1" />
-          <span className="text-xs font-medium uppercase text-muted-foreground">o</span>
-          <Separator className="flex-1" />
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          disabled={isSubmitting || isGoogleLoading}
-          onClick={handleGoogleRegister}
-        >
-          {isGoogleLoading ? <Loader2 className="size-4 animate-spin" /> : <Chrome className="size-4" />}
-          Continuar con Google
+        <div className="space-y-2">
+          <Label htmlFor="email" className="text-sm font-semibold text-neutral-800">Correo electrónico</Label>
+          <div className="group relative">
+            <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-neutral-400 transition-colors group-focus-within:text-cyan-700" aria-hidden="true" />
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="tu@email.com"
+              className="h-12 rounded-xl border-neutral-200 bg-white pl-11 pr-4 text-base shadow-sm md:text-[15px] focus-visible:border-cyan-700 focus-visible:ring-cyan-700/15"
+              aria-invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? 'email-error' : undefined}
+              {...register('email')}
+            />
+          </div>
+          {errors.email && (
+            <p id="email-error" className="text-sm text-red-700">
+              {errors.email.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password" className="text-sm font-semibold text-neutral-800">Contraseña</Label>
+          <div className="group relative">
+            <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-neutral-400 transition-colors group-focus-within:text-cyan-700" aria-hidden="true" />
+            <Input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              placeholder="Mínimo 8 caracteres"
+              className="h-12 rounded-xl border-neutral-200 bg-white pl-11 pr-12 text-base shadow-sm md:text-[15px] focus-visible:border-cyan-700 focus-visible:ring-cyan-700/15"
+              aria-invalid={Boolean(errors.password)}
+              aria-describedby={errors.password ? 'password-error' : undefined}
+              {...register('password')}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 size-10 -translate-y-1/2 rounded-lg text-neutral-500 hover:bg-cyan-50 hover:text-cyan-800 focus-visible:ring-cyan-700/20"
+              onClick={() => setShowPassword((value) => !value)}
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </Button>
+          </div>
+          {errors.password && (
+            <p id="password-error" className="text-sm text-red-700">
+              {errors.password.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password_confirmation" className="text-sm font-semibold text-neutral-800">Confirmar contraseña</Label>
+          <div className="group relative">
+            <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-neutral-400 transition-colors group-focus-within:text-cyan-700" aria-hidden="true" />
+            <Input
+              id="password_confirmation"
+              type={showConfirmation ? 'text' : 'password'}
+              autoComplete="new-password"
+              placeholder="Repite la contraseña"
+              className="h-12 rounded-xl border-neutral-200 bg-white pl-11 pr-12 text-base shadow-sm md:text-[15px] focus-visible:border-cyan-700 focus-visible:ring-cyan-700/15"
+              aria-invalid={Boolean(errors.password_confirmation)}
+              aria-describedby={
+                errors.password_confirmation ? 'password-confirmation-error' : undefined
+              }
+              {...register('password_confirmation')}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 size-10 -translate-y-1/2 rounded-lg text-neutral-500 hover:bg-cyan-50 hover:text-cyan-800 focus-visible:ring-cyan-700/20"
+              onClick={() => setShowConfirmation((value) => !value)}
+              aria-label={showConfirmation ? 'Ocultar confirmación' : 'Mostrar confirmación'}
+              aria-pressed={showConfirmation}
+            >
+              {showConfirmation ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </Button>
+          </div>
+          {errors.password_confirmation && (
+            <p id="password-confirmation-error" className="text-sm text-red-700">
+              {errors.password_confirmation.message}
+            </p>
+          )}
+        </div>
+
+        <Button type="submit" className="h-12 w-full rounded-xl bg-cyan-800 text-[15px] font-semibold text-white shadow-md shadow-cyan-900/10 hover:bg-cyan-700 focus-visible:ring-cyan-700/25" disabled={isSubmitting || isGoogleLoading}>
+          {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+          {isSubmitting ? 'Creando cuenta…' : 'Crear cuenta'}
         </Button>
-      </CardContent>
-      <CardFooter className="justify-center text-sm text-muted-foreground">
-        <span>
-          Ya tienes cuenta?{' '}
-          <Link href={`/login?next=${encodeURIComponent(nextPath)}`} className="font-medium text-foreground underline-offset-4 hover:underline">
-            Inicia sesion
-          </Link>
-        </span>
-      </CardFooter>
-    </Card>
+      </form>
+
+      <GoogleAuthButton loading={isGoogleLoading} disabled={isSubmitting} onClick={handleGoogleRegister} />
+
+      <p className="mt-6 text-center text-sm text-neutral-600">
+        ¿Ya tienes cuenta?{' '}
+        <Link
+          href={`/login?next=${encodeURIComponent(nextPath)}`}
+          className="font-semibold text-cyan-800 underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-700/20"
+        >
+          Inicia sesión
+        </Link>
+      </p>
+    </>
   );
 }

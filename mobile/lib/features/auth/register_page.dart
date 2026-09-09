@@ -47,15 +47,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const AuthBrandHeader(),
-            const SizedBox(height: 26),
-            const AuthIntro(
-              eyebrow: 'Solicitud de acceso',
-              title: 'Crea tu cuenta',
-              description:
-                  'Regístrate y un administrador revisará tu solicitud antes de habilitar el panel.',
+            AuthModeSwitch(
+              registering: true,
+              enabled: !isBusy,
+              onChanged: () => context.go('/login'),
             ),
-            const SizedBox(height: 26),
+            const SizedBox(height: 20),
             if (_formError != null) ...[
               AuthErrorBanner(message: _formError!),
               const SizedBox(height: 18),
@@ -75,7 +72,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     autofillHints: const [AutofillHints.name],
                     validator: AuthValidators.name,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   AuthTextField(
                     fieldKey: const Key('register-email-field'),
                     label: 'Correo electrónico',
@@ -87,7 +84,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     autofillHints: const [AutofillHints.email],
                     validator: AuthValidators.email,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   AuthTextField(
                     fieldKey: const Key('register-password-field'),
                     label: 'Contraseña',
@@ -113,7 +110,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   AuthTextField(
                     fieldKey: const Key('register-confirmation-field'),
                     label: 'Confirmar contraseña',
@@ -149,7 +146,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 16),
                   AuthPrimaryButton(
                     buttonKey: const Key('register-submit-button'),
                     label: 'Crear cuenta',
@@ -160,7 +157,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               ),
             ),
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 22),
+              padding: EdgeInsets.symmetric(vertical: 10),
               child: AuthDivider(),
             ),
             GoogleAuthButton(
@@ -168,30 +165,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               loading: _googleLoading,
               onPressed: isBusy ? null : () => _submitGoogle(googleConfigured),
             ),
-            const SizedBox(height: 20),
-            Wrap(
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                const Text(
-                  '¿Ya tienes cuenta?',
-                  style: TextStyle(color: authMuted),
-                ),
-                TextButton(
-                  key: const Key('back-to-login-button'),
-                  onPressed: isBusy ? null : () => context.go('/login'),
-                  child: const Text(
-                    'Inicia sesión',
-                    style: TextStyle(
-                      color: authPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
+            const AuthSecurityNote(
+              message: 'Un administrador revisará tu solicitud de acceso.',
             ),
-            const Divider(height: 1, color: Color(0xFFDADDDC)),
-            const AuthSecurityNote(),
           ],
         ),
       ),

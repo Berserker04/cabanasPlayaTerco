@@ -1,6 +1,5 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 const authBackground = Color(0xFFF4F8F7);
 const authPrimary = Color(0xFF155E5B);
@@ -17,102 +16,153 @@ class AuthScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final keyboardOpen = media.viewInsets.bottom > 0;
-    final verticalPadding = keyboardOpen ? 18.0 : 30.0;
+    final reduceMotion = media.disableAnimations;
 
-    return Scaffold(
-      backgroundColor: authBackground,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const _AuthBackdrop(),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: const Color(0xFF082F2E),
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFF082F2E),
+        resizeToAvoidBottomInset: false,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const _AuthBackdrop(),
+            SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+                child: SingleChildScrollView(
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(24, verticalPadding, 24, 24),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: math.max(
-                        0,
-                        constraints.maxHeight - verticalPadding - 24,
-                      ),
-                    ),
-                    child: Align(
-                      alignment: keyboardOpen
-                          ? Alignment.topCenter
-                          : Alignment.center,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 430),
-                        child: Theme(
-                          data: Theme.of(context).copyWith(
-                            inputDecorationTheme: const InputDecorationTheme(
-                              filled: true,
-                              fillColor: Colors.white,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
+                  padding: EdgeInsets.fromLTRB(
+                    18,
+                    keyboardOpen ? 8 : 12,
+                    18,
+                    12,
+                  ),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 430),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const AuthBrandHeader(),
+                          const SizedBox(height: 12),
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0, end: 1),
+                            duration: reduceMotion
+                                ? Duration.zero
+                                : const Duration(milliseconds: 420),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, value, child) => Opacity(
+                              opacity: value,
+                              child: Transform.translate(
+                                offset: Offset(0, 12 * (1 - value)),
+                                child: child,
                               ),
-                              hintStyle: TextStyle(
-                                color: Color(0xFF9A9A9A),
-                                fontSize: 15,
+                            ),
+                            child: Container(
+                              key: const Key('auth-form-panel'),
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                color: authBackground.withValues(alpha: 0.97),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(color: Colors.white),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x26002120),
+                                    blurRadius: 30,
+                                    offset: Offset(0, 12),
+                                  ),
+                                ],
                               ),
-                              prefixIconColor: Color(0xFF8A8A8A),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(14),
+                              child: Theme(
+                                data: Theme.of(context).copyWith(
+                                  inputDecorationTheme:
+                                      const InputDecorationTheme(
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        isDense: true,
+                                        floatingLabelBehavior:
+                                            FloatingLabelBehavior.always,
+                                        constraints: BoxConstraints(
+                                          minHeight: 54,
+                                        ),
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 15,
+                                        ),
+                                        labelStyle: TextStyle(
+                                          color: Color(0xFF485B59),
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        hintStyle: TextStyle(
+                                          color: Color(0xFF788582),
+                                          fontSize: 14,
+                                        ),
+                                        prefixIconColor: Color(0xFF8A8A8A),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(14),
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: Color(0xFFDADDDC),
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(14),
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: Color(0xFFDADDDC),
+                                          ),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(14),
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: authPrimary,
+                                            width: 1.7,
+                                          ),
+                                        ),
+                                        errorBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(14),
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: Color(0xFFB42318),
+                                          ),
+                                        ),
+                                        focusedErrorBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(14),
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: Color(0xFFB42318),
+                                            width: 1.7,
+                                          ),
+                                        ),
+                                      ),
                                 ),
-                                borderSide: BorderSide(
-                                  color: Color(0xFFDADDDC),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(14),
-                                ),
-                                borderSide: BorderSide(
-                                  color: Color(0xFFDADDDC),
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(14),
-                                ),
-                                borderSide: BorderSide(
-                                  color: authPrimary,
-                                  width: 1.7,
-                                ),
-                              ),
-                              errorBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(14),
-                                ),
-                                borderSide: BorderSide(
-                                  color: Color(0xFFB42318),
-                                ),
-                              ),
-                              focusedErrorBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(14),
-                                ),
-                                borderSide: BorderSide(
-                                  color: Color(0xFFB42318),
-                                  width: 1.7,
-                                ),
+                                child: child,
                               ),
                             ),
                           ),
-                          child: child,
-                        ),
+                        ],
                       ),
                     ),
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -131,12 +181,32 @@ class AuthBrandHeader extends StatelessWidget {
           child: Image.asset(
             'assets/branding/terco_logo_nav.png',
             key: const Key('playa-terco-logo'),
-            width: 112,
-            height: 74,
+            width: 78,
+            height: 52,
             fit: BoxFit.contain,
           ),
         ),
-        const Spacer(),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Playa Terco',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                'Panel administrativo',
+                style: TextStyle(color: Color(0xFFDEEFEB), fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
@@ -161,6 +231,76 @@ class AuthBrandHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class AuthModeSwitch extends StatelessWidget {
+  const AuthModeSwitch({
+    super.key,
+    required this.registering,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final bool registering;
+  final bool enabled;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE6EEEB),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            _tab(
+              label: 'Iniciar sesión',
+              selected: !registering,
+              key: const Key('back-to-login-button'),
+            ),
+            _tab(
+              label: 'Crear cuenta',
+              selected: registering,
+              key: const Key('open-register-button'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tab({
+    required String label,
+    required bool selected,
+    required Key key,
+  }) {
+    return Expanded(
+      child: Semantics(
+        selected: selected,
+        child: TextButton(
+          key: key,
+          onPressed: enabled ? (selected ? () {} : onChanged) : null,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            backgroundColor: selected ? Colors.white : Colors.transparent,
+            foregroundColor: selected ? authPrimary : authMuted,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            textStyle: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+          child: Text(label, textAlign: TextAlign.center),
+        ),
+      ),
     );
   }
 }
@@ -244,35 +384,23 @@ class AuthTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF303333),
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          key: fieldKey,
-          controller: controller,
-          keyboardType: keyboardType,
-          textInputAction: textInputAction,
-          obscureText: obscureText,
-          autofillHints: autofillHints,
-          validator: validator,
-          onFieldSubmitted: onFieldSubmitted,
-          style: const TextStyle(color: authText, fontSize: 15),
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: Icon(icon, size: 20),
-            suffixIcon: suffixIcon,
-          ),
-        ),
-      ],
+    return TextFormField(
+      key: fieldKey,
+      controller: controller,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      obscureText: obscureText,
+      autofillHints: autofillHints,
+      validator: validator,
+      onFieldSubmitted: onFieldSubmitted,
+      style: const TextStyle(color: authText, fontSize: 15),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        errorMaxLines: 2,
+        prefixIcon: Icon(icon, size: 20),
+        suffixIcon: suffixIcon,
+      ),
     );
   }
 }
@@ -332,8 +460,8 @@ class AuthPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
       child: FilledButton(
         key: buttonKey,
         onPressed: loading ? null : onPressed,
@@ -355,7 +483,7 @@ class AuthPrimaryButton extends StatelessWidget {
                   color: Colors.white,
                 ),
               )
-            : Text(label),
+            : Text(label, textAlign: TextAlign.center),
       ),
     );
   }
@@ -375,61 +503,61 @@ class GoogleAuthButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
       child: OutlinedButton(
         key: const Key('google-auth-button'),
         onPressed: loading ? null : onPressed,
         style: OutlinedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: authText,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           side: const BorderSide(color: Color(0xFFDADDDC)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (loading)
-                const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: authPrimary,
-                  ),
-                )
-              else
-                const _GoogleMark(),
-              const SizedBox(width: 10),
-              Text(loading ? 'Conectando…' : 'Continuar con Google'),
-              if (!configured && !loading) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF5D6),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Text(
-                    'Pendiente',
-                    style: TextStyle(
-                      color: Color(0xFF7A5510),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (loading)
+              const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: authPrimary,
+                ),
+              )
+            else
+              const _GoogleMark(),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                loading ? 'Conectando…' : 'Continuar con Google',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            if (!configured && !loading) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF5D6),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'Pendiente',
+                  style: TextStyle(
+                    color: Color(0xFF7A5510),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -447,7 +575,7 @@ class AuthDivider extends StatelessWidget {
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
           child: Text(
-            'o continúa con',
+            'o',
             style: TextStyle(
               color: authMuted,
               fontSize: 12,
@@ -462,22 +590,31 @@ class AuthDivider extends StatelessWidget {
 }
 
 class AuthSecurityNote extends StatelessWidget {
-  const AuthSecurityNote({super.key});
+  const AuthSecurityNote({
+    super.key,
+    this.message = 'Acceso seguro a Playa Terco',
+  });
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 22),
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.verified_user_outlined, size: 17, color: authAccent),
-          SizedBox(width: 7),
+          const Icon(Icons.verified_user_outlined, size: 15, color: authAccent),
+          const SizedBox(width: 7),
           Flexible(
             child: Text(
-              'Acceso seguro al panel de Playa Terco',
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: authMuted, fontSize: 12),
+              style: const TextStyle(
+                color: authMuted,
+                fontSize: 11,
+                height: 1.4,
+              ),
             ),
           ),
         ],
@@ -542,38 +679,46 @@ class _AuthBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Stack(
-        children: [
-          Positioned(
-            right: -90,
-            top: -80,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [Color(0x554CD8D0), Color(0x004CD8D0)],
+    return ExcludeSemantics(
+      child: IgnorePointer(
+        child: ClipRect(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 1.04, end: 1),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 1800),
+            curve: Curves.easeOutCubic,
+            builder: (context, scale, child) =>
+                Transform.scale(scale: scale, child: child),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/branding/auth_sunset.jpg',
+                  key: const Key('auth-sunset-background'),
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(0.2, 0),
+                  cacheWidth: 1536,
+                  gaplessPlayback: true,
                 ),
-              ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0x99062220),
+                        Color(0x33062220),
+                        Color(0xB3082F2E),
+                      ],
+                      stops: [0, 0.45, 1],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Positioned(
-            left: -110,
-            bottom: -120,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [Color(0x66FCE7B2), Color(0x00FCE7B2)],
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

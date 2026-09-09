@@ -4,6 +4,7 @@ import { RegisterForm } from './register-form';
 
 export const metadata: Metadata = {
   title: 'Registrarse',
+  description: 'Crea tu cuenta para organizar tus reservas y compartir tu experiencia en Playa Terco.',
 };
 
 type RegisterPageProps = {
@@ -17,13 +18,9 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   const params = await searchParams;
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
-      <div className="w-full max-w-md">
-        <RegisterForm
-          nextPath={sanitizeLocalPath(firstStringParam(params?.next))}
-          oauthError={firstStringParam(params?.error)}
-        />
-      </div>
-    </main>
+    <RegisterForm
+      nextPath={sanitizeLocalPath(firstStringParam(params?.next))}
+      oauthError={firstStringParam(params?.error)}
+    />
   );
 }

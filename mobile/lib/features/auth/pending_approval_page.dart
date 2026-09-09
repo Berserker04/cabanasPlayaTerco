@@ -15,8 +15,6 @@ class PendingApprovalPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const AuthBrandHeader(),
-          const SizedBox(height: 38),
           Container(
             width: 72,
             height: 72,

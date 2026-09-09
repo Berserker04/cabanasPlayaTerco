@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\GoogleIdentityVerifier;
+use Firebase\JWT\JWT;
 use Google\Auth\AccessToken;
 use LogicException;
 use Throwable;
@@ -10,6 +11,10 @@ use UnexpectedValueException;
 
 final class GoogleIdTokenVerifier implements GoogleIdentityVerifier
 {
+    private const CLOCK_SKEW_SECONDS = 60;
+
+    public function __construct(private readonly AccessToken $accessToken) {}
+
     /**
      * @return array{sub: string, email: string, name: string, avatar: string|null}
      */
@@ -21,10 +26,16 @@ final class GoogleIdTokenVerifier implements GoogleIdentityVerifier
             throw new LogicException('Inicio de sesión con Google no está configurado.');
         }
 
+        $previousLeeway = JWT::$leeway;
+
         try {
-            $claims = (array) (new AccessToken)->verify($idToken);
+            // Google's clock and the API host can differ slightly for newly issued tokens.
+            JWT::$leeway = self::CLOCK_SKEW_SECONDS;
+            $claims = (array) $this->accessToken->verify($idToken, ['throwException' => true]);
         } catch (Throwable $exception) {
             throw new UnexpectedValueException('No pudimos validar la identidad de Google.', previous: $exception);
+        } finally {
+            JWT::$leeway = $previousLeeway;
         }
 
         $issuer = (string) ($claims['iss'] ?? '');

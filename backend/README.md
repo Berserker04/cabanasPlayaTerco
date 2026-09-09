@@ -63,6 +63,26 @@ php artisan config:cache
 php artisan route:cache
 ```
 
+## Google en la web local
+
+El flujo web usa Laravel Socialite y necesita el ID y el secreto del cliente OAuth
+de tipo **Aplicación web** en el `.env` privado del backend:
+
+```env
+APP_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:4050
+GOOGLE_CLIENT_ID=ID_DEL_CLIENTE_WEB
+GOOGLE_CLIENT_SECRET=SECRETO_DEL_CLIENTE_WEB
+GOOGLE_REDIRECT_URI="${APP_URL}/api/v1/auth/google/callback"
+```
+
+En Google Cloud, añade `http://localhost:8000/api/v1/auth/google/callback` a los
+**URIs de redireccionamiento autorizados** de ese cliente. El retorno debe coincidir
+con `GOOGLE_REDIRECT_URI`. Después de cambiar el `.env`, ejecuta
+`php artisan config:clear`. El secreto permanece en Laravel; no se incorpora al
+frontend ni a Flutter. Si el proyecto OAuth está en modo de prueba, autoriza la
+cuenta con la que probarás el acceso.
+
 ## Notas
 
 - No configures `REDIS_HOST`, `SESSION_DRIVER=redis`, `CACHE_STORE=redis` ni `QUEUE_CONNECTION=redis` en Hostinger si no tienes Redis contratado.
