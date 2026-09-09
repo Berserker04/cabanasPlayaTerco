@@ -28,6 +28,7 @@ export interface Post {
   body?: string;
   featured_image: string | null;
   cover_image_path?: string | null;
+  cover_media_id?: number | null;
   status: PostStatus;
   status_label: string;
   published_at: string | null;
@@ -68,6 +69,8 @@ export interface Comment {
   body: string;
   status: string;
   parent_id: number | null;
+  parent?: Pick<Comment, 'id' | 'body' | 'author_name' | 'status'> | null;
+  replies_count?: number;
   created_at: string;
   replies?: Comment[];
   user?: { id: number; name: string; avatar: string | null };

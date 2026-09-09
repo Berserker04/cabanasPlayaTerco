@@ -14,7 +14,7 @@ class StoreCommentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'body'      => ['required', 'string', 'max:2000'],
+            'body' => ['required', 'string', 'min:3', 'max:2000'],
             'parent_id' => ['nullable', 'exists:comments,id'],
         ];
     }
@@ -23,7 +23,8 @@ class StoreCommentRequest extends FormRequest
     {
         return [
             'body.required' => 'El comentario es obligatorio.',
-            'body.max'      => 'El comentario no puede superar los 2000 caracteres.',
+            'body.min' => 'El comentario debe tener al menos 3 caracteres.',
+            'body.max' => 'El comentario no puede superar los 2000 caracteres.',
         ];
     }
 }

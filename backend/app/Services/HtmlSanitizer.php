@@ -21,7 +21,8 @@ class HtmlSanitizer
         $config->set('Core.Encoding', 'UTF-8');
         $config->set('HTML.Doctype', 'HTML 4.01 Transitional');
         $config->set('HTML.DefinitionID', 'cabanas_blog_content');
-        $config->set('HTML.DefinitionRev', 1);
+        $config->set('HTML.DefinitionRev', 2);
+        $config->set('URI.AllowedSchemes', ['http' => true, 'https' => true, 'mailto' => true]);
         $config->set('HTML.SafeIframe', true);
         $config->set('URI.SafeIframeRegexp', '%^(https?:)?//(www\.youtube\.com/embed/|player\.vimeo\.com/video/)%');
         $config->set('Attr.AllowedFrameTargets', ['_blank']);
@@ -48,7 +49,7 @@ class HtmlSanitizer
                 'hr',
                 'pre',
                 'code',
-                'img[src|alt|title|width|height]',
+                'img[src|alt|title|width|height|data-size|data-align]',
                 'video[src|controls|poster|width|height|preload]',
                 'source[src|type]',
                 'iframe[src|width|height|frameborder]',
@@ -56,6 +57,8 @@ class HtmlSanitizer
         );
 
         if ($definition = $config->maybeGetRawHTMLDefinition()) {
+            $definition->addAttribute('img', 'data-size', 'Enum#small,medium,wide');
+            $definition->addAttribute('img', 'data-align', 'Enum#left,center,right');
             $definition->addElement('video', 'Block', 'Optional: (source)*', 'Common', [
                 'src' => 'URI',
                 'controls' => 'Bool',
@@ -80,6 +83,8 @@ class HtmlSanitizer
 
     public function plainText(?string $html, int $limit = 240): string
     {
-        return Str::limit(trim(preg_replace('/\s+/', ' ', strip_tags((string) $html)) ?: ''), $limit);
+        $text = html_entity_decode(strip_tags((string) $html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return Str::limit(trim(preg_replace('/[\s\x{00A0}\x{200B}]+/u', ' ', $text) ?: ''), $limit);
     }
 }

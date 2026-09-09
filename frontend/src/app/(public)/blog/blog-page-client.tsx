@@ -2,245 +2,257 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, LoaderCircle, Search, Tag } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { useEffect } from 'react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/use-auth';
 import { api } from '@/lib/api';
-import type { ApiListResponse } from '@/types/api';
-import type { BlogCategory, BlogListResponse, BlogTag, Post, PostType } from '@/types/blog';
+import { blogDate, blogQuery } from '@/lib/blog-utils';
+import {
+  BlogError,
+  BlogLoading,
+  BlogPagination,
+  useBlogFilters,
+  useBlogSearch,
+} from '@/components/blog/blog-ui';
+import type { BlogCategory, BlogListResponse, BlogTag } from '@/types/blog';
 
-const heroImage = '/assets/imagenes/240518846_4193049004078113_944283279498408299_n.jpg';
-
-function buildQuery(params: Record<string, string | number | undefined>) {
-  const searchParams = new URLSearchParams();
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== '') {
-      searchParams.set(key, String(value));
-    }
-  });
-
-  const query = searchParams.toString();
-
-  return query ? `?${query}` : '';
-}
-
-function formatDate(value?: string | null) {
-  if (!value) {
-    return '';
-  }
-
-  return new Intl.DateTimeFormat('es-CO', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(value));
-}
-
-function postLabel(type: PostType) {
-  return type === 'experience' ? 'Experiencia' : 'Articulo';
-}
-
-function PostCard({ post }: { post: Post }) {
-  return (
-    <article className="group overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <Link href={`/blog/${post.slug}`} className="block">
-        {post.featured_image ? (
-          <img src={post.featured_image} alt={post.title} className="aspect-[16/9] w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
-        ) : (
-          <div className="aspect-[16/9] bg-gradient-to-br from-cyan-900 via-neutral-900 to-emerald-900" />
-        )}
-      </Link>
-      <div className="p-5">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant="outline" className={post.type === 'experience' ? 'border-cyan-200 bg-cyan-50 text-cyan-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}>
-            {postLabel(post.type)}
-          </Badge>
-          <span>{formatDate(post.published_at ?? post.created_at)}</span>
-          {post.comments_count !== undefined ? <span>{post.comments_count} comentario(s)</span> : null}
-        </div>
-        <h2 className="mt-3 line-clamp-2 text-xl font-semibold tracking-normal text-neutral-950">
-          <Link href={`/blog/${post.slug}`}>{post.title}</Link>
-        </h2>
-        <p className="mt-3 line-clamp-3 text-sm leading-6 text-neutral-600">
-          {post.summary || post.excerpt || 'Una historia desde Playa Terco.'}
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-          <span>{post.author?.name ?? 'Cabanas Playa Terco'}</span>
-          {post.travel_style ? <span>{post.travel_style}</span> : null}
-          {post.media_count > 0 ? <span>{post.media_count} medio(s)</span> : null}
-        </div>
-      </div>
-    </article>
-  );
-}
-
+const heroImage =
+  '/assets/imagenes/240518846_4193049004078113_944283279498408299_n.jpg';
 export function BlogPageClient() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [type, setType] = useState<PostType | 'all'>('all');
-  const [category, setCategory] = useState('all');
-  const [tag, setTag] = useState('all');
-
-  const postsQuery = useQuery({
-    queryKey: ['posts', page, search, type, category, tag],
+  const { params, update } = useBlogFilters();
+  const { isAuthenticated } = useAuth();
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const search = params.get('search') ?? '';
+  const debounced = useBlogSearch(search);
+  const type = params.get('type') ?? 'all';
+  const category = params.get('category') ?? 'all';
+  const tag = params.get('tag') ?? 'all';
+  const query = useQuery({
+    queryKey: ['posts', page, debounced, type, category, tag],
     queryFn: () =>
       api.get<BlogListResponse>(
-        `/posts${buildQuery({
-          page,
-          per_page: 9,
-          search,
-          type: type === 'all' ? undefined : type,
-          category: category === 'all' ? undefined : category,
-          tag: tag === 'all' ? undefined : tag,
-        })}`,
+        '/posts' +
+          blogQuery({
+            page,
+            per_page: 9,
+            search: debounced,
+            type,
+            category,
+            tag,
+          }),
       ),
   });
-
-  const categoriesQuery = useQuery({
+  const categories = useQuery({
     queryKey: ['blog-categories'],
-    queryFn: () => api.get<ApiListResponse<BlogCategory>>('/categories'),
+    queryFn: () => api.get<{ data: BlogCategory[] }>('/categories'),
   });
-
-  const tagsQuery = useQuery({
+  const tags = useQuery({
     queryKey: ['blog-tags'],
-    queryFn: () => api.get<ApiListResponse<BlogTag>>('/tags'),
+    queryFn: () => api.get<{ data: BlogTag[] }>('/tags'),
   });
-
-  const posts = useMemo(() => postsQuery.data?.data ?? [], [postsQuery.data?.data]);
-  const meta = postsQuery.data?.meta;
-  const lastPage = meta?.last_page ?? 1;
-
+  const last = query.data?.meta.last_page;
+  useEffect(() => {
+    if (last && page > last) update({ page: last });
+  }, [last, page, update]);
+  const from = '/blog' + blogQuery({ page, search, type, category, tag });
+  const posts = query.data?.data ?? [];
   return (
     <>
       <section className="relative isolate overflow-hidden bg-neutral-950 text-white">
-        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${heroImage})` }} />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,28,28,0.94),rgba(4,28,28,0.66),rgba(4,28,28,0.28))]" />
-        <div className="container relative mx-auto px-4 py-16 sm:py-20">
-          <Badge className="mb-5 bg-cyan-400 text-cyan-950 hover:bg-cyan-300">Blog de viajeros</Badge>
-          <h1 className="max-w-3xl text-3xl font-bold tracking-normal sm:text-5xl">
-            Experiencias, guias y relatos desde Playa Terco
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${heroImage})` }}
+        />
+        <div className="absolute inset-0 bg-neutral-950/75" />
+        <div className="container relative mx-auto px-4 py-12 sm:py-16">
+          <Badge className="mb-4 bg-cyan-300 text-cyan-950">
+            Blog de viajeros
+          </Badge>
+          <h1 className="max-w-3xl text-3xl font-bold sm:text-5xl">
+            Historias desde Playa Terco
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-cyan-50">
-            Historias de turistas registrados y articulos del equipo para preparar mejor tu visita al Pacifico.
+          <p className="mt-5 max-w-2xl leading-8 text-cyan-50">
+            Experiencias de viajeros y artículos del equipo para inspirar tu
+            próxima visita al Pacífico.
           </p>
+          <Button
+            asChild
+            className="mt-6 bg-white text-cyan-950 hover:bg-cyan-50"
+          >
+            <Link
+              href={
+                isAuthenticated
+                  ? '/perfil?tab=blog'
+                  : '/login?next=%2Fperfil%3Ftab%3Dblog'
+              }
+            >
+              <Plus />
+              Compartir mi experiencia
+            </Link>
+          </Button>
         </div>
       </section>
-
-      <section className="bg-stone-50 py-10 sm:py-12">
-        <div className="container mx-auto px-4">
-          <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_150px_150px_150px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Buscar por titulo, lugar o recomendacion"
-                  className="pl-9"
-                />
-              </div>
-              <Select value={type} onValueChange={(value) => {
-                setType(value as PostType | 'all');
-                setPage(1);
-              }}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="experience">Experiencias</SelectItem>
-                  <SelectItem value="article">Articulos</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={category} onValueChange={(value) => {
-                setCategory(value);
-                setPage(1);
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Categorias</SelectItem>
-                  {(categoriesQuery.data?.data ?? []).map((item) => (
-                    <SelectItem key={item.id} value={item.slug}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={tag} onValueChange={(value) => {
-                setTag(value);
-                setPage(1);
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Etiqueta" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Etiquetas</SelectItem>
-                  {(tagsQuery.data?.data ?? []).map((item) => (
-                    <SelectItem key={item.id} value={item.slug}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      <section className="bg-stone-50 py-8 sm:py-10">
+        <div className="container mx-auto space-y-6 px-4">
+          <div className="grid items-end gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_170px_170px_auto]">
+            <div className="space-y-1">
+              <Label htmlFor="public-blog-search">Buscar historias</Label>
+              <Input
+                id="public-blog-search"
+                value={search}
+                placeholder="Título, lugar o recomendación"
+                onChange={(e) => update({ search: e.target.value, page: 1 })}
+              />
             </div>
+            <label className="grid gap-1 text-sm font-medium">
+              Tipo
+              <select
+                className="h-10 rounded-md border bg-white px-3 font-normal"
+                value={type}
+                onChange={(e) => update({ type: e.target.value, page: 1 })}
+              >
+                <option value="all">Todos</option>
+                <option value="experience">Experiencias</option>
+                <option value="article">Artículos</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Categoría
+              <select
+                className="h-10 rounded-md border bg-white px-3 font-normal"
+                value={category}
+                disabled={categories.isLoading || categories.isError}
+                onChange={(e) => update({ category: e.target.value, page: 1 })}
+              >
+                <option value="all">Todas</option>
+                {categories.data?.data.map((item) => (
+                  <option key={item.id} value={item.slug}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Etiqueta
+              <select
+                className="h-10 rounded-md border bg-white px-3 font-normal"
+                value={tag}
+                disabled={tags.isLoading || tags.isError}
+                onChange={(e) => update({ tag: e.target.value, page: 1 })}
+              >
+                <option value="all">Todas</option>
+                {tags.data?.data.map((item) => (
+                  <option key={item.id} value={item.slug}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                update({
+                  search: null,
+                  type: null,
+                  category: null,
+                  tag: null,
+                  page: 1,
+                })
+              }
+            >
+              Limpiar
+            </Button>
           </div>
-
-          <div className="mt-8 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-cyan-700">Publicaciones</p>
-              <h2 className="mt-2 text-2xl font-bold tracking-normal text-neutral-950">Ultimas historias</h2>
-            </div>
-            {postsQuery.isFetching ? <LoaderCircle className="h-5 w-5 animate-spin text-cyan-700" /> : null}
-          </div>
-
-          {postsQuery.isError ? (
-            <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
-              No pudimos cargar el blog ahora.
-            </div>
-          ) : posts.length > 0 ? (
-            <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {posts.map((post) => (
-                <PostCard key={post.id} post={post} />
-              ))}
+          {(categories.isError || tags.isError) && (
+            <BlogError
+              message="No pudimos cargar todos los filtros."
+              retry={() => {
+                void categories.refetch();
+                void tags.refetch();
+              }}
+            />
+          )}
+          <h2 className="text-2xl font-bold">Últimas historias</h2>
+          {query.isLoading ? (
+            <BlogLoading />
+          ) : query.isError ? (
+            <BlogError retry={() => void query.refetch()} />
+          ) : posts.length ? (
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {posts.map((post) => {
+                const href = `/blog/${post.slug}?from=${encodeURIComponent(from)}`;
+                return (
+                  <article
+                    key={post.id}
+                    className="min-w-0 overflow-hidden rounded-lg border bg-white shadow-sm"
+                  >
+                    {post.featured_image && (
+                      <Link href={href} tabIndex={-1} aria-hidden="true">
+                        <img
+                          src={post.featured_image}
+                          alt=""
+                          loading="lazy"
+                          className="aspect-video w-full object-cover"
+                        />
+                      </Link>
+                    )}
+                    <div className="space-y-3 p-5">
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline">
+                          {post.type === 'experience'
+                            ? 'Experiencia'
+                            : 'Artículo'}
+                        </Badge>
+                        <span>{blogDate(post.published_at)}</span>
+                      </div>
+                      <h3 className="break-words text-xl font-semibold">
+                        <Link
+                          className="hover:text-cyan-800 hover:underline"
+                          href={href}
+                        >
+                          {post.title}
+                        </Link>
+                      </h3>
+                      <p className="line-clamp-3 break-words text-sm leading-7 text-neutral-600">
+                        {post.excerpt || post.summary}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {post.author?.name || 'Playa Terco'} ·{' '}
+                        {post.comments_count ?? 0} comentarios
+                      </p>
+                      <Link
+                        className="inline-block py-2 text-sm font-medium text-cyan-800 underline underline-offset-4"
+                        href={href}
+                      >
+                        Leer historia
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           ) : (
-            <div className="mt-5 rounded-lg border bg-white p-8 text-center">
-              <Tag className="mx-auto h-10 w-10 text-cyan-700" aria-hidden="true" />
-              <h3 className="mt-4 text-lg font-semibold text-neutral-950">No hay publicaciones con estos filtros</h3>
-              <p className="mt-2 text-sm text-neutral-600">Prueba cambiando la busqueda o el tipo de contenido.</p>
+            <div className="rounded-lg border bg-white p-8 text-center">
+              <h3 className="text-lg font-semibold">
+                No hay historias con estos filtros
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Prueba otra búsqueda o limpia los filtros.
+              </p>
             </div>
           )}
-
-          {lastPage > 1 ? (
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
-                <ChevronLeft className="h-4 w-4" />
-                Anterior
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Pagina {page} de {lastPage}
-              </span>
-              <Button type="button" variant="outline" size="sm" disabled={page >= lastPage} onClick={() => setPage((value) => Math.min(lastPage, value + 1))}>
-                Siguiente
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : null}
+          {!query.isError && (
+            <BlogPagination
+              meta={query.data?.meta}
+              page={page}
+              onPage={(value) => update({ page: value })}
+              busy={query.isFetching}
+            />
+          )}
         </div>
       </section>
     </>

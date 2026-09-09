@@ -1,6 +1,6 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -128,6 +128,9 @@
 @layer components {
   .blog-content {
     @apply text-neutral-800;
+    overflow-wrap: anywhere;
+    max-width: 760px;
+    margin-inline: auto;
   }
 
   .blog-content h2 {
@@ -169,7 +172,46 @@
 
   .blog-content img,
   .blog-content video {
-    @apply my-5 max-h-[620px] w-full rounded-lg object-cover;
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: min(100%, 560px);
+    max-height: 480px;
+    margin: 1.25rem auto;
+    border-radius: 0.5rem;
+    object-fit: contain;
+  }
+
+  .blog-content img[data-size='small'] {
+    max-width: min(100%, 320px);
+  }
+  .blog-content img[data-size='medium'] {
+    max-width: min(100%, 560px);
+  }
+  .blog-content img[data-size='wide'] {
+    max-width: min(100%, 760px);
+  }
+  .blog-content img[data-align='left'] {
+    margin-left: 0;
+    margin-right: auto;
+  }
+  .blog-content img[data-align='right'] {
+    margin-left: auto;
+    margin-right: 0;
+  }
+  .blog-content img[role='button'] {
+    cursor: zoom-in;
+  }
+  .blog-content img:focus-visible,
+  .blog-content .ProseMirror-selectednode {
+    outline: 3px solid #0e7490;
+    outline-offset: 3px;
+  }
+  .blog-content > :first-child {
+    margin-top: 0;
+  }
+  .blog-content iframe {
+    max-width: 100%;
   }
 
   .blog-content pre {

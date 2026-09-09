@@ -15,20 +15,27 @@ class CommentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $comments = Comment::query()
-            ->with(['user', 'commentable'])
+            ->whereHasMorph('commentable', [Post::class])
+            ->with(['user', 'commentable', 'parent.user'])
+            ->withCount('replies')
+            ->when($request->search, fn ($q, $search) => $q->where(fn ($q) => $q
+                ->where('body', 'like', "%{$search}%")->orWhere('author_name', 'like', "%{$search}%")
+                ->orWhereHasMorph('commentable', [Post::class], fn ($post) => $post->where('title', 'like', "%{$search}%"))))
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
             ->when($request->post_id, fn ($q, $postId) => $q
                 ->where('commentable_type', Post::class)
                 ->where('commentable_id', $postId))
             ->latest()
-            ->paginate(20);
+            ->orderByDesc('id')
+            ->paginate(max(1, min($request->integer('per_page', 20), 100)));
 
         return response()->json([
             'data' => CommentResource::collection($comments),
             'meta' => [
                 'current_page' => $comments->currentPage(),
-                'per_page'     => $comments->perPage(),
-                'total'        => $comments->total(),
+                'last_page' => $comments->lastPage(),
+                'per_page' => $comments->perPage(),
+                'total' => $comments->total(),
             ],
         ]);
     }
@@ -38,7 +45,7 @@ class CommentController extends Controller
         $comment->update($request->validated());
 
         return response()->json([
-            'data'    => new CommentResource($comment->fresh()->load('user')),
+            'data' => new CommentResource($comment->fresh()->load('user')),
             'message' => 'Comentario actualizado.',
         ]);
     }

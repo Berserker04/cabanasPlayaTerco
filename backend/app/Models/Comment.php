@@ -49,4 +49,10 @@ class Comment extends Model
     {
         return $query->where('status', 'approved');
     }
+
+    public function scopeVisibleInBlog(Builder $query): Builder
+    {
+        return $query->approved()->where(fn (Builder $query) => $query->whereNull('parent_id')
+            ->orWhereHas('parent', fn (Builder $parent) => $parent->approved()->whereNull('parent_id')));
+    }
 }

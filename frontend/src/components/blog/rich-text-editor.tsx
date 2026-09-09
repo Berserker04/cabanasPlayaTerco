@@ -1,12 +1,11 @@
 'use client';
 
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, mergeAttributes, type Editor } from '@tiptap/core';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
-import Underline from '@tiptap/extension-underline';
-import { EditorContent, useEditor } from '@tiptap/react';
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
   AlignCenter,
@@ -24,35 +23,58 @@ import {
   Redo2,
   UnderlineIcon,
   Undo2,
-  Video,
+  Images,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import type { PostMedia } from '@/types/blog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  imageSizes,
+  imageAlignments,
+  mediaUrlKey,
+  validBlogLink,
+} from '@/lib/blog-utils';
+
+const BlogImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      size: {
+        default: 'medium',
+        parseHTML: (el) => el.getAttribute('data-size') || 'medium',
+        renderHTML: (attrs) => ({ 'data-size': attrs.size }),
+      },
+      align: {
+        default: 'center',
+        parseHTML: (el) => el.getAttribute('data-align') || 'center',
+        renderHTML: (attrs) => ({ 'data-align': attrs.align }),
+      },
+    };
+  },
+});
 
 const VideoNode = Node.create({
   name: 'video',
   group: 'block',
   atom: true,
   draggable: true,
-
   addAttributes() {
     return {
       src: { default: null },
       controls: { default: true },
       poster: { default: null },
-      width: { default: null },
-      height: { default: null },
-      preload: { default: 'metadata' },
     };
   },
-
   parseHTML() {
     return [{ tag: 'video' }];
   },
-
   renderHTML({ HTMLAttributes }) {
     return [
       'video',
@@ -64,208 +86,459 @@ const VideoNode = Node.create({
   },
 });
 
-type Props = {
-  value: string;
-  onChange: (value: string) => void;
-  onUploadMedia?: (file: File) => Promise<PostMedia>;
-  placeholder?: string;
-  className?: string;
-};
+export function removeEditorMedia(editor: Editor | null, url: string) {
+  if (!editor) return;
+  const positions: { pos: number; size: number }[] = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (
+      ['image', 'video'].includes(node.type.name) &&
+      mediaUrlKey(node.attrs.src) === mediaUrlKey(url)
+    )
+      positions.push({ pos, size: node.nodeSize });
+  });
+  const tr = editor.state.tr;
+  positions.reverse().forEach(({ pos, size }) => tr.delete(pos, pos + size));
+  editor.view.dispatch(tr);
+}
 
-type ToolButtonProps = {
+export function updateEditorAlt(
+  editor: Editor | null,
+  url: string,
+  alt: string,
+) {
+  if (!editor) return;
+  const tr = editor.state.tr;
+  editor.state.doc.descendants((node, pos) => {
+    if (
+      node.type.name === 'image' &&
+      mediaUrlKey(node.attrs.src) === mediaUrlKey(url)
+    )
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, alt });
+  });
+  editor.view.dispatch(tr);
+}
+
+function Tool({
+  label,
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
   label: string;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
-};
-
-function ToolButton({ label, active, disabled, onClick, children }: ToolButtonProps) {
+}) {
   return (
     <Button
       type="button"
-      size="icon-sm"
+      size="icon"
       variant={active ? 'default' : 'ghost'}
-      className={cn(active && 'bg-cyan-700 text-white hover:bg-cyan-800')}
       title={label}
       aria-label={label}
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
+      className={active ? 'bg-cyan-700 text-white' : ''}
     >
       {children}
     </Button>
   );
 }
 
+function toolbarState(editor: Editor | null) {
+  if (!editor) return null;
+  return {
+    h2: editor.isActive('heading', { level: 2 }),
+    h3: editor.isActive('heading', { level: 3 }),
+    bold: editor.isActive('bold'),
+    italic: editor.isActive('italic'),
+    underline: editor.isActive('underline'),
+    bullet: editor.isActive('bulletList'),
+    ordered: editor.isActive('orderedList'),
+    quote: editor.isActive('blockquote'),
+    link: editor.isActive('link'),
+    image: editor.isActive('image'),
+    video: editor.isActive('video'),
+    attrs: editor.getAttributes('image'),
+    undo: editor.can().undo(),
+    redo: editor.can().redo(),
+    left: editor.isActive({ textAlign: 'left' }),
+    center: editor.isActive({ textAlign: 'center' }),
+    right: editor.isActive({ textAlign: 'right' }),
+  };
+}
+
 export function RichTextEditor({
   value,
   onChange,
-  onUploadMedia,
-  placeholder = 'Cuenta tu experiencia con detalles, recomendaciones y momentos especiales.',
-  className,
-}: Props) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  onReady,
+  onUpload,
+  onLibrary,
+  onAltChange,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onReady: (editor: Editor) => void;
+  onUpload: () => void;
+  onLibrary: () => void;
+  onAltChange: (url: string, alt: string) => void;
+  disabled?: boolean;
+}) {
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [url, setUrl] = useState('');
+  const [linkError, setLinkError] = useState('');
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [2, 3, 4] },
+        link: false,
+        trailingNode: false,
       }),
-      Underline,
       Link.configure({
         openOnClick: false,
-        autolink: true,
         defaultProtocol: 'https',
-        HTMLAttributes: {
-          rel: 'noopener noreferrer',
-          target: '_blank',
-        },
+        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
       }),
-      Image.configure({
-        allowBase64: false,
-        HTMLAttributes: {
-          loading: 'lazy',
-        },
+      BlogImage.configure({ allowBase64: false }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Placeholder.configure({
+        placeholder:
+          'Cuenta cómo fue tu visita, qué disfrutaste y qué recomendarías a otros viajeros…',
       }),
-      TextAlign.configure({
-        types: ['heading', 'paragraph'],
-      }),
-      Placeholder.configure({ placeholder }),
       VideoNode,
     ],
     content: value,
     editorProps: {
       attributes: {
-        class:
-          'blog-content min-h-[280px] rounded-b-lg border-x border-b bg-white px-4 py-4 text-sm leading-7 outline-none focus:ring-2 focus:ring-cyan-600/30',
+        class: 'blog-content min-h-[380px] px-4 py-5 sm:px-7 outline-none',
+        role: 'textbox',
+        'aria-multiline': 'true',
+        'aria-label': 'Contenido',
+        id: 'blog-body',
       },
     },
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
   });
-
+  const state =
+    useEditorState({
+      editor,
+      selector: (snapshot) => toolbarState(snapshot.editor),
+    }) ?? toolbarState(editor);
   useEffect(() => {
-    if (!editor || editor.getHTML() === value) {
-      return;
-    }
-
-    editor.commands.setContent(value || '', { emitUpdate: false });
+    if (editor) onReady(editor);
+  }, [editor, onReady]);
+  useEffect(() => {
+    if (editor && editor.getHTML() !== (value || '<p></p>'))
+      editor
+        .chain()
+        .setMeta('addToHistory', false)
+        .setContent(value || '', { emitUpdate: false })
+        .run();
   }, [editor, value]);
-
-  async function handleMedia(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-
-    if (!file || !editor || !onUploadMedia) {
-      return;
-    }
-
-    const isVideo = file.type.startsWith('video/');
-    const maxBytes = isVideo ? 150 * 1024 * 1024 : 10 * 1024 * 1024;
-
-    if (file.size > maxBytes) {
-      toast.error(isVideo ? 'El video no puede superar 150 MB.' : 'La imagen no puede superar 10 MB.');
-      return;
-    }
-
-    setIsUploading(true);
-
-    try {
-      const media = await onUploadMedia(file);
-
-      if (media.type === 'video') {
-        editor.chain().focus().insertContent({ type: 'video', attrs: { src: media.url } }).run();
-      } else {
-        editor.chain().focus().setImage({ src: media.url, alt: media.alt ?? 'Imagen del blog' }).run();
-      }
-    } catch {
-      toast.error('No pudimos subir el archivo.');
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
-  function setLink() {
-    if (!editor) {
-      return;
-    }
-
-    const previousUrl = editor.getAttributes('link').href as string | undefined;
-    const url = window.prompt('URL del enlace', previousUrl ?? 'https://');
-
-    if (url === null) {
-      return;
-    }
-
-    if (url.trim() === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
-      return;
-    }
-
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
-  }
-
-  if (!editor) {
-    return <div className="min-h-[320px] rounded-lg border bg-white" />;
-  }
-
-  return (
-    <div className={cn('overflow-hidden rounded-lg', className)}>
-      <div className="flex flex-wrap items-center gap-1 rounded-t-lg border bg-stone-50 p-2">
-        <ToolButton label="Titulo 2" active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
-          <Heading2 />
-        </ToolButton>
-        <ToolButton label="Titulo 3" active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
-          <Heading3 />
-        </ToolButton>
-        <ToolButton label="Negrita" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
-          <Bold />
-        </ToolButton>
-        <ToolButton label="Cursiva" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}>
-          <Italic />
-        </ToolButton>
-        <ToolButton label="Subrayado" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()}>
-          <UnderlineIcon />
-        </ToolButton>
-        <ToolButton label="Lista" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()}>
-          <List />
-        </ToolButton>
-        <ToolButton label="Lista numerada" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-          <ListOrdered />
-        </ToolButton>
-        <ToolButton label="Cita" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()}>
-          <Quote />
-        </ToolButton>
-        <ToolButton label="Alinear izquierda" active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()}>
-          <AlignLeft />
-        </ToolButton>
-        <ToolButton label="Centrar" active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()}>
-          <AlignCenter />
-        </ToolButton>
-        <ToolButton label="Alinear derecha" active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()}>
-          <AlignRight />
-        </ToolButton>
-        <ToolButton label="Enlace" active={editor.isActive('link')} onClick={setLink}>
-          <LinkIcon />
-        </ToolButton>
-        <ToolButton label="Agregar imagen o video" disabled={!onUploadMedia || isUploading} onClick={() => inputRef.current?.click()}>
-          {isUploading ? <Video className="animate-pulse" /> : <ImagePlus />}
-        </ToolButton>
-        <ToolButton label="Deshacer" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
-          <Undo2 />
-        </ToolButton>
-        <ToolButton label="Rehacer" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
-          <Redo2 />
-        </ToolButton>
+  useEffect(() => {
+    editor?.setEditable(!disabled, false);
+  }, [editor, disabled]);
+  if (!editor || !state)
+    return (
+      <div
+        role="status"
+        className="min-h-[380px] rounded-lg border p-5 text-sm"
+      >
+        Preparando editor…
       </div>
+    );
+  return (
+    <div className="min-w-0 rounded-lg border bg-white focus-within:ring-2 focus-within:ring-cyan-600/30">
+      <div
+        role="toolbar"
+        aria-label="Formato del contenido"
+        className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 rounded-t-lg border-b bg-stone-50 p-2"
+      >
+        <Tool
+          label="Título 2"
+          active={state.h2}
+          disabled={disabled}
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 2 }).run()
+          }
+        >
+          <Heading2 />
+        </Tool>
+        <Tool
+          label="Título 3"
+          active={state.h3}
+          disabled={disabled}
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 3 }).run()
+          }
+        >
+          <Heading3 />
+        </Tool>
+        <Tool
+          label="Negrita"
+          active={state.bold}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+        >
+          <Bold />
+        </Tool>
+        <Tool
+          label="Cursiva"
+          active={state.italic}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+        >
+          <Italic />
+        </Tool>
+        <Tool
+          label="Subrayado"
+          active={state.underline}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+        >
+          <UnderlineIcon />
+        </Tool>
+        <Tool
+          label="Lista"
+          active={state.bullet}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+        >
+          <List />
+        </Tool>
+        <Tool
+          label="Lista numerada"
+          active={state.ordered}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        >
+          <ListOrdered />
+        </Tool>
+        <Tool
+          label="Cita"
+          active={state.quote}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        >
+          <Quote />
+        </Tool>
+        <Tool
+          label="Alinear texto a la izquierda"
+          active={state.left}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        >
+          <AlignLeft />
+        </Tool>
+        <Tool
+          label="Centrar texto"
+          active={state.center}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        >
+          <AlignCenter />
+        </Tool>
+        <Tool
+          label="Alinear texto a la derecha"
+          active={state.right}
+          disabled={disabled}
+          onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        >
+          <AlignRight />
+        </Tool>
+        <Tool
+          label="Editar enlace"
+          active={state.link}
+          disabled={disabled}
+          onClick={() => {
+            setUrl(editor.getAttributes('link').href || '');
+            setLinkError('');
+            setLinkOpen(true);
+          }}
+        >
+          <LinkIcon />
+        </Tool>
+        <Tool
+          label="Subir imagen o video"
+          disabled={disabled}
+          onClick={onUpload}
+        >
+          <ImagePlus />
+        </Tool>
+        <Tool
+          label="Usar archivo de la biblioteca"
+          disabled={disabled}
+          onClick={onLibrary}
+        >
+          <Images />
+        </Tool>
+        <Tool
+          label="Deshacer"
+          disabled={disabled || !state.undo}
+          onClick={() => editor.chain().focus().undo().run()}
+        >
+          <Undo2 />
+        </Tool>
+        <Tool
+          label="Rehacer"
+          disabled={disabled || !state.redo}
+          onClick={() => editor.chain().focus().redo().run()}
+        >
+          <Redo2 />
+        </Tool>
+      </div>
+      {state.image && (
+        <fieldset
+          disabled={disabled}
+          className="grid gap-3 border-b bg-cyan-50 p-3 sm:grid-cols-2"
+        >
+          <label className="grid gap-1 text-sm">
+            Tamaño de imagen
+            <select
+              aria-label="Tamaño de imagen"
+              className="h-10 rounded-md border bg-white px-2"
+              value={state.attrs.size || 'medium'}
+              onChange={(e) =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes('image', { size: e.target.value })
+                  .run()
+              }
+            >
+              {Object.entries(imageSizes).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm">
+            Alineación de imagen
+            <select
+              aria-label="Alineación de imagen"
+              className="h-10 rounded-md border bg-white px-2"
+              value={state.attrs.align || 'center'}
+              onChange={(e) =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes('image', { align: e.target.value })
+                  .run()
+              }
+            >
+              {Object.entries(imageAlignments).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm sm:col-span-2">
+            Descripción de la imagen
+            <Input
+              aria-label="Descripción de la imagen"
+              maxLength={255}
+              value={state.attrs.alt || ''}
+              onChange={(e) => {
+                editor
+                  .chain()
+                  .updateAttributes('image', { alt: e.target.value })
+                  .run();
+                onAltChange(String(state.attrs.src), e.target.value);
+              }}
+            />
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => editor.chain().focus().deleteSelection().run()}
+          >
+            Quitar del contenido
+          </Button>
+        </fieldset>
+      )}
+      {state.video && (
+        <Button
+          type="button"
+          disabled={disabled}
+          variant="outline"
+          className="m-3"
+          onClick={() => editor.chain().focus().deleteSelection().run()}
+        >
+          Quitar video del contenido
+        </Button>
+      )}
       <EditorContent editor={editor} />
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
-        className="hidden"
-        onChange={handleMedia}
-      />
+      <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
+        <DialogContent closeLabel="Cerrar enlace">
+          <DialogTitle>Enlace</DialogTitle>
+          <DialogDescription>
+            Selecciona texto para enlazarlo. Puedes usar una dirección web o un
+            correo con mailto:.
+          </DialogDescription>
+          <Label htmlFor="blog-link">Dirección</Label>
+          <Input
+            id="blog-link"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://ejemplo.com"
+            aria-invalid={!!linkError}
+          />
+          {linkError && (
+            <p role="alert" className="text-sm text-red-700">
+              {linkError}
+            </p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                editor
+                  .chain()
+                  .focus()
+                  .extendMarkRange('link')
+                  .unsetLink()
+                  .run();
+                setLinkOpen(false);
+              }}
+            >
+              Quitar enlace
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const href = validBlogLink(url.trim());
+                if (!href) {
+                  setLinkError(
+                    'Escribe una dirección válida que empiece por https://, http:// o mailto:.',
+                  );
+                  return;
+                }
+                const chain = editor.chain().focus().extendMarkRange('link');
+                if (editor.state.selection.empty && !state.link)
+                  chain
+                    .insertContent({
+                      type: 'text',
+                      text: href,
+                      marks: [{ type: 'link', attrs: { href } }],
+                    })
+                    .run();
+                else chain.setLink({ href }).run();
+                setLinkOpen(false);
+              }}
+            >
+              Aplicar enlace
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

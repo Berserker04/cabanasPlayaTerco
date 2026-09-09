@@ -2,54 +2,20 @@
 
 namespace App\Http\Requests\Admin;
 
-use App\Enums\PostStatus;
-use App\Enums\PostType;
+use App\Http\Requests\Concerns\ValidatesPost;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StorePostRequest extends FormRequest
 {
+    use ValidatesPost;
+
     public function authorize(): bool
     {
-        return $this->user()?->isStaff();
+        return (bool) $this->user()?->isStaff();
     }
 
     public function rules(): array
     {
-        return [
-            'title'            => ['required', 'string', 'max:255'],
-            'slug'             => ['required', 'string', 'max:255', 'unique:posts,slug'],
-            'excerpt'          => ['nullable', 'string', 'max:500'],
-            'summary'          => ['nullable', 'string', 'max:1200'],
-            'body'             => ['required', 'string'],
-            'featured_image'   => ['nullable', 'string'],
-            'cover_image_path'  => ['nullable', 'string'],
-            'type'             => ['sometimes', Rule::enum(PostType::class)],
-            'status'           => ['sometimes', Rule::enum(PostStatus::class)],
-            'published_at'     => ['nullable', 'date'],
-            'visit_date'       => ['nullable', 'date'],
-            'travel_style'     => ['nullable', 'string', 'max:80'],
-            'meta_title'       => ['nullable', 'string', 'max:255'],
-            'meta_description' => ['nullable', 'string', 'max:500'],
-            'cover_media_id'   => ['nullable', 'integer', 'exists:post_media,id'],
-            'media_ids'        => ['nullable', 'array', 'max:20'],
-            'media_ids.*'      => ['integer', 'distinct', 'exists:post_media,id'],
-            'category_ids'     => ['nullable', 'array'],
-            'category_ids.*'   => ['exists:categories,id'],
-            'tag_ids'          => ['nullable', 'array'],
-            'tag_ids.*'        => ['exists:tags,id'],
-            'tag_names'        => ['nullable', 'array', 'max:12'],
-            'tag_names.*'      => ['string', 'max:40'],
-        ];
-    }
-
-    public function messages(): array
-    {
-        return [
-            'title.required' => 'El título es obligatorio.',
-            'slug.required'  => 'El slug es obligatorio.',
-            'slug.unique'    => 'Este slug ya está en uso.',
-            'body.required'  => 'El contenido es obligatorio.',
-        ];
+        return $this->postRules(true, true);
     }
 }

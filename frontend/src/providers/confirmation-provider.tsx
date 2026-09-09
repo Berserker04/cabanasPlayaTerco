@@ -26,9 +26,11 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
   const resolve = useRef<((answer: boolean) => void) | null>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
   const confirm = useCallback(
     (text: string) =>
       new Promise<boolean>((done) => {
+        previousFocus.current = document.activeElement as HTMLElement | null;
         resolve.current?.(false);
         resolve.current = done;
         setMessage(text);
@@ -51,7 +53,17 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
         }}
       >
         <DialogContent
+          closeLabel="Cancelar confirmación"
           className="max-h-[85dvh] overflow-y-auto"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            requestAnimationFrame(() => {
+              const target = previousFocus.current;
+              if (target?.matches(':disabled'))
+                target.closest<HTMLElement>('[role="dialog"]')?.focus();
+              else if (target?.isConnected) target.focus();
+            });
+          }}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             cancelButton.current?.focus();

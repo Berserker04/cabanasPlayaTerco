@@ -7,258 +7,53 @@ use App\Http\Requests\Admin\StorePostRequest;
 use App\Http\Requests\Admin\UpdatePostRequest;
 use App\Http\Resources\PostResource;
 use App\Models\Post;
-use App\Models\PostMedia;
-use App\Models\Tag;
-use App\Services\FileUploadService;
-use App\Services\HtmlSanitizer;
+use App\Services\PostService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class PostController extends Controller
 {
-    public function __construct(
-        private readonly FileUploadService $uploadService,
-        private readonly HtmlSanitizer $sanitizer,
-    ) {}
+    public function __construct(private readonly PostService $posts) {}
 
     public function index(Request $request): JsonResponse
     {
-        $perPage = min($request->integer('per_page', 20), 100);
-
-        $posts = Post::query()
-            ->with(['author', 'categories', 'tags', 'media'])
-            ->withCount('comments')
+        $posts = Post::query()->with(['author', 'categories', 'tags', 'media'])->withCount('comments')
             ->when($request->status, fn ($query, $status) => $query->where('status', $status))
             ->when($request->type, fn ($query, $type) => $query->where('type', $type))
-            ->when($request->search, function ($query, string $search): void {
-                $query->where(function ($query) use ($search): void {
-                    $query->where('title', 'like', "%{$search}%")
-                        ->orWhere('excerpt', 'like', "%{$search}%")
-                        ->orWhere('summary', 'like', "%{$search}%")
-                        ->orWhere('body', 'like', "%{$search}%");
-                });
-            })
-            ->latest()
-            ->paginate($perPage);
+            ->when($request->search, fn ($query, $search) => $query->where(fn ($query) => $query
+                ->where('title', 'like', "%{$search}%")->orWhere('summary', 'like', "%{$search}%")
+                ->orWhere('body', 'like', "%{$search}%")->orWhereHas('author', fn ($author) => $author->where('name', 'like', "%{$search}%"))))
+            ->latest('updated_at')->orderByDesc('id')->paginate(max(1, min($request->integer('per_page', 20), 100)));
 
-        return response()->json([
-            'data' => PostResource::collection($posts),
-            'meta' => [
-                'current_page' => $posts->currentPage(),
-                'last_page' => $posts->lastPage(),
-                'per_page' => $posts->perPage(),
-                'total' => $posts->total(),
-            ],
-        ]);
+        return response()->json(['data' => PostResource::collection($posts), 'meta' => [
+            'current_page' => $posts->currentPage(), 'last_page' => $posts->lastPage(),
+            'per_page' => $posts->perPage(), 'total' => $posts->total(),
+        ]]);
     }
 
     public function show(Post $post): JsonResponse
     {
-        return response()->json([
-            'data' => new PostResource($post->load(['author', 'categories', 'tags', 'media', 'comments.user'])),
-        ]);
+        return response()->json(['data' => new PostResource($post->load(['author', 'categories', 'tags', 'media'])->loadCount('comments'))]);
     }
 
     public function store(StorePostRequest $request): JsonResponse
     {
-        $data = $request->validated();
+        $post = $this->posts->save($request->validated(), $request->user(), admin: true);
 
-        $post = DB::transaction(function () use ($data, $request): Post {
-            $payload = Arr::except($data, [
-                'category_ids',
-                'tag_ids',
-                'tag_names',
-                'media_ids',
-                'cover_media_id',
-            ]);
-            $payload['user_id'] = $request->user()->id;
-            $payload['body'] = $this->sanitizeBody($data['body']);
-
-            $post = Post::create($payload);
-            $this->syncTaxonomy($post, $data);
-            $media = $this->syncMedia($post, $data);
-            $this->applyCover($post, $data, $media);
-
-            return $post;
-        });
-
-        return response()->json([
-            'data' => new PostResource($post->load('author', 'categories', 'tags', 'media')),
-            'message' => 'Articulo creado.',
-        ], 201);
+        return response()->json(['data' => new PostResource($post), 'message' => 'Publicación guardada.'], 201);
     }
 
     public function update(UpdatePostRequest $request, Post $post): JsonResponse
     {
-        $data = $request->validated();
+        $post = $this->posts->save($request->validated(), $request->user(), $post, true);
 
-        DB::transaction(function () use ($data, $post): void {
-            $payload = Arr::except($data, [
-                'category_ids',
-                'tag_ids',
-                'tag_names',
-                'media_ids',
-                'cover_media_id',
-            ]);
-
-            if (array_key_exists('body', $payload)) {
-                $payload['body'] = $this->sanitizeBody($payload['body']);
-            }
-
-            $post->update($payload);
-            $this->syncTaxonomy($post, $data);
-
-            $media = array_key_exists('media_ids', $data) || array_key_exists('cover_media_id', $data)
-                ? $this->syncMedia($post, $data)
-                : $post->media;
-
-            $this->applyCover($post, $data, $media);
-        });
-
-        return response()->json([
-            'data' => new PostResource($post->fresh()->load('author', 'categories', 'tags', 'media')),
-            'message' => 'Articulo actualizado.',
-        ]);
+        return response()->json(['data' => new PostResource($post), 'message' => 'Cambios guardados.']);
     }
 
     public function destroy(Post $post): JsonResponse
     {
-        $post->load('media');
-        $post->media->each(fn (PostMedia $media) => $this->deleteMediaFile($media));
-        $post->delete();
+        $this->posts->delete($post);
 
-        return response()->json([
-            'message' => 'Articulo eliminado.',
-        ]);
-    }
-
-    private function sanitizeBody(string $body): string
-    {
-        $sanitized = $this->sanitizer->sanitize($body);
-
-        if ($this->sanitizer->plainText($sanitized, 10000) === '') {
-            throw ValidationException::withMessages([
-                'body' => ['El contenido no puede quedar vacio.'],
-            ]);
-        }
-
-        return $sanitized;
-    }
-
-    private function syncTaxonomy(Post $post, array $data): void
-    {
-        if (array_key_exists('category_ids', $data)) {
-            $post->categories()->sync($data['category_ids'] ?? []);
-        }
-
-        if (! array_key_exists('tag_ids', $data) && ! array_key_exists('tag_names', $data)) {
-            return;
-        }
-
-        $tagIds = collect($data['tag_ids'] ?? []);
-
-        $nameIds = collect($data['tag_names'] ?? [])
-            ->map(fn (string $name) => trim($name))
-            ->filter()
-            ->unique(fn (string $name) => Str::lower($name))
-            ->map(function (string $name): int {
-                $slug = Str::slug($name);
-
-                if ($slug === '') {
-                    return 0;
-                }
-
-                return Tag::firstOrCreate(
-                    ['slug' => $slug],
-                    ['name' => Str::headline($name)],
-                )->id;
-            })
-            ->filter();
-
-        $post->tags()->sync($tagIds->merge($nameIds)->unique()->values()->all());
-    }
-
-    private function syncMedia(Post $post, array $data): Collection
-    {
-        $mediaIds = collect($data['media_ids'] ?? []);
-
-        if (! empty($data['cover_media_id'])) {
-            $mediaIds->push((int) $data['cover_media_id']);
-        }
-
-        $mediaIds = $mediaIds->unique()->values();
-
-        if ($mediaIds->count() > 20) {
-            throw ValidationException::withMessages([
-                'media_ids' => ['Cada blog puede tener hasta 20 archivos multimedia.'],
-            ]);
-        }
-
-        $media = PostMedia::query()
-            ->whereIn('id', $mediaIds)
-            ->where(function ($query) use ($post): void {
-                $query->whereNull('post_id')
-                    ->orWhere('post_id', $post->id);
-            })
-            ->get();
-
-        if ($media->count() !== $mediaIds->count()) {
-            throw ValidationException::withMessages([
-                'media_ids' => ['Uno o mas archivos no estan disponibles.'],
-            ]);
-        }
-
-        PostMedia::query()
-            ->where('post_id', $post->id)
-            ->when($mediaIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $mediaIds))
-            ->update(['post_id' => null, 'sort_order' => 0]);
-
-        $mediaIds->each(function (int $id, int $index) use ($post): void {
-            PostMedia::query()
-                ->whereKey($id)
-                ->update([
-                    'post_id' => $post->id,
-                    'sort_order' => $index,
-                ]);
-        });
-
-        $post->update(['media_count' => $mediaIds->count()]);
-
-        return PostMedia::query()
-            ->whereIn('id', $mediaIds)
-            ->orderBy('sort_order')
-            ->get();
-    }
-
-    private function applyCover(Post $post, array $data, Collection $media): void
-    {
-        if (! array_key_exists('cover_media_id', $data) && ! empty($data['featured_image'])) {
-            return;
-        }
-
-        $cover = ! empty($data['cover_media_id'])
-            ? $media->firstWhere('id', (int) $data['cover_media_id'])
-            : $media->firstWhere('type', 'image');
-
-        if (! $cover instanceof PostMedia) {
-            return;
-        }
-
-        $post->update([
-            'featured_image' => $cover->url,
-            'cover_image_path' => $cover->path,
-        ]);
-    }
-
-    private function deleteMediaFile(PostMedia $media): void
-    {
-        if ($media->path) {
-            $this->uploadService->delete($media->path);
-        }
+        return response()->json(['message' => 'Publicación y comentarios eliminados.']);
     }
 }

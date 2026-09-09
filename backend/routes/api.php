@@ -75,6 +75,8 @@ Route::prefix('me')
         Route::delete('/reviews/{review}/media/{media}', [Api\MeReviewController::class, 'destroyMedia']);
         Route::get('/posts', [Api\MePostController::class, 'index']);
         Route::post('/posts/media', [Api\MePostController::class, 'storeMedia']);
+        Route::delete('/posts/media/{postMedia}', [Api\MePostController::class, 'destroyMedia']);
+        Route::get('/posts/{post}', [Api\MePostController::class, 'show']);
         Route::post('/posts', [Api\MePostController::class, 'store']);
         Route::put('/posts/{post}', [Api\MePostController::class, 'update']);
         Route::delete('/posts/{post}', [Api\MePostController::class, 'destroy']);

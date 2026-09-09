@@ -20,12 +20,12 @@ class PostController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = min($request->integer('per_page', 12), 48);
+        $perPage = max(1, min($request->integer('per_page', 12), 48));
 
         $posts = Post::query()
             ->published()
             ->with(['author', 'categories', 'tags', 'media'])
-            ->withCount(['comments' => fn ($query) => $query->approved()])
+            ->withCount(['comments' => fn ($query) => $query->visibleInBlog()])
             ->when($request->type, fn ($query, $type) => $query->where('type', $type))
             ->when($request->category, fn ($query, $category) => $query->whereHas('categories', fn ($categoryQuery) => $categoryQuery->where('slug', $category)))
             ->when($request->tag, fn ($query, $tag) => $query->whereHas('tags', fn ($tagQuery) => $tagQuery->where('slug', $tag)))
@@ -56,6 +56,7 @@ class PostController extends Controller
         $post = Post::query()
             ->where('slug', $slug)
             ->published()
+            ->withCount(['comments' => fn ($query) => $query->visibleInBlog()])
             ->with([
                 'author',
                 'categories',
@@ -100,18 +101,20 @@ class PostController extends Controller
 
     public function storeComment(Post $post, StoreCommentRequest $request): JsonResponse
     {
-        abort_unless($post->status->value === 'published', 404);
+        abort_unless(Post::published()->whereKey($post->id)->exists(), 404);
 
         if ($request->parent_id) {
             $parentExists = Comment::query()
                 ->whereKey($request->parent_id)
                 ->where('commentable_type', Post::class)
                 ->where('commentable_id', $post->id)
+                ->approved()
+                ->whereNull('parent_id')
                 ->exists();
 
             if (! $parentExists) {
                 throw ValidationException::withMessages([
-                    'parent_id' => ['El comentario padre no pertenece a este blog.'],
+                    'parent_id' => ['Solo puedes responder a un comentario principal visible de este blog.'],
                 ]);
             }
         }

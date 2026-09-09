@@ -11,11 +11,18 @@ type TraverseEvent = Event & {
 };
 type BrowserNavigation = EventTarget & { traverseTo: (key: string) => unknown };
 
-export function useUnsavedChanges(dirty: boolean) {
+export function useUnsavedChanges(
+  dirty: boolean,
+  beforeLeave?: () => Promise<boolean>,
+) {
   const router = useRouter();
   const confirm = useConfirm();
   useEffect(() => {
     if (!dirty) return;
+    const canLeave = () =>
+      beforeLeave
+        ? beforeLeave()
+        : confirm('Tienes cambios sin guardar. ¿Quieres salir y descartarlos?');
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     const click = async (event: MouseEvent) => {
       const anchor = (
@@ -36,11 +43,7 @@ export function useUnsavedChanges(dirty: boolean) {
         return;
       event.preventDefault();
       event.stopPropagation();
-      if (
-        await confirm(
-          'Tienes cambios sin guardar. ¿Quieres salir y descartarlos?',
-        )
-      ) {
+      if (await canLeave()) {
         const target = new URL(anchor.href);
         if (target.origin === window.location.origin)
           router.push(target.pathname + target.search + target.hash);
@@ -64,11 +67,7 @@ export function useUnsavedChanges(dirty: boolean) {
         return;
       }
       event.preventDefault();
-      if (
-        await confirm(
-          'Tienes cambios sin guardar. ¿Quieres salir y descartarlos?',
-        )
-      ) {
+      if (await canLeave()) {
         approvedTraversal = true;
         navigation?.traverseTo(traversal.destination.key);
       }
@@ -81,5 +80,5 @@ export function useUnsavedChanges(dirty: boolean) {
       document.removeEventListener('click', click, true);
       navigation?.removeEventListener('navigate', navigate);
     };
-  }, [dirty, confirm, router]);
+  }, [dirty, beforeLeave, confirm, router]);
 }
