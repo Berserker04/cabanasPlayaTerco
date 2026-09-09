@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\ReservationStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\ReservationStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreReservationRequest;
 use App\Http\Requests\Admin\UpdateReservationRequest;
@@ -47,8 +47,8 @@ class ReservationController extends Controller
             'data' => ReservationResource::collection($reservations),
             'meta' => [
                 'current_page' => $reservations->currentPage(),
-                'per_page'     => $reservations->perPage(),
-                'total'        => $reservations->total(),
+                'per_page' => $reservations->perPage(),
+                'total' => $reservations->total(),
             ],
         ]);
     }
@@ -78,7 +78,7 @@ class ReservationController extends Controller
         });
 
         return response()->json([
-            'data'    => new ReservationResource($reservation->load('cabin.type', 'cabins.type')),
+            'data' => new ReservationResource($reservation->load('cabin.type', 'cabins.type')),
             'message' => 'Reserva creada.',
         ], 201);
     }
@@ -105,6 +105,14 @@ class ReservationController extends Controller
         DB::transaction(function () use ($data, $reservation): void {
             $reservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
             $cabinIds = $this->normalizeCabinIds($data, $reservation);
+            // Serialize assignments with cabin deletion, including cancelled reservations.
+            $this->lockCabins($cabinIds);
+            $newCabinIds = array_diff($cabinIds, $this->normalizeCabinIds([], $reservation));
+            if (Cabin::onlyTrashed()->whereIn('id', $newCabinIds)->exists()) {
+                throw ValidationException::withMessages([
+                    'cabin_ids' => ['No se puede añadir una cabaña eliminada a una reserva.'],
+                ]);
+            }
             $checkIn = $data['check_in'] ?? $reservation->check_in->format('Y-m-d');
             $checkOut = $data['check_out'] ?? $reservation->check_out->format('Y-m-d');
             $targetStatus = ReservationStatus::from(
@@ -116,7 +124,6 @@ class ReservationController extends Controller
                 || ($targetStatus === ReservationStatus::Pending
                     && $this->reservationPlacementChanges($reservation, $checkIn, $checkOut, $cabinIds))
             ) {
-                $this->lockCabins($cabinIds);
                 $this->ensureCabinsAvailable(
                     checkIn: $checkIn,
                     checkOut: $checkOut,
@@ -134,7 +141,7 @@ class ReservationController extends Controller
         });
 
         return response()->json([
-            'data'    => new ReservationResource($reservation->fresh()->load('cabin.type', 'cabins.type', 'user', 'guestGroup', 'assignedStaff')),
+            'data' => new ReservationResource($reservation->fresh()->load('cabin.type', 'cabins.type', 'user', 'guestGroup', 'assignedStaff')),
             'message' => 'Reserva actualizada.',
         ]);
     }
@@ -155,7 +162,7 @@ class ReservationController extends Controller
         ]);
 
         $month = $request->month;
-        $start = \Carbon\Carbon::parse($month . '-01')->startOfMonth();
+        $start = \Carbon\Carbon::parse($month.'-01')->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
         $reservations = Reservation::query()
@@ -167,9 +174,9 @@ class ReservationController extends Controller
 
         return response()->json([
             'data' => [
-                'month'        => $month,
+                'month' => $month,
                 'reservations' => ReservationResource::collection($reservations),
-                'total'        => $reservations->count(),
+                'total' => $reservations->count(),
             ],
         ]);
     }
@@ -230,8 +237,7 @@ class ReservationController extends Controller
         string $checkIn,
         string $checkOut,
         array $cabinIds,
-    ): bool
-    {
+    ): bool {
         $existingCabinIds = $this->normalizeCabinIds([], $reservation);
         sort($existingCabinIds);
         sort($cabinIds);
@@ -243,7 +249,7 @@ class ReservationController extends Controller
 
     private function lockCabins(array $cabinIds): void
     {
-        Cabin::query()
+        Cabin::withTrashed()
             ->whereIn('id', $cabinIds)
             ->orderBy('id')
             ->lockForUpdate()

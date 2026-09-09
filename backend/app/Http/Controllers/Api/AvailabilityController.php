@@ -17,9 +17,9 @@ class AvailabilityController extends Controller
     public function check(Request $request): JsonResponse
     {
         $request->validate([
-            'check_in'  => ['required', 'date', 'after_or_equal:today'],
-            'check_out' => ['required', 'date', 'after:check_in'],
-            'guests'    => ['nullable', 'integer', 'min:1'],
+            'check_in' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.now(config('app.business_timezone'))->toDateString()],
+            'check_out' => ['required', 'date_format:Y-m-d', 'after:check_in'],
+            'guests' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
 
         $availability = $this->availabilityService->checkAvailability(
@@ -30,13 +30,13 @@ class AvailabilityController extends Controller
 
         return response()->json([
             'data' => [
-                'check_in'         => $availability['check_in'],
-                'check_out'        => $availability['check_out'],
-                'guests'           => $availability['guests'],
-                'cabins'           => CabinAvailabilityResource::collection($availability['cabins']),
+                'check_in' => $availability['check_in'],
+                'check_out' => $availability['check_out'],
+                'guests' => $availability['guests'],
+                'cabins' => CabinAvailabilityResource::collection($availability['cabins']),
                 'available_cabins' => CabinAvailabilityResource::collection($availability['available_cabins']),
-                'summary'          => $availability['summary'],
-                'message'          => $availability['message'],
+                'summary' => $availability['summary'],
+                'message' => $availability['message'],
             ],
         ]);
     }
@@ -44,7 +44,7 @@ class AvailabilityController extends Controller
     public function calendar(Request $request): JsonResponse
     {
         $request->validate([
-            'month'         => ['required', 'date_format:Y-m'],
+            'month' => ['required', 'date_format:Y-m'],
             'cabin_type_id' => ['nullable', 'exists:cabin_types,id'],
         ]);
 

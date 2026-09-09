@@ -25,15 +25,15 @@ class AvailabilityBlock extends Model
     protected function casts(): array
     {
         return [
-            'check_in'       => 'date',
-            'check_out'      => 'date',
+            'check_in' => 'date',
+            'check_out' => 'date',
             'applies_to_all' => 'boolean',
         ];
     }
 
     public function cabins(): BelongsToMany
     {
-        return $this->belongsToMany(Cabin::class, 'availability_block_cabin')
+        return $this->belongsToMany(Cabin::class, 'availability_block_cabin')->withTrashed()
             ->withTimestamps();
     }
 
@@ -48,4 +48,4 @@ class AvailabilityBlock extends Model
             ->where('check_in', '<', $checkOut)
             ->where('check_out', '>', $checkIn);
     }
-};
+}

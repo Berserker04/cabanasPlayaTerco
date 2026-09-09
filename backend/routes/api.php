@@ -48,6 +48,7 @@ Route::prefix('auth')->group(function () {
 });
 
 // ── Cabins ───────────────────────────────────────────────────
+Route::get('/cabin-map-points', [Admin\CabinMapPointController::class, 'publicIndex']);
 Route::get('/cabins', [Api\CabinController::class, 'index']);
 Route::get('/cabins/{cabin:slug}', [Api\CabinController::class, 'show']);
 Route::get('/amenities', [Api\AmenityController::class, 'index']);
@@ -114,6 +115,11 @@ Route::prefix('admin')
         Route::apiResource('cabin-types', Admin\CabinTypeController::class)
             ->except(['index', 'show'])
             ->middleware('admin');
+
+        Route::get('/cabin-map-points', [Admin\CabinMapPointController::class, 'index']);
+        Route::apiResource('cabin-map-points', Admin\CabinMapPointController::class)->parameter('cabin-map-points', 'cabinMapPoint')->except(['index', 'show'])->middleware('admin');
+        Route::post('/cabins/{id}/restore', [Admin\CabinController::class, 'restore'])->whereNumber('id')->middleware('admin');
+        Route::delete('/cabins/{cabin}/cover', [Admin\CabinController::class, 'deleteCover'])->middleware('admin');
 
         // ── Cabins ───────────────────────────────────────────
         Route::apiResource('cabins', Admin\CabinController::class)

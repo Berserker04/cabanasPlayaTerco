@@ -1,7 +1,16 @@
 'use client';
+import { stayHref, type StayContext } from '@/lib/stay-context';
 
 import Link from 'next/link';
-import { Bath, BedDouble, Images, MessageCircle, Search, Users, Waves } from 'lucide-react';
+import {
+  Bath,
+  BedDouble,
+  Images,
+  MessageCircle,
+  Search,
+  Users,
+  Waves,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CabinMap } from '@/components/cabins/cabin-map';
 import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
@@ -17,36 +26,55 @@ import {
 } from '@/components/ui/select';
 import {
   CABIN_FALLBACK_IMAGES,
-  MAP_SLOT_LABELS,
   buildCabinWhatsAppHref,
   getCabinCover,
 } from '@/lib/cabin-utils';
 import { MAP_FEATURE_LABELS } from '@/lib/map-features';
-import type { Cabin, LodgingTariff, MapSlot } from '@/types/cabin';
+import type {
+  PublicCabin as Cabin,
+  LodgingTariff,
+  MapSlot,
+} from '@/types/cabin';
 import type { GalleryItem } from '@/types/gallery';
 import type { MapFeatureKey } from '@/types/map-feature';
 
 const guestOptions = [
   { label: 'Cualquier capacidad', value: 'any' },
-  { label: '2+ huespedes', value: '2' },
-  { label: '4+ huespedes', value: '4' },
-  { label: '6+ huespedes', value: '6' },
-  { label: '8+ huespedes', value: '8' },
-] as const;
+  ...Array.from({ length: 50 }, (_, i) => ({
+    label: `${i + 1} huéspedes`,
+    value: String(i + 1),
+  })),
+];
 
 export function CabinCatalog({
   cabins,
+  initialContext = {},
   tariffs,
   mapFeatureMedia = {},
 }: {
   cabins: Cabin[];
+  initialContext?: StayContext;
   tariffs: LodgingTariff[];
   mapFeatureMedia?: Partial<Record<MapFeatureKey, GalleryItem[]>>;
 }) {
   const [search, setSearch] = useState('');
-  const [guests, setGuests] = useState('any');
-  const [selectedSlot, setSelectedSlot] = useState<MapSlot | null>(null);
-  const [selectedFeature, setSelectedFeature] = useState<MapFeatureKey | null>(null);
+  const [guests, setGuests] = useState(initialContext.guests ?? 'any');
+  const context = {
+    ...initialContext,
+    guests: guests === 'any' ? undefined : guests,
+  };
+  const whatsappDates = {
+    checkIn: context.check_in,
+    checkOut: context.check_out,
+    guests: context.guests,
+  };
+  const [selectedSlot, setSelectedSlot] = useState<MapSlot | null>(
+    cabins.find((cabin) => cabin.id === Number(initialContext.cabin_id))
+      ?.map_slot ?? null,
+  );
+  const [selectedFeature, setSelectedFeature] = useState<MapFeatureKey | null>(
+    null,
+  );
 
   const filteredCabins = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -56,17 +84,24 @@ export function CabinCatalog({
       const matchesSearch =
         normalizedSearch.length === 0 ||
         cabin.name.toLowerCase().includes(normalizedSearch) ||
-        (cabin.short_description ?? '').toLowerCase().includes(normalizedSearch) ||
+        (cabin.short_description ?? '')
+          .toLowerCase()
+          .includes(normalizedSearch) ||
         (cabin.description ?? '').toLowerCase().includes(normalizedSearch);
-      const matchesGuests = guestsCount === 0 || cabin.max_guests >= guestsCount;
+      const matchesGuests =
+        guestsCount === 0 || cabin.max_guests >= guestsCount;
       const matchesSlot = !selectedSlot || cabin.map_slot === selectedSlot;
 
       return matchesSearch && matchesGuests && matchesSlot;
     });
   }, [cabins, guests, search, selectedSlot]);
 
-  const heroImage = cabins[0] ? getCabinCover(cabins[0]) : CABIN_FALLBACK_IMAGES[0];
-  const selectedFeatureImages = selectedFeature ? (mapFeatureMedia[selectedFeature] ?? []) : [];
+  const heroImage = cabins[0]
+    ? getCabinCover(cabins[0])
+    : CABIN_FALLBACK_IMAGES[0];
+  const selectedFeatureImages = selectedFeature
+    ? (mapFeatureMedia[selectedFeature] ?? [])
+    : [];
 
   function handleSelectSlot(slot: MapSlot) {
     setSelectedSlot(slot);
@@ -95,12 +130,23 @@ export function CabinCatalog({
               Cabañas reales entre la playa, el mar y la zona verde
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-8 text-cyan-50 sm:text-lg">
-              Revisa cada cabaña por nombre, capacidad, ubicacion y galeria. La reserva se confirma
-              por WhatsApp con atencion directa.
+              Revisa cada cabaña por nombre, capacidad, ubicacion y galeria. La
+              reserva se confirma por WhatsApp con atencion directa.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="bg-cyan-500 text-cyan-950 hover:bg-cyan-400">
-                <a href={buildCabinWhatsAppHref()} target="_blank" rel="noopener noreferrer">
+              <Button
+                asChild
+                size="lg"
+                className="bg-cyan-500 text-cyan-950 hover:bg-cyan-400"
+              >
+                <a
+                  href={buildCabinWhatsAppHref(
+                    cabins.find((cabin) => cabin.map_slot === selectedSlot),
+                    whatsappDates,
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <MessageCircle className="h-5 w-5" />
                   WhatsApp
                 </a>
@@ -111,7 +157,16 @@ export function CabinCatalog({
                 variant="outline"
                 className="border-white/70 bg-white/10 text-white hover:bg-white hover:text-neutral-950"
               >
-                <Link href="/disponibilidad">Consultar disponibilidad</Link>
+                <Link
+                  href={stayHref('/disponibilidad', {
+                    ...context,
+                    cabin_id: cabins
+                      .find((cabin) => cabin.map_slot === selectedSlot)
+                      ?.id.toString(),
+                  })}
+                >
+                  Consultar disponibilidad
+                </Link>
               </Button>
             </div>
           </div>
@@ -126,11 +181,16 @@ export function CabinCatalog({
                 <p className="text-sm font-semibold uppercase tracking-[0.14em] text-cyan-200">
                   Tarifas
                 </p>
-                <h2 className="mt-2 text-2xl font-bold tracking-normal">Hospedaje Playa Terco</h2>
+                <h2 className="mt-2 text-2xl font-bold tracking-normal">
+                  Hospedaje Playa Terco
+                </h2>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {tariffs.map((tariff) => (
-                  <article key={tariff.id} className="rounded-lg border border-white/15 bg-white/10 p-4">
+                  <article
+                    key={tariff.id}
+                    className="rounded-lg border border-white/15 bg-white/10 p-4"
+                  >
                     <LodgingTariffDetails tariff={tariff} tone="dark" />
                   </article>
                 ))}
@@ -157,12 +217,16 @@ export function CabinCatalog({
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
+                  aria-label="Buscar cabaña por nombre"
                   placeholder="Buscar por nombre"
                   className="pl-9"
                 />
               </div>
               <Select value={guests} onValueChange={setGuests}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger
+                  aria-label="Número de huéspedes"
+                  className="w-full"
+                >
                   <SelectValue placeholder="Capacidad" />
                 </SelectTrigger>
                 <SelectContent>
@@ -187,8 +251,15 @@ export function CabinCatalog({
             />
             {selectedSlot ? (
               <div className="flex items-center justify-between gap-3 rounded-lg border bg-stone-50 px-4 py-3 text-sm">
-                <span className="font-medium text-neutral-800">{MAP_SLOT_LABELS[selectedSlot]}</span>
-                <Button size="sm" variant="ghost" onClick={() => setSelectedSlot(null)}>
+                <span className="font-medium text-neutral-800">
+                  {cabins.find((cabin) => cabin.map_slot === selectedSlot)
+                    ?.map_point?.label ?? selectedSlot}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedSlot(null)}
+                >
                   Ver todas
                 </Button>
               </div>
@@ -205,7 +276,11 @@ export function CabinCatalog({
                       Fotos publicas de este punto dentro de Playa Terco.
                     </p>
                   </div>
-                  <Button size="sm" variant="ghost" onClick={() => setSelectedFeature(null)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSelectedFeature(null)}
+                  >
                     Ver todas
                   </Button>
                 </div>
@@ -215,8 +290,14 @@ export function CabinCatalog({
                       <div
                         key={item.id}
                         className="aspect-[4/3] rounded-md bg-cover bg-center"
-                        style={{ backgroundImage: `url(${item.thumbnail_url ?? item.url})` }}
-                        aria-label={item.alt ?? item.caption ?? MAP_FEATURE_LABELS[selectedFeature]}
+                        style={{
+                          backgroundImage: `url(${item.thumbnail_url ?? item.url})`,
+                        }}
+                        aria-label={
+                          item.alt ??
+                          item.caption ??
+                          MAP_FEATURE_LABELS[selectedFeature]
+                        }
                       />
                     ))}
                   </div>
@@ -236,9 +317,14 @@ export function CabinCatalog({
                     className="overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <Link
-                      href={`/cabanas/${cabin.slug}`}
+                      href={stayHref(`/cabanas/${cabin.slug}`, {
+                        ...context,
+                        cabin_id: String(cabin.id),
+                      })}
                       className="block aspect-[4/3] bg-cover bg-center"
-                      style={{ backgroundImage: `url(${getCabinCover(cabin)})` }}
+                      style={{
+                        backgroundImage: `url(${getCabinCover(cabin)})`,
+                      }}
                       aria-label={`Ver ${cabin.name}`}
                     />
                     <div className="p-5">
@@ -251,7 +337,11 @@ export function CabinCatalog({
                             {cabin.short_description ?? cabin.description}
                           </p>
                         </div>
-                        {cabin.map_slot ? <Badge variant="outline">{MAP_SLOT_LABELS[cabin.map_slot]}</Badge> : null}
+                        {cabin.map_slot ? (
+                          <Badge variant="outline">
+                            {cabin.map_point?.label ?? cabin.map_slot}
+                          </Badge>
+                        ) : null}
                       </div>
 
                       <div className="mt-5 grid grid-cols-3 gap-2 text-sm text-neutral-700">
@@ -269,15 +359,26 @@ export function CabinCatalog({
                         </span>
                       </div>
 
-                      <div className="mt-5 flex items-center justify-between gap-4 border-t pt-5">
+                      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-5">
                         <Button asChild variant="outline">
-                          <a href={buildCabinWhatsAppHref(cabin)} target="_blank" rel="noopener noreferrer">
+                          <a
+                            href={buildCabinWhatsAppHref(cabin, whatsappDates)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             <MessageCircle className="h-4 w-4" />
                             WhatsApp
                           </a>
                         </Button>
                         <Button asChild>
-                          <Link href={`/cabanas/${cabin.slug}`}>Ver detalles</Link>
+                          <Link
+                            href={stayHref(`/cabanas/${cabin.slug}`, {
+                              ...context,
+                              cabin_id: String(cabin.id),
+                            })}
+                          >
+                            Ver detalles
+                          </Link>
                         </Button>
                       </div>
                     </div>
@@ -287,9 +388,12 @@ export function CabinCatalog({
             ) : (
               <div className="rounded-lg border border-dashed bg-stone-50 p-8 text-center">
                 <Waves className="mx-auto h-8 w-8 text-cyan-700" />
-                <h3 className="mt-4 text-lg font-semibold">No hay cabañas para esos filtros</h3>
+                <h3 className="mt-4 text-lg font-semibold">
+                  No hay cabañas para esos filtros
+                </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Ajusta la busqueda o escribenos para recomendarte una opcion disponible.
+                  Ajusta la busqueda o escribenos para recomendarte una opcion
+                  disponible.
                 </p>
               </div>
             )}

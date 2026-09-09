@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\CabinResource;
+use App\Http\Resources\PublicCabinResource;
 use App\Models\Cabin;
 use Illuminate\Http\JsonResponse;
 
@@ -14,7 +14,7 @@ class CabinController extends Controller
         $cabins = Cabin::query()
             ->visible()
             ->with([
-                'type',
+                'mapPoint',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
             ->orderBy('sort_order')
@@ -22,7 +22,7 @@ class CabinController extends Controller
             ->get();
 
         return response()->json([
-            'data' => CabinResource::collection($cabins),
+            'data' => PublicCabinResource::collection($cabins),
         ]);
     }
 
@@ -31,12 +31,12 @@ class CabinController extends Controller
         abort_if(! $cabin->is_active || $cabin->status->value === 'inactive', 404);
 
         $cabin->load([
-            'type',
+            'mapPoint',
             'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
         ]);
 
         return response()->json([
-            'data' => new CabinResource($cabin),
+            'data' => new PublicCabinResource($cabin),
         ]);
     }
 }

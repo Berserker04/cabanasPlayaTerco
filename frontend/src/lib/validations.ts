@@ -1,15 +1,6 @@
 import { z } from 'zod';
 
-const cabinMapSlots = [
-  'cabana_1',
-  'cabana_2',
-  'cabana_3',
-  'cabana_4',
-  'cabana_5',
-  'cabana_6',
-  'cabana_7',
-  'cabana_8',
-] as const;
+import { localDateIso } from '@/lib/stay-context';
 
 const cabinStatuses = ['available', 'occupied', 'maintenance', 'inactive'] as const;
 
@@ -22,12 +13,7 @@ const integerString = (label: string, minimum: number, maximum = 50) =>
     .refine((value) => Number(value) >= minimum, `${label} debe ser mayor o igual a ${minimum}`)
     .refine((value) => Number(value) <= maximum, `${label} no puede superar ${maximum}`);
 
-const todayIso = () => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  return today.toISOString().slice(0, 10);
-};
+const todayIso = localDateIso;
 
 const optionalString = (schema: z.ZodString) =>
   z
@@ -81,7 +67,7 @@ export const contactSchema = z
         .number({ error: 'Indica un número de huéspedes válido' })
         .int('El número de huéspedes debe ser entero')
         .min(1, 'Debe haber al menos 1 huésped')
-        .max(20, 'El máximo permitido es de 20 huéspedes'),
+        .max(50, 'El máximo permitido es de 50 huéspedes'),
     ),
     cabin_id: optionalNumber(z.number().int().positive()),
     cabin_type_id: optionalNumber(z.number().int().positive()),
@@ -137,35 +123,31 @@ export const cabinFormSchema = z
     floor: z
       .string()
       .trim()
-      .refine((value) => value === '' || /^-?\d+$/.test(value), 'El piso debe ser un numero entero'),
+      .refine((value) => value === '' || (/^\d+$/.test(value) && Number(value) <= 65535), 'El piso debe ser un entero entre 0 y 65535'),
     short_description: z
       .string()
       .trim()
       .max(500, 'El resumen no puede superar 500 caracteres'),
     description: z.string().trim(),
+    min_guests: integerString('La capacidad mínima', 1),
     guest_capacity: integerString('La capacidad comoda', 1),
     max_guests: integerString('La capacidad maxima', 1),
     beds_count: integerString('La cantidad de camas', 0),
     bathrooms_count: integerString('La cantidad de banos', 0),
-    map_slot: z
-      .string()
-      .refine(
-        (value) => cabinMapSlots.includes(value as (typeof cabinMapSlots)[number]),
-        'La ubicacion en el mapa es obligatoria',
-      ),
+    map_slot: z.string().min(1, 'La ubicación en el mapa es obligatoria'),
     is_active: z.boolean(),
-    sort_order: integerString('El orden', 0, 999),
+    sort_order: integerString('El orden', 0, 65535),
     notes: z.string().trim(),
   })
   .superRefine((data, ctx) => {
     const comfortable = Number(data.guest_capacity);
     const maximum = Number(data.max_guests);
 
-    if (comfortable > maximum) {
+    if (comfortable > maximum || comfortable < Number(data.min_guests)) {
       ctx.addIssue({
         code: 'custom',
         path: ['guest_capacity'],
-        message: 'La capacidad comoda no puede superar la capacidad maxima',
+        message: 'La capacidad cómoda debe estar entre la mínima y la máxima',
       });
     }
   });

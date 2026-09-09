@@ -26,22 +26,22 @@ class UpdateReservationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'cabin_id'      => ['sometimes', 'exists:cabins,id'],
-            'cabin_ids'     => ['sometimes', 'array', 'min:1'],
-            'cabin_ids.*'   => ['integer', 'distinct', 'exists:cabins,id'],
-            'check_in'      => ['sometimes', 'date'],
-            'check_out'     => ['sometimes', 'date'],
-            'guests_count'  => ['sometimes', 'integer', 'min:1'],
-            'leader_name'   => ['nullable', 'string', 'max:255'],
+            'cabin_id' => ['sometimes', 'exists:cabins,id'],
+            'cabin_ids' => ['sometimes', 'array', 'min:1'],
+            'cabin_ids.*' => ['integer', 'distinct', 'exists:cabins,id'],
+            'check_in' => ['sometimes', 'date'],
+            'check_out' => ['sometimes', 'date'],
+            'guests_count' => ['sometimes', 'integer', 'min:1'],
+            'leader_name' => ['nullable', 'string', 'max:255'],
             'leader_phone' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
             'leader_whatsapp' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
             'display_color' => ['nullable', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'expires_at'    => ['nullable', 'date'],
-            'status'        => ['sometimes', Rule::enum(ReservationStatus::class)],
-            'source'        => ['nullable', 'string', 'max:100'],
-            'notes'         => ['nullable', 'string'],
-            'total_price'   => ['nullable', 'numeric', 'min:0'],
-            'assigned_to'   => ['nullable', 'exists:staff,id'],
+            'expires_at' => ['nullable', 'date'],
+            'status' => ['sometimes', Rule::enum(ReservationStatus::class)],
+            'source' => ['nullable', 'string', 'max:100'],
+            'notes' => ['nullable', 'string'],
+            'total_price' => ['nullable', 'numeric', 'min:0'],
+            'assigned_to' => ['nullable', 'exists:staff,id'],
         ];
     }
 
@@ -50,7 +50,7 @@ class UpdateReservationRequest extends FormRequest
         return [
             'leader_phone.regex' => 'El celular debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
             'leader_whatsapp.regex' => 'El WhatsApp debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
-            'check_out.after'     => 'La fecha de salida debe ser posterior a la llegada.',
+            'check_out.after' => 'La fecha de salida debe ser posterior a la llegada.',
             'display_color.regex' => 'El color debe estar en formato hexadecimal, por ejemplo #0ea5e9.',
         ];
     }
@@ -62,6 +62,12 @@ class UpdateReservationRequest extends FormRequest
 
             if (! $reservation) {
                 return;
+            }
+
+            $existingIds = $reservation->cabins()->pluck('cabins.id')->push($reservation->cabin_id)->filter();
+            $newIds = collect($this->input('cabin_ids', []))->diff($existingIds);
+            if (\App\Models\Cabin::onlyTrashed()->whereIn('id', $newIds)->exists()) {
+                $validator->errors()->add('cabin_ids', 'No puedes añadir una cabaña eliminada a una reserva.');
             }
 
             $checkIn = $this->input('check_in', $reservation->check_in->format('Y-m-d'));

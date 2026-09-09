@@ -25,29 +25,41 @@ class CabinMediaController extends Controller
         $files = is_array($files) ? $files : [$request->file('file')];
         $baseSortOrder = $request->integer('sort_order', 0);
 
-        $mediaItems = collect($files)
-            ->filter(fn ($file) => $file instanceof UploadedFile)
-            ->values()
-            ->map(function (UploadedFile $file, int $index) use ($request, $cabin, $baseSortOrder): CabinMedia {
-                $upload = $this->uploadService->upload($file, 'cabins/media');
-                $type = $request->type ?: (str_starts_with((string) $upload['mime_type'], 'video/') ? 'video' : 'image');
+        $uploadedPaths = [];
+        try {
+            $mediaItems = \Illuminate\Support\Facades\DB::transaction(function () use ($files, $request, $cabin, $baseSortOrder, &$uploadedPaths) {
+                return collect($files)
+                    ->filter(fn ($file) => $file instanceof UploadedFile)
+                    ->values()
+                    ->map(function (UploadedFile $file, int $index) use ($request, $cabin, $baseSortOrder, &$uploadedPaths): CabinMedia {
+                        $upload = $this->uploadService->upload($file, 'cabins/media');
+                        $uploadedPaths[] = $upload['path'];
+                        $type = $request->type ?: (str_starts_with((string) $upload['mime_type'], 'video/') ? 'video' : 'image');
 
-                return CabinMedia::create([
-                    'cabin_id'      => $cabin->id,
-                    'cabin_type_id' => $cabin->cabin_type_id,
-                    'url'           => $upload['url'],
-                    'path'          => $upload['path'],
-                    'alt'           => $request->alt,
-                    'type'          => $type,
-                    'mime_type'     => $upload['mime_type'],
-                    'size_bytes'    => $upload['size_bytes'],
-                    'sort_order'    => $baseSortOrder + $index,
-                ]);
+                        return CabinMedia::create([
+                            'cabin_id' => $cabin->id,
+                            'cabin_type_id' => $cabin->cabin_type_id,
+                            'url' => $upload['url'],
+                            'path' => $upload['path'],
+                            'alt' => $request->alt,
+                            'type' => $type,
+                            'mime_type' => $upload['mime_type'],
+                            'size_bytes' => $upload['size_bytes'],
+                            'sort_order' => $baseSortOrder + $index,
+                        ]);
+                    });
+
             });
+        } catch (\Throwable $exception) {
+            foreach ($uploadedPaths as $path) {
+                $this->uploadService->delete($path);
+            }
+            throw $exception;
+        }
 
         if ($mediaItems->count() === 1 && ! $request->hasFile('files')) {
             return response()->json([
-                'data'    => new CabinMediaResource($mediaItems->first()->load('cabin')),
+                'data' => new CabinMediaResource($mediaItems->first()->load('cabin')),
                 'message' => 'Archivo subido.',
             ], 201);
         }
@@ -55,23 +67,25 @@ class CabinMediaController extends Controller
         $mediaItems->each->load('cabin');
 
         return response()->json([
-            'data'    => CabinMediaResource::collection($mediaItems)->resolve(),
+            'data' => CabinMediaResource::collection($mediaItems)->resolve(),
             'message' => 'Archivos subidos.',
         ], 201);
     }
 
     public function update(UpdateCabinMediaRequest $request, CabinMedia $cabinMedia): JsonResponse
     {
+        Cabin::findOrFail($cabinMedia->cabin_id);
         $cabinMedia->update($request->validated());
 
         return response()->json([
-            'data'    => new CabinMediaResource($cabinMedia->fresh()->load('cabin')),
+            'data' => new CabinMediaResource($cabinMedia->fresh()->load('cabin')),
             'message' => 'Archivo actualizado.',
         ]);
     }
 
     public function destroy(CabinMedia $cabinMedia): JsonResponse
     {
+        Cabin::findOrFail($cabinMedia->cabin_id);
         if ($cabinMedia->path) {
             $this->uploadService->delete($cabinMedia->path);
         }

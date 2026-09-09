@@ -139,9 +139,14 @@ class AvailabilityService
         $checkInDate = Carbon::parse($checkIn)->startOfDay();
         $checkOutDate = Carbon::parse($checkOut)->startOfDay();
 
-        $cabins = Cabin::query()
+        $existingReservation = $excludeReservationId ? Reservation::find($excludeReservationId) : null;
+        $retainedIds = $existingReservation
+            ? $existingReservation->cabins()->pluck('cabins.id')->push($existingReservation->cabin_id)->filter()
+            : collect();
+        $cabins = Cabin::withTrashed()
+            ->where(fn ($query) => $query->whereNull('deleted_at')->orWhereIn('id', $retainedIds))
             ->with([
-                'type',
+                'type', 'mapPoint',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
             ->whereNotNull('map_slot')
@@ -358,7 +363,7 @@ class AvailabilityService
             ->concat($blocks->map(fn (AvailabilityBlock $block) => $this->blockEvent($block, $cabinIds)))
             ->sortBy([
                 ['check_in', 'asc'],
-                ['type', 'desc'],
+                ['type', 'mapPoint', 'desc'],
             ])
             ->values();
 
@@ -406,15 +411,24 @@ class AvailabilityService
             return collect();
         }
 
+        $retainedIds = $ignoreReservationId
+            ? ($existingReservation = Reservation::find($ignoreReservationId))?->cabins()->pluck('cabins.id')->push($existingReservation->cabin_id)->filter() ?? collect()
+            : collect();
+        if ($ignoreBlockId) {
+            $retainedIds = $retainedIds->merge(AvailabilityBlock::find($ignoreBlockId)?->cabins()->pluck('cabins.id') ?? collect());
+        }
+        $missingIds = $cabinIds->diff(Cabin::whereIn('id', $cabinIds)->pluck('id'))->diff($retainedIds);
+
         $unavailable = $includeCabinStatus
             ? Cabin::query()
                 ->whereIn('id', $cabinIds)
                 ->where(function ($query) {
-                    $query->where('is_active', false)
-                        ->orWhere('status', '!=', CabinStatus::Available->value);
+                    $query->where('status', '!=', CabinStatus::Available->value);
                 })
                 ->pluck('id')
             : collect();
+
+        $unavailable = $unavailable->merge($missingIds);
 
         $reservations = Reservation::query()
             ->with('cabins:id')
@@ -535,11 +549,11 @@ class AvailabilityService
             ->values()
             ->all();
 
-        if (! $cabin->is_active || $cabin->status === CabinStatus::Inactive) {
+        if (! $cabin->trashed() && ($cabin->status === CabinStatus::Inactive || $cabin->status === CabinStatus::Occupied)) {
             return $this->plannerState('inactive', 'gray', 'Inactiva', quotes: $quotePayloads);
         }
 
-        if ($cabin->status === CabinStatus::Maintenance) {
+        if (! $cabin->trashed() && $cabin->status === CabinStatus::Maintenance) {
             return $this->plannerState('maintenance', 'orange', 'Mantenimiento', quotes: $quotePayloads);
         }
 
@@ -803,11 +817,11 @@ class AvailabilityService
     {
         return Cabin::query()
             ->with([
-                'type',
+                'type', 'mapPoint',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
             ->whereNotNull('map_slot')
-            ->when(! $admin, fn ($query) => $query->whereNotNull('slug'))
+            ->when(! $admin, fn ($query) => $query->visible())
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
@@ -902,7 +916,7 @@ class AvailabilityService
             $tone = 'red';
             $label = $admin ? $this->reservationLabel($reservation) : 'No disponible';
             $isAvailable = false;
-        } elseif (! $cabin->is_active || $cabin->status !== CabinStatus::Available) {
+        } elseif ($cabin->status !== CabinStatus::Available) {
             $state = 'inactive';
             $tone = 'gray';
             $label = $admin ? $cabin->status->label() : 'No disponible';
@@ -922,6 +936,7 @@ class AvailabilityService
             'label' => $label,
             'is_available' => $isAvailable,
             'fits_guests' => $fitsGuests,
+            'admin' => $admin,
             'leader_name' => $admin ? $reservation?->leader_name : null,
             'display_color' => $admin ? $reservation?->display_color : null,
             'reservation' => $admin && $reservation ? $this->reservationPayload($reservation) : null,

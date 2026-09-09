@@ -2,19 +2,20 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\LeadSource;
+use App\Enums\LeadStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ContactRequest;
 use App\Mail\ContactLeadAutoresponse;
 use App\Mail\ContactLeadNotification;
-use App\Http\Resources\LeadResource;
-use App\Enums\LeadSource;
-use App\Enums\LeadStatus;
 use App\Models\Cabin;
 use App\Models\Lead;
 use App\Services\PushNotificationService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ContactController extends Controller
@@ -25,26 +26,37 @@ class ContactController extends Controller
 
     public function store(ContactRequest $request): JsonResponse
     {
-        $cabin = $request->filled('cabin_id')
-            ? Cabin::find($request->integer('cabin_id'))
-            : null;
+        $lead = DB::transaction(function () use ($request): Lead {
+            $cabin = $request->filled('cabin_id')
+                ? Cabin::visible()->lockForUpdate()->find($request->integer('cabin_id'))
+                : null;
 
-        $lead = Lead::create([
-            'name'          => $request->name,
-            'email'         => $request->email,
-            'phone'         => $request->phone,
-            'source'        => LeadSource::Website,
-            'status'        => LeadStatus::New,
-            'message'       => $request->message,
-            'check_in'      => $request->check_in,
-            'check_out'     => $request->check_out,
-            'guests_count'  => $request->guests_count,
-            'cabin_id'      => $cabin?->id,
-            'cabin_type_id' => $cabin?->cabin_type_id ?? $request->cabin_type_id,
-        ]);
+            if ($request->filled('cabin_id') && ! $cabin) {
+                throw ValidationException::withMessages(['cabin_id' => 'Esta cabaña ya no está publicada. Selecciona otra o deja la cabaña por definir.']);
+            }
+
+            return Lead::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'source' => LeadSource::Website,
+                'status' => LeadStatus::New,
+                'message' => $request->message,
+                'check_in' => $request->check_in,
+                'check_out' => $request->check_out,
+                'guests_count' => $request->guests_count,
+                'cabin_id' => $cabin?->id,
+                'cabin_type_id' => $cabin?->cabin_type_id ?? $request->cabin_type_id,
+            ]);
+
+        });
 
         $lead->load(['cabin', 'cabinType']);
-        $this->pushNotificationService->notifyStaffOfNewLead($lead);
+        try {
+            $this->pushNotificationService->notifyStaffOfNewLead($lead);
+        } catch (Throwable $exception) {
+            Log::warning('Contact push delivery failed.', ['lead_id' => $lead->id]);
+        }
 
         $emailSent = true;
         $message = 'Tu mensaje ha sido enviado. Te contactaremos pronto.';
@@ -61,14 +73,14 @@ class ContactController extends Controller
 
             Log::error('Contact email delivery failed.', [
                 'lead_id' => $lead->id,
-                'error'   => $exception->getMessage(),
+                'error' => $exception->getMessage(),
             ]);
         }
 
         return response()->json([
-            'data'    => new LeadResource($lead),
+            'data' => ['id' => $lead->id, 'name' => $lead->name, 'email' => $lead->email, 'cabin_id' => $lead->cabin_id],
             'message' => $message,
-            'meta'    => [
+            'meta' => [
                 'email_sent' => $emailSent,
             ],
         ], 201);

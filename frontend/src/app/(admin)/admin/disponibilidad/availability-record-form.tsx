@@ -535,7 +535,7 @@ export function AvailabilityRecordForm({
                       />
                       <span className="min-w-0">
                         <span className="block font-medium">
-                          {cabin.name} · {cabin.max_guests} personas
+                          {cabin.name}{cabin.cabin.deleted_at ? ' · Eliminada (reserva existente)' : ''} · {cabin.max_guests} personas
                         </span>
                         <span className="mt-0.5 block text-xs">
                           {checking

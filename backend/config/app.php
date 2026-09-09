@@ -67,6 +67,9 @@ return [
 
     'timezone' => 'UTC',
 
+    // Calendar dates for stays follow the property's local day.
+    'business_timezone' => 'America/Bogota',
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

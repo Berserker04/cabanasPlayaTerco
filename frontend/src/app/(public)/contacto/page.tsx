@@ -1,3 +1,11 @@
+import { api } from '@/lib/api';
+import { buildCabinWhatsAppHref } from '@/lib/cabin-utils';
+import type { ApiResponse } from '@/types/api';
+import type { PublicCabin } from '@/types/cabin';
+import {
+  stayFromSearchParams,
+  type StaySearchParams,
+} from '@/lib/stay-context';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import {
@@ -26,11 +34,14 @@ import { ContactForm } from './contact-form';
 
 export const metadata: Metadata = {
   title: 'Contacto',
-  description: 'Contáctanos para reservas, cotizaciones e información sobre Cabañas Playa Terco.',
+  description:
+    'Contáctanos para reservas, cotizaciones e información sobre Cabañas Playa Terco.',
 };
 
-const heroImage = '/assets/imagenes/511133396_9990216891027933_4540081246476097597_n.jpg';
-const mapImage = '/assets/imagenes/54516895_2086105884772446_8521564931760324608_n.jpg';
+const heroImage =
+  '/assets/imagenes/511133396_9990216891027933_4540081246476097597_n.jpg';
+const mapImage =
+  '/assets/imagenes/54516895_2086105884772446_8521564931760324608_n.jpg';
 
 const whatsappHref = `${WHATSAPP_URL}?text=${encodeURIComponent(
   `Hola, quiero consultar disponibilidad para hospedarme en ${SITE_NAME}.`,
@@ -80,7 +91,26 @@ const socialLinks = [
   },
 ] as const;
 
-export default function ContactPage() {
+export default async function ContactPage({
+  searchParams,
+}: {
+  searchParams: StaySearchParams;
+}) {
+  const context = await stayFromSearchParams(searchParams);
+  const cabins = context.cabin_id
+    ? await api
+        .get<ApiResponse<PublicCabin[]>>('/cabins', { cache: 'no-store' })
+        .then((response) => response.data)
+        .catch(() => [])
+    : [];
+  const preferredCabin = cabins.find(
+    (cabin) => String(cabin.id) === context.cabin_id,
+  );
+  const stayWhatsappHref = buildCabinWhatsAppHref(preferredCabin, {
+    checkIn: context.check_in,
+    checkOut: context.check_out,
+    guests: context.guests,
+  });
   return (
     <>
       <section className="relative isolate overflow-hidden bg-neutral-950 text-white">
@@ -103,12 +133,20 @@ export default function ContactPage() {
               Contacto y reservas
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-cyan-50 sm:text-lg">
-              Escríbenos para consultar fechas, coordinar tu llegada y preparar una cotización
-              clara para tu estadía frente al mar.
+              Escríbenos para consultar fechas, coordinar tu llegada y preparar
+              una cotización clara para tu estadía frente al mar.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button size="lg" asChild className="bg-cyan-500 text-cyan-950 hover:bg-cyan-400">
-                <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+              <Button
+                size="lg"
+                asChild
+                className="bg-cyan-500 text-cyan-950 hover:bg-cyan-400"
+              >
+                <a
+                  href={stayWhatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <MessageCircle className="h-5 w-5" aria-hidden="true" />
                   WhatsApp directo
                 </a>
@@ -139,23 +177,28 @@ export default function ContactPage() {
               Cuéntanos cómo quieres viajar
             </h2>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-neutral-600">
-              Comparte tus fechas, número de huéspedes y cualquier detalle importante. Si aún no
-              tienes fechas exactas, deja la cabaña por definir y te orientamos por correo o WhatsApp.
+              Comparte tus fechas, número de huéspedes y cualquier detalle
+              importante. Si aún no tienes fechas exactas, deja la cabaña por
+              definir y te orientamos por correo o WhatsApp.
             </p>
             <div className="mt-7">
-              <ContactForm />
+              <ContactForm initialContext={context} />
             </div>
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-24">
             <div className="rounded-lg border bg-white p-5 shadow-sm">
-              <Clock className="mb-4 h-6 w-6 text-cyan-700" aria-hidden="true" />
+              <Clock
+                className="mb-4 h-6 w-6 text-cyan-700"
+                aria-hidden="true"
+              />
               <h2 className="text-lg font-semibold tracking-normal text-neutral-950">
                 Respuesta cercana
               </h2>
               <p className="mt-2 text-sm leading-6 text-neutral-600">
-                Revisamos cada solicitud para confirmar disponibilidad, recomendaciones de llegada y
-                opciones de alojamiento según tu grupo.
+                Revisamos cada solicitud para confirmar disponibilidad,
+                recomendaciones de llegada y opciones de alojamiento según tu
+                grupo.
               </p>
             </div>
 
@@ -163,7 +206,7 @@ export default function ContactPage() {
               {contactMethods.map(({ title, value, href, Icon, external }) => (
                 <a
                   key={title}
-                  href={href}
+                  href={title === 'WhatsApp' ? stayWhatsappHref : href}
                   target={external ? '_blank' : undefined}
                   rel={external ? 'noopener noreferrer' : undefined}
                   className="group flex min-w-0 items-center gap-3 rounded-lg border bg-white p-4 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50"
@@ -172,7 +215,9 @@ export default function ContactPage() {
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-neutral-950">{title}</span>
+                    <span className="block text-sm font-semibold text-neutral-950">
+                      {title}
+                    </span>
                     <span className="block break-words text-sm text-neutral-600 group-hover:text-cyan-800">
                       {value}
                     </span>
@@ -182,7 +227,9 @@ export default function ContactPage() {
             </div>
 
             <div className="rounded-lg border bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold tracking-normal text-neutral-950">Redes</h2>
+              <h2 className="text-lg font-semibold tracking-normal text-neutral-950">
+                Redes
+              </h2>
               <div className="mt-4 flex flex-wrap gap-3">
                 {socialLinks.map(({ label, href, Icon }) => (
                   <Button key={label} variant="outline" asChild>
@@ -207,16 +254,29 @@ export default function ContactPage() {
             <h2 className="mt-3 text-3xl font-bold tracking-normal text-neutral-950">
               Encuéntranos en Playa Terco
             </h2>
-            <p className="mt-4 text-sm leading-7 text-neutral-600">{LOCATION_LABEL}</p>
+            <p className="mt-4 text-sm leading-7 text-neutral-600">
+              {LOCATION_LABEL}
+            </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Button asChild className="bg-cyan-700 text-white hover:bg-cyan-800">
-                <a href={GOOGLE_MAPS_URL} target="_blank" rel="noopener noreferrer">
+              <Button
+                asChild
+                className="bg-cyan-700 text-white hover:bg-cyan-800"
+              >
+                <a
+                  href={GOOGLE_MAPS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <Navigation className="h-4 w-4" aria-hidden="true" />
                   Abrir Google Maps
                 </a>
               </Button>
               <Button variant="outline" asChild>
-                <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={stayWhatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <MessageCircle className="h-4 w-4" aria-hidden="true" />
                   Coordinar llegada
                 </a>
@@ -243,7 +303,9 @@ export default function ContactPage() {
                 <MapPin className="h-5 w-5" aria-hidden="true" />
               </span>
               <span>
-                <span className="block text-sm font-semibold">Ver ubicación exacta</span>
+                <span className="block text-sm font-semibold">
+                  Ver ubicación exacta
+                </span>
                 <span className="block text-xs text-cyan-50">Google Maps</span>
               </span>
             </span>

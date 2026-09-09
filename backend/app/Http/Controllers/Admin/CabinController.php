@@ -7,11 +7,14 @@ use App\Http\Requests\Admin\StoreCabinRequest;
 use App\Http\Requests\Admin\UpdateCabinRequest;
 use App\Http\Resources\CabinResource;
 use App\Models\Cabin;
+use App\Models\CabinMapPoint;
 use App\Models\CabinType;
 use App\Services\FileUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class CabinController extends Controller
 {
@@ -21,8 +24,17 @@ class CabinController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'trashed' => ['sometimes', 'in:without,only,with'],
+            'per_page' => ['sometimes', 'integer', 'between:1,100'],
+            'status' => ['sometimes', 'in:available,occupied,maintenance,inactive'],
+            'is_active' => ['sometimes', 'in:true,false,1,0'],
+        ]);
         $cabins = Cabin::query()
+            ->when($request->input('trashed') === 'only', fn ($query) => $query->onlyTrashed())
+            ->when($request->input('trashed') === 'with', fn ($query) => $query->withTrashed())
             ->with([
+                'mapPoint',
                 'type',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
@@ -41,26 +53,36 @@ class CabinController extends Controller
             ->when($request->filled('is_active'), fn ($query) => $query->where('is_active', $request->boolean('is_active')))
             ->orderBy('sort_order')
             ->orderBy('name')
-            ->paginate(30);
+            ->paginate($request->integer('per_page', 30));
 
         return response()->json([
             'data' => CabinResource::collection($cabins),
             'meta' => [
                 'current_page' => $cabins->currentPage(),
-                'last_page'    => $cabins->lastPage(),
-                'per_page'     => $cabins->perPage(),
-                'total'        => $cabins->total(),
+                'last_page' => $cabins->lastPage(),
+                'per_page' => $cabins->perPage(),
+                'total' => $cabins->total(),
+            ],
+            'summary' => [
+                'total' => Cabin::count(),
+                'public' => Cabin::visible()->count(),
+                'available' => Cabin::available()->count(),
+                'deleted' => Cabin::onlyTrashed()->count(),
             ],
         ]);
     }
 
     public function store(StoreCabinRequest $request): JsonResponse
     {
-        $data = $this->preparePayload($request->validated());
-        $cabin = Cabin::create($data);
+        $cabin = DB::transaction(function () use ($request): Cabin {
+            $data = $this->preparePayload($request->validated());
+            $this->reservePoint($data['map_slot']);
+
+            return Cabin::create($data);
+        });
 
         return response()->json([
-            'data'    => new CabinResource($this->loadForResponse($cabin)),
+            'data' => new CabinResource($this->loadForResponse($cabin)),
             'message' => 'Cabaña creada.',
         ], 201);
     }
@@ -74,10 +96,16 @@ class CabinController extends Controller
 
     public function update(UpdateCabinRequest $request, Cabin $cabin): JsonResponse
     {
-        $cabin->update($this->preparePayload($request->validated(), $cabin));
+        DB::transaction(function () use ($request, $cabin): void {
+            $data = $this->preparePayload($request->validated(), $cabin);
+            if (isset($data['map_slot'])) {
+                $this->reservePoint($data['map_slot'], $cabin->id);
+            }
+            $cabin->update($data);
+        });
 
         return response()->json([
-            'data'    => new CabinResource($this->loadForResponse($cabin->fresh())),
+            'data' => new CabinResource($this->loadForResponse($cabin->fresh())),
             'message' => 'Cabaña actualizada.',
         ]);
     }
@@ -90,28 +118,63 @@ class CabinController extends Controller
 
         $upload = $this->uploadService->upload($request->file('file'), 'cabins/covers');
 
-        if ($cabin->cover_image_path) {
-            $this->uploadService->delete($cabin->cover_image_path);
+        $previousPath = $cabin->cover_image_path;
+        try {
+            $cabin->update(['cover_image' => $upload['url'], 'cover_image_path' => $upload['path']]);
+        } catch (\Throwable $exception) {
+            $this->uploadService->delete($upload['path']);
+            throw $exception;
+        }
+        if ($previousPath) {
+            $this->uploadService->delete($previousPath);
         }
 
-        $cabin->update([
-            'cover_image'      => $upload['url'],
-            'cover_image_path' => $upload['path'],
-        ]);
-
         return response()->json([
-            'data'    => new CabinResource($this->loadForResponse($cabin->fresh())),
+            'data' => new CabinResource($this->loadForResponse($cabin->fresh())),
             'message' => 'Portada actualizada.',
         ]);
     }
 
     public function destroy(Cabin $cabin): JsonResponse
     {
-        $cabin->delete();
+        DB::transaction(fn () => Cabin::lockForUpdate()->findOrFail($cabin->id)->delete());
 
         return response()->json([
             'message' => 'Cabaña eliminada.',
         ]);
+    }
+
+    public function restore(int $id): JsonResponse
+    {
+        $cabin = DB::transaction(function () use ($id): Cabin {
+            $cabin = Cabin::onlyTrashed()->lockForUpdate()->findOrFail($id);
+            $cabin->is_active = false;
+            $cabin->restore();
+
+            return $cabin;
+        });
+
+        return response()->json(['data' => new CabinResource($this->loadForResponse($cabin)), 'message' => 'Cabaña restaurada. La ficha permanece oculta hasta publicarla.']);
+    }
+
+    public function deleteCover(Cabin $cabin): JsonResponse
+    {
+        $path = $cabin->cover_image_path;
+        $cabin->update(['cover_image' => null, 'cover_image_path' => null]);
+        if ($path) {
+            $this->uploadService->delete($path);
+        }
+
+        return response()->json(['data' => new CabinResource($this->loadForResponse($cabin)), 'message' => 'Portada retirada.']);
+    }
+
+    private function reservePoint(string $key, ?int $cabinId = null): void
+    {
+        CabinMapPoint::where('key', $key)->lockForUpdate()->firstOrFail();
+        // A locking read sees the winner even under MySQL REPEATABLE READ.
+        if (Cabin::withTrashed()->where('map_slot', $key)->when($cabinId, fn ($query) => $query->whereKeyNot($cabinId))->lockForUpdate()->first(['id'])) {
+            throw ValidationException::withMessages(['map_slot' => 'Este punto ya está reservado para otra cabaña.']);
+        }
     }
 
     private function preparePayload(array $data, ?Cabin $cabin = null): array
@@ -124,8 +187,7 @@ class CabinController extends Controller
         $data['slug'] ??= $cabin?->slug ?? $this->uniqueSlug($data['name'] ?? 'cabana');
 
         if (empty($data['code'])) {
-            $source = $data['slug'] ?? $cabin?->slug ?? $data['name'] ?? $cabin?->name ?? Str::uuid()->toString();
-            $data['code'] = Str::upper(Str::limit(Str::slug($source), 50, ''));
+            $data['code'] = $cabin?->code ?? 'CAB-'.Str::upper(Str::random(12));
         }
 
         return $data;
@@ -137,7 +199,7 @@ class CabinController extends Controller
         $slug = $base;
         $suffix = 2;
 
-        while (Cabin::where('slug', $slug)->exists()) {
+        while (Cabin::withTrashed()->where('slug', $slug)->exists()) {
             $slug = "{$base}-{$suffix}";
             $suffix++;
         }
@@ -150,15 +212,15 @@ class CabinController extends Controller
         return CabinType::firstOrCreate(
             ['slug' => 'cabana-playa-terco'],
             [
-                'name'              => 'Cabaña Playa Terco',
-                'description'       => 'Tipo interno para las cabañas fisicas de Playa Terco.',
+                'name' => 'Cabaña Playa Terco',
+                'description' => 'Tipo interno para las cabañas fisicas de Playa Terco.',
                 'short_description' => 'Tipo interno.',
-                'base_price'        => 0,
-                'max_guests'        => 1,
-                'bedrooms'          => 0,
-                'bathrooms'         => 0,
-                'is_active'         => false,
-                'sort_order'        => 0,
+                'base_price' => 0,
+                'max_guests' => 1,
+                'bedrooms' => 0,
+                'bathrooms' => 0,
+                'is_active' => false,
+                'sort_order' => 0,
             ],
         )->id;
     }
@@ -166,6 +228,7 @@ class CabinController extends Controller
     private function loadForResponse(Cabin $cabin): Cabin
     {
         return $cabin->load([
+            'mapPoint',
             'type',
             'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
         ]);

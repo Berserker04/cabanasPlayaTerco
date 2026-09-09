@@ -17,7 +17,7 @@ class FileUploadService
     public function upload(UploadedFile $file, string $directory = 'uploads', ?string $disk = null): array
     {
         $disk ??= config('filesystems.uploads_disk', config('filesystems.default', 's3'));
-        $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
+        $filename = Str::uuid().'.'.($file->guessExtension() ?: $file->getClientOriginalExtension());
         $this->ensureDiskIsConfigured($disk);
 
         try {
@@ -38,11 +38,11 @@ class FileUploadService
         }
 
         return [
-            'url'           => Storage::disk($disk)->url($path),
-            'path'          => $path,
+            'url' => Storage::disk($disk)->url($path),
+            'path' => $path,
             'original_name' => $file->getClientOriginalName(),
-            'mime_type'     => $file->getMimeType(),
-            'size_bytes'    => $file->getSize(),
+            'mime_type' => $file->getMimeType(),
+            'size_bytes' => $file->getSize(),
         ];
     }
 

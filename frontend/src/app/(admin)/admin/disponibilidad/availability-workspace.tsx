@@ -5,8 +5,6 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   LoaderCircle,
   LockKeyhole,
@@ -45,6 +43,7 @@ import {
   type AgendaSelection,
 } from './availability-agenda';
 import { BlockSheet } from './availability-block-form';
+import { OperationPeriodSelector } from './availability-period-selector';
 import {
   AvailabilityRecordForm,
   Field,
@@ -60,15 +59,17 @@ import {
   buildQuery,
   formatDate,
   formatRange,
-  initialFilters,
-  isIsoDate,
+  initialWorkspace,
+  operationParams,
+  operationQueryPeriod,
+  operationStayFilters,
   MAX_RANGE_DAYS,
   rangeLength,
-  todayIso,
   validRange,
   type AvailabilityFilters,
   type AvailabilityMode,
   type AvailabilityView,
+  type OperationPeriod,
 } from './availability-model';
 
 const subscribeHash = (callback: () => void) => {
@@ -92,23 +93,11 @@ export function AvailabilityWorkspace() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const hash = useSyncExternalStore(subscribeHash, hashSnapshot, serverHash);
-  const filters = initialFilters(new URLSearchParams(searchParams.toString()));
-  const legacyAgenda = hash === '#agenda' && !searchParams.has('mode');
-  const mode: AvailabilityMode =
-    legacyAgenda ||
-    searchParams.get('mode') === 'operation' ||
-    (!searchParams.has('mode') &&
-      !searchParams.has('from') &&
-      !searchParams.has('view'))
-      ? 'operation'
-      : 'availability';
-  const operationRange = legacyAgenda || searchParams.get('period') === 'range';
-  const dateParam = searchParams.get('date');
-  const day = isIsoDate(dateParam)
-    ? dateParam
-    : searchParams.has('from')
-      ? filters.checkIn
-      : todayIso();
+  const { mode, operation, filters } = initialWorkspace(
+    new URLSearchParams(searchParams.toString()),
+    hash,
+  );
+  const operationRange = operation.from !== operation.to;
   const viewParam = searchParams.get('view');
   const view: AvailabilityView =
     viewParam === 'matrix' || viewParam === 'list' || viewParam === 'map'
@@ -140,6 +129,9 @@ export function AvailabilityWorkspace() {
   const [blockReason, setBlockReason] = useState('');
   const [blockNotes, setBlockNotes] = useState('');
   const [blockAll, setBlockAll] = useState(false);
+  const [blockCabinNames, setBlockCabinNames] = useState<
+    Record<number, string>
+  >({});
   const [blockCabinIds, setBlockCabinIds] = useState<number[]>([]);
   const [blockError, setBlockError] = useState('');
   const [openingBlock, setOpeningBlock] = useState(false);
@@ -169,12 +161,20 @@ export function AvailabilityWorkspace() {
   }
   function changeMode(next: AvailabilityMode) {
     updateUrl({
+      ...operationParams(operation),
       mode: next,
       from: filters.checkIn,
       to: filters.checkOut,
       guests: filters.guests,
-      date: day,
-      period: undefined,
+    });
+  }
+  function changeOperation(next: OperationPeriod) {
+    updateUrl({
+      ...operationParams(next),
+      mode: 'operation',
+      from: filters.checkIn,
+      to: filters.checkOut,
+      guests: filters.guests,
     });
   }
   function selectCabins(ids: number[]) {
@@ -204,8 +204,11 @@ export function AvailabilityWorkspace() {
       ),
     enabled: mode === 'availability' || blockOpen,
   });
-  const agendaFrom = operationRange ? filters.checkIn : day;
-  const agendaTo = operationRange ? filters.checkOut : addDaysIso(day, 1);
+  const {
+    from: agendaFrom,
+    to: agendaTo,
+    day,
+  } = operationQueryPeriod(operation);
   const agendaQuery = useQuery({
     queryKey: ['admin-availability-agenda', agendaFrom, agendaTo],
     queryFn: () =>
@@ -232,8 +235,8 @@ export function AvailabilityWorkspace() {
   function newRecord() {
     rememberFocus();
     const initial =
-      mode === 'operation' && !operationRange
-        ? { checkIn: day, checkOut: addDaysIso(day, 1), guests: filters.guests }
+      mode === 'operation'
+        ? operationStayFilters(operation, filters.guests)
         : filters;
     setRecordDraft({
       filters: initial,
@@ -345,14 +348,12 @@ export function AvailabilityWorkspace() {
     setBlockNotes('');
     setBlockAll(false);
     setBlockError('');
-    setBlockCheckIn(
-      mode === 'operation' && !operationRange ? day : filters.checkIn,
-    );
-    setBlockCheckOut(
-      mode === 'operation' && !operationRange
-        ? addDaysIso(day, 1)
-        : filters.checkOut,
-    );
+    const initial =
+      mode === 'operation'
+        ? operationStayFilters(operation, filters.guests)
+        : filters;
+    setBlockCheckIn(initial.checkIn);
+    setBlockCheckOut(initial.checkOut);
     setBlockCabinIds(mode === 'availability' ? selectedIds : []);
     setBlockOpen(true);
   }
@@ -368,6 +369,14 @@ export function AvailabilityWorkspace() {
       setBlockNotes(block.notes ?? '');
       setBlockAll(block.applies_to_all);
       setBlockCabinIds(block.cabin_ids);
+      setBlockCabinNames(
+        Object.fromEntries(
+          block.cabin_ids.map((id, index) => [
+            id,
+            block.cabin_names[index] ?? `Cabaña ${id}`,
+          ]),
+        ),
+      );
       setBlockError('');
       setBlockOpen(true);
     } catch (error) {
@@ -427,26 +436,28 @@ export function AvailabilityWorkspace() {
             Disponibilidad
           </h1>
         </div>
-        {canOperate && <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-11 min-w-0 whitespace-normal px-2"
-            onClick={newBlock}
-          >
-            <LockKeyhole className="size-4" />
-            <span>Bloquear fechas</span>
-          </Button>
-          <Button
-            ref={newRecordButton}
-            type="button"
-            className="h-auto min-h-11 min-w-0 whitespace-normal px-2"
-            onClick={newRecord}
-          >
-            <Plus className="size-4" />
-            Nuevo registro
-          </Button>
-        </div>}
+        {canOperate && (
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-0 whitespace-normal px-2"
+              onClick={newBlock}
+            >
+              <LockKeyhole className="size-4" />
+              <span>Bloquear fechas</span>
+            </Button>
+            <Button
+              ref={newRecordButton}
+              type="button"
+              className="h-auto min-h-11 min-w-0 whitespace-normal px-2"
+              onClick={newRecord}
+            >
+              <Plus className="size-4" />
+              Nuevo registro
+            </Button>
+          </div>
+        )}
       </header>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b pb-2">
         <div
@@ -465,7 +476,7 @@ export function AvailabilityWorkspace() {
             onClick={() => changeMode('operation')}
           >
             <ClipboardList className="hidden size-4 min-[380px]:block" />
-            Operación del día
+            Operación
           </Button>
           <Button
             type="button"
@@ -497,111 +508,14 @@ export function AvailabilityWorkspace() {
       </div>
       {mode === 'operation' ? (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {operationRange ? (
-              <>
-                <p className="mr-auto text-sm font-medium">
-                  {formatRange(filters.checkIn, filters.checkOut)}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-11"
-                  onClick={() =>
-                    updateUrl({
-                      mode: 'operation',
-                      period: undefined,
-                      date: todayIso(),
-                    })
-                  }
-                >
-                  Ver hoy
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="size-11 shrink-0"
-                  aria-label="Día anterior"
-                  onClick={() =>
-                    updateUrl({
-                      mode: 'operation',
-                      period: undefined,
-                      date: addDaysIso(day, -1),
-                    })
-                  }
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <label className="min-w-40 flex-1 sm:max-w-48">
-                  <span className="sr-only">Día de operación</span>
-                  <Input
-                    type="date"
-                    className="h-11 min-w-0 text-base"
-                    value={day}
-                    onInput={(event) => {
-                      if (isIsoDate(event.currentTarget.value))
-                        updateUrl({
-                          mode: 'operation',
-                          date: event.currentTarget.value,
-                          period: undefined,
-                        });
-                    }}
-                  />
-                </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="size-11 shrink-0"
-                  aria-label="Día siguiente"
-                  onClick={() =>
-                    updateUrl({
-                      mode: 'operation',
-                      period: undefined,
-                      date: addDaysIso(day, 1),
-                    })
-                  }
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="min-h-11"
-                  onClick={() =>
-                    updateUrl({
-                      mode: 'operation',
-                      date: todayIso(),
-                      period: undefined,
-                    })
-                  }
-                >
-                  Hoy
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="min-h-11 text-xs sm:ml-auto"
-                  onClick={() =>
-                    updateUrl({
-                      mode: 'operation',
-                      period: 'range',
-                      from: day,
-                      to: addDaysIso(day, 6),
-                    })
-                  }
-                >
-                  Próximos 7 días
-                </Button>
-              </>
-            )}
-          </div>
+          <OperationPeriodSelector
+            period={operation}
+            onChange={changeOperation}
+          />
           <AvailabilityAgendaSection
             key={`${agendaFrom}/${agendaTo}/${operationRange}`}
             agenda={agendaQuery.data?.data}
-            day={operationRange ? undefined : day}
+            day={day}
             isLoading={agendaQuery.isPending}
             isFetching={agendaQuery.isFetching}
             errorMessage={
@@ -622,11 +536,11 @@ export function AvailabilityWorkspace() {
             pending={plannerQuery.isFetching}
             onSubmit={(next) =>
               updateUrl({
+                ...operationParams(operation),
                 mode: 'availability',
                 from: next.checkIn,
                 to: next.checkOut,
                 guests: next.guests,
-                period: undefined,
               })
             }
           />
@@ -674,11 +588,10 @@ export function AvailabilityWorkspace() {
             className="min-h-11"
             variant="ghost"
             onClick={() =>
-              updateUrl({
-                mode: 'operation',
-                period: 'range',
+              changeOperation({
                 from: filters.checkIn,
                 to: filters.checkOut,
+                preset: 'range',
               })
             }
           >
@@ -770,6 +683,7 @@ export function AvailabilityWorkspace() {
           notes={blockNotes}
           appliesToAll={blockAll}
           cabinIds={blockCabinIds}
+          cabinNames={blockCabinNames}
           cabins={cabins}
           onCheckInChange={setBlockCheckIn}
           onCheckOutChange={setBlockCheckOut}
@@ -816,7 +730,12 @@ export function AvailabilityWorkspace() {
               range: `${from}/${to}/${filters.guests}`,
               ids: canOperate ? [id] : [],
             });
-            updateUrl({ mode: 'availability', from, to, period: undefined });
+            updateUrl({
+              ...operationParams(operation),
+              mode: 'availability',
+              from,
+              to,
+            });
             restoreFocus();
           }}
         />

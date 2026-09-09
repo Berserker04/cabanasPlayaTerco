@@ -1,3 +1,10 @@
+import Image from 'next/image';
+import { notFound } from 'next/navigation';
+import {
+  stayHref,
+  stayFromSearchParams,
+  type StaySearchParams,
+} from '@/lib/stay-context';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -6,36 +13,37 @@ import { CabinMap } from '@/components/cabins/cabin-map';
 import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { api } from '@/lib/api';
-import {
-  MAP_SLOT_LABELS,
-  buildCabinWhatsAppHref,
-  getCabinCover,
-} from '@/lib/cabin-utils';
+import { api, ApiError } from '@/lib/api';
+import { buildCabinWhatsAppHref, getCabinCover } from '@/lib/cabin-utils';
 import type { ApiResponse } from '@/types/api';
-import type { Cabin, LodgingTariff } from '@/types/cabin';
+import type { PublicCabin as Cabin, LodgingTariff } from '@/types/cabin';
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams: StaySearchParams;
 }
 
 async function getCabin(slug: string): Promise<Cabin | null> {
   try {
     const response = await api.get<ApiResponse<Cabin>>(`/cabins/${slug}`, {
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
 
     return response.data;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
   }
 }
 
 async function getTariffs(): Promise<LodgingTariff[]> {
   try {
-    const response = await api.get<ApiResponse<LodgingTariff[]>>('/lodging-tariffs', {
-      next: { revalidate: 60 },
-    });
+    const response = await api.get<ApiResponse<LodgingTariff[]>>(
+      '/lodging-tariffs',
+      {
+        cache: 'no-store',
+      },
+    );
 
     return response.data;
   } catch {
@@ -55,73 +63,61 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function CabinDetailPage({ params }: Props) {
+export default async function CabinDetailPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const [cabin, tariffs] = await Promise.all([getCabin(slug), getTariffs()]);
 
-  if (!cabin) {
-    return (
-      <section className="bg-stone-50 py-16">
-        <div className="container mx-auto px-4">
-          <div className="rounded-lg border bg-white p-8 text-center shadow-sm">
-            <h1 className="text-2xl font-bold tracking-normal">No pudimos cargar esta cabaña</h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-              Puede ser un problema temporal de conexión con la API. Puedes volver al catálogo o
-              escribirnos directamente para recibir ayuda.
-            </p>
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-              <Button asChild>
-                <Link href="/cabanas">Volver al catalogo</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <a href={buildCabinWhatsAppHref()} target="_blank" rel="noopener noreferrer">
-                  WhatsApp
-                </a>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  const images = cabin.media?.filter((item) => item.type === 'image') ?? [];
-  const videos = cabin.media?.filter((item) => item.type === 'video') ?? [];
+  if (!cabin) notFound();
+  const context = {
+    ...(await stayFromSearchParams(searchParams)),
+    cabin_id: String(cabin.id),
+  };
+  const media = [...(cabin.media ?? [])].sort(
+    (a, b) => a.sort_order - b.sort_order || a.id - b.id,
+  );
+  const images = media.filter((item) => item.type === 'image') ?? [];
   const cover = getCabinCover(cabin);
-  const imageUrls = images.length > 0 ? images.map((item) => item.url) : [cover];
 
   return (
     <>
       <section className="bg-white">
         <div className="container mx-auto px-4 py-8 sm:py-10">
           <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <div
-              className="min-h-[320px] rounded-lg bg-cover bg-center sm:min-h-[460px]"
-              style={{ backgroundImage: `url(${cover})` }}
-              aria-label={cabin.name}
-            />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-              {imageUrls.slice(1, 3).map((image, index) => (
+            <div className="relative aspect-[4/3] overflow-hidden rounded-lg">
+              <Image
+                src={cover}
+                alt={'Portada de ' + cabin.name}
+                fill
+                unoptimized
+                priority
+                sizes="(min-width: 1024px) 60vw, 100vw"
+                className="object-cover"
+              />
+            </div>
+            <div className={`grid gap-4 ${images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} lg:grid-cols-1`}>
+              {images.slice(0, 2).map((item) => (
                 <div
-                  key={`${image}-${index}`}
-                  className="min-h-[180px] rounded-lg bg-cover bg-center"
-                  style={{ backgroundImage: `url(${image})` }}
-                />
+                  key={item.id}
+                  className="relative min-h-[128px] overflow-hidden rounded-lg sm:min-h-[180px]"
+                >
+                  <Image
+                    src={item.url}
+                    alt={item.alt || cabin.name}
+                    fill
+                    unoptimized
+                    sizes="40vw"
+                    className="object-cover"
+                  />
+                </div>
               ))}
-              {videos[0] ? (
-                <video
-                  src={videos[0].url}
-                  controls
-                  className="min-h-[180px] w-full rounded-lg bg-neutral-950 object-cover"
-                />
-              ) : null}
-              {imageUrls.length === 1 && !videos[0] ? (
-                <div className="flex min-h-[180px] items-center justify-center rounded-lg bg-cyan-950 p-6 text-center text-white">
-                  <p className="max-w-xs text-sm leading-6">
-                    Una estadía tranquila entre vegetación tropical, playa y atención directa.
+              {images.length === 0 && (
+                <div className="flex items-center rounded-lg bg-cyan-950 p-6 text-white">
+                  <p>
+                    Una estadía tranquila entre vegetación tropical, playa y
+                    atención directa.
                   </p>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
@@ -131,20 +127,36 @@ export default async function CabinDetailPage({ params }: Props) {
         <div className="container mx-auto grid gap-10 px-4 lg:grid-cols-[1fr_360px]">
           <div>
             <Badge className="bg-cyan-100 text-cyan-900 hover:bg-cyan-100">
-              {cabin.map_slot ? MAP_SLOT_LABELS[cabin.map_slot] : 'Cabañas Playa Terco'}
+              {cabin.map_point?.label ?? 'Cabañas Playa Terco'}
             </Badge>
             <h1 className="mt-4 text-3xl font-bold tracking-normal text-neutral-950 sm:text-5xl">
               {cabin.name}
             </h1>
-            <p className="mt-5 max-w-3xl text-base leading-8 text-neutral-600">
+            <p className="mt-5 max-w-3xl whitespace-pre-wrap break-words text-base leading-8 text-neutral-600">
               {cabin.description ?? cabin.short_description}
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Fact icon={<Users className="h-5 w-5" />} label="Capacidad cómoda" value={`${cabin.guest_capacity} huéspedes`} />
-              <Fact icon={<Users className="h-5 w-5" />} label="Capacidad máxima" value={`${cabin.min_guests}-${cabin.max_guests}`} />
-              <Fact icon={<BedDouble className="h-5 w-5" />} label="Camas" value={`${cabin.beds_count}`} />
-              <Fact icon={<Bath className="h-5 w-5" />} label="Baños" value={`${cabin.bathrooms_count}`} />
+              <Fact
+                icon={<Users className="h-5 w-5" />}
+                label="Capacidad cómoda"
+                value={`${cabin.guest_capacity} huéspedes`}
+              />
+              <Fact
+                icon={<Users className="h-5 w-5" />}
+                label="Huéspedes (mín. – máx.)"
+                value={`${cabin.min_guests} – ${cabin.max_guests}`}
+              />
+              <Fact
+                icon={<BedDouble className="h-5 w-5" />}
+                label="Camas"
+                value={`${cabin.beds_count}`}
+              />
+              <Fact
+                icon={<Bath className="h-5 w-5" />}
+                label="Baños"
+                value={`${cabin.bathrooms_count}`}
+              />
             </div>
 
             <div className="mt-10">
@@ -156,21 +168,41 @@ export default async function CabinDetailPage({ params }: Props) {
               </div>
             </div>
 
-            {images.length > 0 || videos.length > 0 ? (
+            {media.length > 0 ? (
               <div className="mt-10">
-                <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">Galería</h2>
+                <h2 className="text-2xl font-semibold tracking-normal text-neutral-950">
+                  Galería
+                </h2>
                 <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {images.map((image) => (
-                    <div
-                      key={image.id}
-                      role="img"
-                      aria-label={image.alt ?? `Imagen de ${cabin.name}`}
-                      className="aspect-[4/3] rounded-lg bg-cover bg-center"
-                      style={{ backgroundImage: `url(${image.url})` }}
-                    />
-                  ))}
-                  {videos.map((video) => (
-                    <video key={video.id} src={video.url} controls className="aspect-[4/3] w-full rounded-lg bg-neutral-950 object-cover" />
+                  {media.map((item) => (
+                    <figure key={item.id} className="min-w-0 space-y-2">
+                      {item.type === 'video' ? (
+                        <video
+                          src={item.url}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          aria-label={item.alt || 'Video de ' + cabin.name}
+                          className="aspect-[4/3] w-full rounded-lg bg-neutral-950 object-contain"
+                        />
+                      ) : (
+                        <div className="relative aspect-[4/3]">
+                          <Image
+                            src={item.url}
+                            alt={item.alt || 'Imagen de ' + cabin.name}
+                            fill
+                            unoptimized
+                            sizes="(min-width: 768px) 33vw, 100vw"
+                            className="rounded-lg object-cover"
+                          />
+                        </div>
+                      )}
+                      {item.alt && (
+                        <figcaption className="break-words text-sm text-muted-foreground">
+                          {item.alt}
+                        </figcaption>
+                      )}
+                    </figure>
                   ))}
                 </div>
               </div>
@@ -178,11 +210,27 @@ export default async function CabinDetailPage({ params }: Props) {
           </div>
 
           <aside className="h-fit rounded-lg border bg-stone-50 p-6">
-            <p className="text-sm text-muted-foreground">Tarifas del hospedaje</p>
+            <Button asChild variant="ghost" className="mb-4">
+              <Link href={stayHref('/cabanas', context)}>
+                Volver al catálogo
+              </Link>
+            </Button>
+            {context.check_in && (
+              <p className="mb-4 text-sm">
+                {context.check_in} → {context.check_out || 'Salida por definir'}{' '}
+                · {context.guests || '2'} huéspedes
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Tarifas del hospedaje
+            </p>
             {tariffs.length > 0 ? (
               <div className="mt-4 space-y-4">
                 {tariffs.map((tariff) => (
-                  <div key={tariff.id} className="border-b pb-4 last:border-b-0 last:pb-0">
+                  <div
+                    key={tariff.id}
+                    className="border-b pb-4 last:border-b-0 last:pb-0"
+                  >
                     <LodgingTariffDetails tariff={tariff} defaultExpanded />
                   </div>
                 ))}
@@ -193,17 +241,33 @@ export default async function CabinDetailPage({ params }: Props) {
               </p>
             )}
             <div className="mt-6 grid gap-3">
-              <Button asChild size="lg" className="bg-cyan-700 text-white hover:bg-cyan-800">
-                <a href={buildCabinWhatsAppHref(cabin)} target="_blank" rel="noopener noreferrer">
+              <Button
+                asChild
+                size="lg"
+                className="bg-cyan-700 text-white hover:bg-cyan-800"
+              >
+                <a
+                  href={buildCabinWhatsAppHref(cabin, {
+                    checkIn: context.check_in,
+                    checkOut: context.check_out,
+                    guests: context.guests,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <MessageCircle className="h-4 w-4" />
                   Reservar por WhatsApp
                 </a>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/disponibilidad">Consultar disponibilidad</Link>
+                <Link href={stayHref('/disponibilidad', context)}>
+                  Consultar disponibilidad
+                </Link>
               </Button>
               <Button asChild size="lg" variant="ghost">
-                <Link href="/contacto">Enviar solicitud</Link>
+                <Link href={stayHref('/contacto', context)}>
+                  Enviar solicitud
+                </Link>
               </Button>
             </div>
           </aside>

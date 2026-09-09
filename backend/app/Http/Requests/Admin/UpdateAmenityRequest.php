@@ -15,8 +15,8 @@ class UpdateAmenityRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'     => ['sometimes', 'string', 'max:255', Rule::unique('amenities')->ignore($this->route('amenity'))],
-            'icon'     => ['nullable', 'string', 'max:100'],
+            'name' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('amenities')->ignore($this->route('amenity'))],
+            'icon' => ['nullable', 'string', 'max:100'],
             'category' => ['nullable', 'string', 'max:100'],
         ];
     }

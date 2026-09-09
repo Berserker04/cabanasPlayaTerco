@@ -32,7 +32,7 @@ function getCookie(name: string): string | undefined {
 }
 
 async function fetchApi<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, cache, next } = options;
+  const { method = 'GET', body, headers = {}, cache = options.next ? undefined : 'no-store', next } = options;
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const requestHeaders: Record<string, string> = isFormData
     ? {

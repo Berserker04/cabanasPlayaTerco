@@ -29,13 +29,13 @@ class ContactTest extends TestCase
         $cabinType = $this->createCabinType();
 
         $response = $this->postJson('/api/v1/contact', [
-            'name'          => '  Maria Perez  ',
-            'email'         => '  MARIA@example.com ',
-            'phone'         => '314 742 7806',
-            'message'       => 'Quiero cotizar una estadia familiar frente al mar.',
-            'check_in'      => now()->addDays(10)->format('Y-m-d'),
-            'check_out'     => now()->addDays(13)->format('Y-m-d'),
-            'guests_count'  => 4,
+            'name' => '  Maria Perez  ',
+            'email' => '  MARIA@example.com ',
+            'phone' => '314 742 7806',
+            'message' => 'Quiero cotizar una estadia familiar frente al mar.',
+            'check_in' => now()->addDays(10)->format('Y-m-d'),
+            'check_out' => now()->addDays(13)->format('Y-m-d'),
+            'guests_count' => 4,
             'cabin_type_id' => $cabinType->id,
         ]);
 
@@ -48,27 +48,20 @@ class ContactTest extends TestCase
                     'id',
                     'name',
                     'email',
-                    'phone',
-                    'source',
-                    'status',
-                    'message',
-                    'check_in',
-                    'check_out',
-                    'guests_count',
-                    'cabin_type',
+                    'cabin_id',
                 ],
                 'message',
                 'meta' => ['email_sent'],
             ]);
 
         $this->assertDatabaseHas('leads', [
-            'name'          => 'Maria Perez',
-            'email'         => 'maria@example.com',
-            'phone'         => '314 742 7806',
-            'guests_count'  => 4,
+            'name' => 'Maria Perez',
+            'email' => 'maria@example.com',
+            'phone' => '314 742 7806',
+            'guests_count' => 4,
             'cabin_type_id' => $cabinType->id,
-            'source'        => 'website',
-            'status'        => 'new',
+            'source' => 'website',
+            'status' => 'new',
         ]);
 
         $lead = Lead::firstOrFail();
@@ -92,9 +85,9 @@ class ContactTest extends TestCase
     public function test_contact_form_validates_dates_and_guest_count(): void
     {
         $validPayload = [
-            'name'    => 'Carlos Ruiz',
-            'email'   => 'carlos@example.com',
-            'phone'   => '314 742 7806',
+            'name' => 'Carlos Ruiz',
+            'email' => 'carlos@example.com',
+            'phone' => '314 742 7806',
             'message' => 'Quiero consultar disponibilidad para una estadia.',
         ];
 
@@ -104,14 +97,14 @@ class ContactTest extends TestCase
             [['check_out' => now()->addDays(7)->format('Y-m-d')], ['check_in']],
             [
                 [
-                    'check_in'  => now()->addDays(7)->format('Y-m-d'),
+                    'check_in' => now()->addDays(7)->format('Y-m-d'),
                     'check_out' => now()->addDays(6)->format('Y-m-d'),
                 ],
                 ['check_out'],
             ],
             [['check_in' => now()->subDay()->format('Y-m-d'), 'check_out' => now()->addDay()->format('Y-m-d')], ['check_in']],
             [['guests_count' => 0], ['guests_count']],
-            [['guests_count' => 21], ['guests_count']],
+            [['guests_count' => 51], ['guests_count']],
             [['cabin_type_id' => 999], ['cabin_type_id']],
         ];
 
@@ -125,14 +118,14 @@ class ContactTest extends TestCase
     private function createCabinType(): CabinType
     {
         return CabinType::create([
-            'name'        => 'Cabana familiar',
-            'slug'        => 'cabana-familiar',
-            'base_price'  => 320000,
-            'max_guests'  => 6,
-            'bedrooms'    => 2,
-            'bathrooms'   => 1,
-            'is_active'   => true,
-            'sort_order'  => 1,
+            'name' => 'Cabana familiar',
+            'slug' => 'cabana-familiar',
+            'base_price' => 320000,
+            'max_guests' => 6,
+            'bedrooms' => 2,
+            'bathrooms' => 1,
+            'is_active' => true,
+            'sort_order' => 1,
         ]);
     }
 }

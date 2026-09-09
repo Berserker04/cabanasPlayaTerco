@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { QueryProvider } from '@/providers/query-provider';
 import { AuthProvider } from '@/providers/auth-provider';
+import { ConfirmationProvider } from '@/providers/confirmation-provider';
 import { SITE_NAME, SITE_DESCRIPTION } from '@/lib/constants';
 import './globals.css';
 
@@ -41,8 +42,10 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
         <QueryProvider>
           <AuthProvider>
+            <ConfirmationProvider>
             {children}
             <Toaster richColors position="top-right" />
+            </ConfirmationProvider>
           </AuthProvider>
         </QueryProvider>
       </body>

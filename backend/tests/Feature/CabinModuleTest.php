@@ -166,7 +166,7 @@ class CabinModuleTest extends TestCase
             ...$payload,
             'name'      => 'Cabana inactiva',
             'is_active' => false,
-        ])->assertCreated();
+        ])->assertUnprocessable()->assertJsonValidationErrors(['map_slot']);
     }
 
     public function test_admin_cabin_requests_reject_amenity_ids(): void

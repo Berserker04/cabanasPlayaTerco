@@ -14,17 +14,17 @@ class UpdateLodgingTariffRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title'        => ['sometimes', 'string', 'max:255'],
-            'price_cop'    => ['sometimes', 'numeric', 'min:0'],
-            'unit_label'   => ['sometimes', 'string', 'max:100'],
-            'description'  => ['nullable', 'string'],
-            'includes'     => ['nullable', 'array'],
-            'includes.*'   => ['string', 'max:255'],
-            'excludes'     => ['nullable', 'array'],
-            'excludes.*'   => ['string', 'max:255'],
+            'title' => ['sometimes', 'required', 'string', 'max:255'],
+            'price_cop' => ['sometimes', 'required', 'numeric', 'min:0', 'max:9999999999.99'],
+            'unit_label' => ['sometimes', 'required', 'string', 'max:100'],
+            'description' => ['nullable', 'string'],
+            'includes' => ['nullable', 'array'],
+            'includes.*' => ['string', 'max:255'],
+            'excludes' => ['nullable', 'array'],
+            'excludes.*' => ['string', 'max:255'],
             'public_notes' => ['nullable', 'string'],
-            'is_active'    => ['boolean'],
-            'sort_order'   => ['integer', 'min:0'],
+            'is_active' => ['boolean'],
+            'sort_order' => ['integer', 'between:0,65535'],
         ];
     }
 }

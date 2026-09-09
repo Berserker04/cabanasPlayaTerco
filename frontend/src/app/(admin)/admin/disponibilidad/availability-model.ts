@@ -13,6 +13,11 @@ export type AvailabilityFilters = {
 };
 export type AvailabilityMode = 'operation' | 'availability';
 export type AvailabilityView = 'auto' | 'list' | 'matrix' | 'map';
+export type OperationPeriod = {
+  from: string;
+  to: string;
+  preset: 'day' | 'week' | 'range';
+};
 export type AgendaFilter =
   | 'all'
   | 'arrivals'
@@ -107,6 +112,121 @@ export function initialFilters(params: URLSearchParams): AvailabilityFilters {
       Number.isInteger(guests) && guests > 0 && guests <= 50
         ? String(guests)
         : '4',
+  };
+}
+
+/** Operational dates include both endpoints, unlike checkout-exclusive stays. */
+export function validOperationRange(from: string, to: string) {
+  return (
+    isIsoDate(from) &&
+    isIsoDate(to) &&
+    rangeLength(from, to) >= 0 &&
+    rangeLength(from, to) <= MAX_RANGE_DAYS
+  );
+}
+
+export function operationWeek(today = todayIso()): OperationPeriod {
+  return { from: today, to: addDaysIso(today, 6), preset: 'week' };
+}
+
+/** Read both older shared-date links and independent operation/stay selections. */
+export function initialWorkspace(
+  params: URLSearchParams,
+  hash = '',
+  today = todayIso(),
+): {
+  mode: AvailabilityMode;
+  operation: OperationPeriod;
+  filters: AvailabilityFilters;
+} {
+  const legacyAgenda = hash === '#agenda' && !params.has('mode');
+  const mode: AvailabilityMode =
+    legacyAgenda ||
+    params.get('mode') === 'operation' ||
+    (!params.has('mode') && !params.has('from') && !params.has('view'))
+      ? 'operation'
+      : 'availability';
+  const from = params.get('operation_from');
+  const to = params.get('operation_to');
+  const canonical =
+    isIsoDate(from) && isIsoDate(to) && validOperationRange(from, to);
+  const preset = params.get('period');
+  let operation = operationWeek(today);
+  if (canonical) {
+    operation = {
+      from,
+      to,
+      preset:
+        preset === 'week' && rangeLength(from, to) === 6
+          ? 'week'
+          : preset === 'day' && from === to
+            ? 'day'
+            : 'range',
+    };
+  } else if (mode === 'operation') {
+    const legacyFrom = params.get('from');
+    const legacyTo = params.get('to');
+    const date = params.get('date');
+    if ((legacyAgenda || preset === 'range') && isIsoDate(legacyFrom)) {
+      operation = {
+        from: legacyFrom,
+        to:
+          isIsoDate(legacyTo) && validOperationRange(legacyFrom, legacyTo)
+            ? legacyTo
+            : addDaysIso(legacyFrom, 1),
+        preset: 'range',
+      };
+    } else if (
+      isIsoDate(date) ||
+      (isIsoDate(legacyFrom) && preset !== 'week')
+    ) {
+      const day = isIsoDate(date) ? date : legacyFrom!;
+      operation = { from: day, to: day, preset: 'day' };
+    } else if (preset === 'day') {
+      operation = { from: today, to: today, preset: 'day' };
+    }
+  }
+  const stayParams = new URLSearchParams(params);
+  if (mode === 'operation' && !canonical) {
+    // Older operation URLs used from/to for the agenda. Do not turn those dates
+    // (or the default week) into a preselected multi-night booking.
+    stayParams.set('from', operation.from);
+    stayParams.set('to', addDaysIso(operation.from, 1));
+  } else if (!isIsoDate(stayParams.get('from'))) {
+    stayParams.set('from', today);
+  }
+  return { mode, operation, filters: initialFilters(stayParams) };
+}
+
+export function operationParams(operation: OperationPeriod) {
+  return {
+    period: operation.preset,
+    operation_from: operation.from,
+    operation_to: operation.to,
+    date: operation.from === operation.to ? operation.from : undefined,
+  };
+}
+
+export function operationQueryPeriod(operation: OperationPeriod) {
+  // The API requires to > from; daily rendering clips the inclusive response.
+  return {
+    from: operation.from,
+    to:
+      operation.from === operation.to
+        ? addDaysIso(operation.from, 1)
+        : operation.to,
+    day: operation.from === operation.to ? operation.from : undefined,
+  };
+}
+
+export function operationStayFilters(
+  operation: OperationPeriod,
+  guests: string,
+): AvailabilityFilters {
+  return {
+    checkIn: operation.from,
+    checkOut: addDaysIso(operation.from, 1),
+    guests,
   };
 }
 export function buildQuery(

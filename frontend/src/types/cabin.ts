@@ -1,12 +1,30 @@
-export type MapSlot =
-  | 'cabana_1'
-  | 'cabana_2'
-  | 'cabana_3'
-  | 'cabana_4'
-  | 'cabana_5'
-  | 'cabana_6'
-  | 'cabana_7'
-  | 'cabana_8';
+export type MapSlot = string;
+
+export interface CabinMapPoint {
+  id: number;
+  key: MapSlot;
+  label: string;
+  x: number;
+  y: number;
+  sort_order: number;
+  cabin_id?: number | null;
+  cabin_deleted?: boolean;
+}
+
+export type PublicCabin = Omit<
+  Cabin,
+  | 'notes'
+  | 'cover_image_path'
+  | 'code'
+  | 'cabin_type_id'
+  | 'status'
+  | 'status_label'
+  | 'is_active'
+  | 'type'
+  | 'media'
+> & {
+  media?: Omit<CabinMedia, 'path' | 'cabin_id' | 'cabin_type_id'>[];
+};
 
 export interface CabinType {
   id: number;
@@ -50,6 +68,8 @@ export interface Cabin {
   beds_count: number;
   bathrooms_count: number;
   map_slot: MapSlot | null;
+  map_point?: CabinMapPoint | null;
+  deleted_at?: string | null;
   is_active: boolean;
   sort_order: number;
   type?: CabinType;
@@ -95,10 +115,11 @@ export interface LodgingTariff {
 
 export type CabinStatus = Cabin['status'];
 
-export type AvailabilityState = 'available' | 'reserved' | 'blocked' | 'maintenance' | 'inactive';
+export type AvailabilityState =
+  'available' | 'reserved' | 'blocked' | 'maintenance' | 'inactive';
 export type AvailabilityTone = 'green' | 'red' | 'orange' | 'gray';
 
-export interface CabinAvailabilityEntry {
+export interface CabinAvailabilityEntry<TCabin = Cabin> {
   cabin_id: number;
   map_slot: MapSlot | null;
   state: AvailabilityState;
@@ -128,7 +149,7 @@ export interface CabinAvailabilityEntry {
     notes: string | null;
     applies_to_all: boolean;
   } | null;
-  cabin: Cabin;
+  cabin: TCabin;
 }
 
 export interface AvailabilitySummary {
@@ -143,12 +164,12 @@ export interface AvailabilitySummary {
   can_host_guests: boolean;
 }
 
-export interface AvailabilityResult {
+export interface AvailabilityResult<TCabin = Cabin> {
   check_in: string;
   check_out: string;
   guests: number | null;
-  cabins: CabinAvailabilityEntry[];
-  available_cabins: CabinAvailabilityEntry[];
+  cabins: CabinAvailabilityEntry<TCabin>[];
+  available_cabins: CabinAvailabilityEntry<TCabin>[];
   summary: AvailabilitySummary;
   message: string;
 }

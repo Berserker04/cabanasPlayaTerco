@@ -63,7 +63,7 @@ type AmenityGroup = {
 async function getAmenities(): Promise<Amenity[]> {
   try {
     const response = await api.get<ApiResponse<Amenity[]>>('/amenities', {
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
 
     return response.data;

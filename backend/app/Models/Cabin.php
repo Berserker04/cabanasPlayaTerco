@@ -8,9 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Cabin extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'cabin_type_id',
         'name',
@@ -36,18 +39,23 @@ class Cabin extends Model
     protected function casts(): array
     {
         return [
-            'status'          => CabinStatus::class,
-            'is_active'       => 'boolean',
-            'guest_capacity'  => 'integer',
-            'min_guests'      => 'integer',
-            'max_guests'      => 'integer',
-            'beds_count'      => 'integer',
+            'status' => CabinStatus::class,
+            'is_active' => 'boolean',
+            'guest_capacity' => 'integer',
+            'min_guests' => 'integer',
+            'max_guests' => 'integer',
+            'beds_count' => 'integer',
             'bathrooms_count' => 'integer',
-            'sort_order'      => 'integer',
+            'sort_order' => 'integer',
         ];
     }
 
     // ── Relationships ──
+
+    public function mapPoint(): BelongsTo
+    {
+        return $this->belongsTo(CabinMapPoint::class, 'map_slot', 'key');
+    }
 
     public function type(): BelongsTo
     {

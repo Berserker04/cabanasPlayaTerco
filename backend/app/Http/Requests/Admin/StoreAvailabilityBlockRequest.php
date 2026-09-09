@@ -15,13 +15,13 @@ class StoreAvailabilityBlockRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'check_in'       => ['required', 'date'],
-            'check_out'      => ['required', 'date', 'after:check_in'],
-            'reason'         => ['required', 'string', 'max:255'],
-            'notes'          => ['nullable', 'string'],
+            'check_in' => ['required', 'date'],
+            'check_out' => ['required', 'date', 'after:check_in'],
+            'reason' => ['required', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
             'applies_to_all' => ['boolean'],
-            'cabin_ids'      => ['nullable', 'array'],
-            'cabin_ids.*'    => ['integer', 'distinct', 'exists:cabins,id'],
+            'cabin_ids' => ['nullable', 'array'],
+            'cabin_ids.*' => ['integer', 'distinct', \Illuminate\Validation\Rule::exists('cabins', 'id')->whereNull('deleted_at')],
         ];
     }
 

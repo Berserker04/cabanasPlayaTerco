@@ -40,11 +40,11 @@ class Reservation extends Model
     protected function casts(): array
     {
         return [
-            'check_in'    => 'date',
-            'check_out'   => 'date',
-            'expires_at'   => 'datetime',
+            'check_in' => 'date',
+            'check_out' => 'date',
+            'expires_at' => 'datetime',
             'confirmed_at' => 'datetime',
-            'status'      => ReservationStatus::class,
+            'status' => ReservationStatus::class,
             'leader_phone' => 'encrypted',
             'leader_whatsapp' => 'encrypted',
             'total_price' => 'decimal:2',
@@ -55,12 +55,12 @@ class Reservation extends Model
 
     public function cabin(): BelongsTo
     {
-        return $this->belongsTo(Cabin::class);
+        return $this->belongsTo(Cabin::class)->withTrashed();
     }
 
     public function cabins(): BelongsToMany
     {
-        return $this->belongsToMany(Cabin::class, 'reservation_cabin')
+        return $this->belongsToMany(Cabin::class, 'reservation_cabin')->withTrashed()
             ->withTimestamps();
     }
 

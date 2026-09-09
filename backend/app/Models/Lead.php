@@ -30,10 +30,10 @@ class Lead extends Model
     protected function casts(): array
     {
         return [
-            'source'       => LeadSource::class,
-            'status'       => LeadStatus::class,
-            'check_in'     => 'date',
-            'check_out'    => 'date',
+            'source' => LeadSource::class,
+            'status' => LeadStatus::class,
+            'check_in' => 'date',
+            'check_out' => 'date',
             'responded_at' => 'datetime',
         ];
     }
@@ -47,7 +47,7 @@ class Lead extends Model
 
     public function cabin(): BelongsTo
     {
-        return $this->belongsTo(Cabin::class);
+        return $this->belongsTo(Cabin::class)->withTrashed();
     }
 
     public function assignee(): BelongsTo

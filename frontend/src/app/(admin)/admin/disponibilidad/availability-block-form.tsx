@@ -32,6 +32,7 @@ export function BlockSheet({
   notes,
   appliesToAll,
   cabinIds,
+  cabinNames,
   cabins,
   onCheckInChange,
   onCheckOutChange,
@@ -52,6 +53,7 @@ export function BlockSheet({
   notes: string;
   appliesToAll: boolean;
   cabinIds: number[];
+  cabinNames: Record<number, string>;
   cabins: PlannerCabin[];
   onCheckInChange: (value: string) => void;
   onCheckOutChange: (value: string) => void;
@@ -144,13 +146,13 @@ export function BlockSheet({
                     key={id}
                     type="button"
                     className="min-h-11"
-                    aria-label={`Quitar ${cabin?.name ?? `cabaña ${id}`}`}
+                    aria-label={`Quitar ${cabin?.name ?? cabinNames[id] ?? `cabaña ${id}`}`}
                     onClick={() =>
                       onCabinIdsChange(cabinIds.filter((item) => item !== id))
                     }
                   >
                     <Badge variant="outline">
-                      {cabin?.name ?? `Cabaña ${id}`}{' '}
+                      {cabin?.name ?? `${cabinNames[id] ?? `Cabaña ${id}`} · Eliminada`}{' '}
                       <XCircle className="ml-1 size-3" />
                     </Badge>
                   </button>
