@@ -1,22 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  Bath,
-  BedDouble,
-  CalendarDays,
-  LoaderCircle,
-  MapPinned,
-  MessageCircle,
-  Search,
-  Users,
-} from 'lucide-react';
+import { Bath, BedDouble, CalendarDays, LoaderCircle, Search, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   CabinMap,
   type CabinMapSlotState,
 } from '@/components/cabins/cabin-map';
+import { GeneralQuoteActions } from '@/components/cabins/general-quote-actions';
 import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,12 +16,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api, ApiError } from '@/lib/api';
 import {
-  addLocalDays as addDaysIso,
-  localDateIso as todayIso,
+  addLocalDays,
+  localDateIso,
+  isStayDate,
   stayHref,
+  staySearchErrors,
   type StayContext,
 } from '@/lib/stay-context';
-import { buildCabinWhatsAppHref, getCabinCover } from '@/lib/cabin-utils';
+import { generalQuoteContext, QUOTE_NOTICE } from '@/lib/general-quote';
+import { getCabinCover } from '@/lib/cabin-utils';
 import type { ApiResponse } from '@/types/api';
 import type {
   AvailabilityResult,
@@ -39,42 +34,31 @@ import type {
   MapSlot,
 } from '@/types/cabin';
 
-function buildSlotStates(entries: CabinAvailabilityEntry<PublicCabin>[]) {
-  return entries.reduce<Partial<Record<MapSlot, CabinMapSlotState>>>(
-    (states, entry) => {
-      if (!entry.map_slot) {
-        return states;
-      }
-
-      states[entry.map_slot] = {
-        tone: entry.tone,
-        label: entry.label,
-        isAvailable: entry.is_available,
-      };
-
-      return states;
-    },
-    {},
-  );
-}
-
 export function AvailabilitySearch({
   initialContext = {},
 }: {
   initialContext?: StayContext;
 }) {
-  const defaultCheckIn = initialContext.check_in ?? todayIso();
-  const [checkIn, setCheckIn] = useState(defaultCheckIn);
-  const [checkOut, setCheckOut] = useState(
-    initialContext.check_out ?? addDaysIso(defaultCheckIn, 1),
-  );
-  const [guests, setGuests] = useState(initialContext.guests ?? '2');
+  const initialArrival = initialContext.check_in ?? localDateIso();
+  const [context, setContext] = useState({
+    check_in: initialArrival,
+    check_out: initialContext.check_out ?? addLocalDays(initialArrival, 1),
+    guests: initialContext.guests ?? '2',
+  });
   const [availability, setAvailability] =
     useState<AvailabilityResult<PublicCabin> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasSearched, setHasSearched] = useState(false);
-
+  const [fieldErrors, setFieldErrors] = useState<
+    ReturnType<typeof staySearchErrors>
+  >({});
+  const requestVersion = useRef(0);
+  useEffect(
+    () => () => {
+      requestVersion.current += 1;
+    },
+    [],
+  );
   const tariffsQuery = useQuery({
     queryKey: ['public-lodging-tariffs'],
     staleTime: 0,
@@ -82,168 +66,301 @@ export function AvailabilitySearch({
     queryFn: () => api.get<ApiResponse<LodgingTariff[]>>('/lodging-tariffs'),
     retry: 1,
   });
+  const entries = availability?.cabins ?? [];
+  const slotStates = entries.reduce<
+    Partial<Record<MapSlot, CabinMapSlotState>>
+  >((states, entry) => {
+    if (entry.map_slot)
+      states[entry.map_slot] = {
+        tone: entry.tone,
+        label: entry.label,
+        isAvailable: entry.is_available,
+      };
+    return states;
+  }, {});
+  const quoteContext = generalQuoteContext(context);
 
-  const tariffs = tariffsQuery.data?.data ?? [];
-  const slotStates = useMemo(
-    () => buildSlotStates(availability?.cabins ?? []),
-    [availability?.cabins],
-  );
-  const mapCabins = useMemo(
-    () => availability?.cabins.map((entry) => entry.cabin) ?? [],
-    [availability?.cabins],
-  );
-  const availableEntries = [...(availability?.available_cabins ?? [])].sort(
-    (a, b) =>
-      Number(b.cabin_id === Number(initialContext.cabin_id)) -
-      Number(a.cabin_id === Number(initialContext.cabin_id)),
-  );
-
+  function change(next: typeof context) {
+    // A slow earlier request cannot restore a result after the visitor edits it.
+    requestVersion.current += 1;
+    setContext(next);
+    setAvailability(null);
+    setError(null);
+    setFieldErrors({});
+    setIsLoading(false);
+  }
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (isLoading) return;
+    const errors = staySearchErrors(context);
+    setFieldErrors(errors);
     setError(null);
-
-    if (!checkIn || checkIn < todayIso() || !checkOut || checkOut <= checkIn) {
-      setError('Indica una fecha de salida posterior a la llegada.');
-      return;
-    }
-
-    if (!/^\d+$/.test(guests) || Number(guests) < 1 || Number(guests) > 50) {
-      setError('Indica entre 1 y 50 huéspedes.');
-      return;
-    }
+    if (Object.keys(errors).length) return;
+    const version = ++requestVersion.current;
+    setAvailability(null);
     setIsLoading(true);
-    setHasSearched(true);
-
     try {
-      const params = new URLSearchParams({
-        check_in: checkIn,
-        check_out: checkOut,
-        guests,
-      });
       const response = await api.get<
         ApiResponse<AvailabilityResult<PublicCabin>>
-      >(`/availability?${params.toString()}`);
-
+      >(`/availability?${new URLSearchParams(context)}`);
+      if (version !== requestVersion.current) return;
       setAvailability(response.data);
-    } catch (error) {
-      setAvailability(null);
+      window.history.replaceState(
+        null,
+        '',
+        stayHref('/disponibilidad', quoteContext),
+      );
+    } catch (failure) {
+      if (version !== requestVersion.current) return;
       setError(
-        error instanceof ApiError
-          ? Object.values(error.errors ?? {})
+        failure instanceof ApiError
+          ? Object.values(failure.errors ?? {})
               .flat()
-              .join(' ') || error.message
+              .join(' ') || failure.message
           : 'No pudimos consultar disponibilidad. Reintenta con los mismos datos.',
       );
     } finally {
-      setIsLoading(false);
+      if (version === requestVersion.current) setIsLoading(false);
     }
   }
-
-  const resultContext = {
-    ...initialContext,
-    check_in: availability?.check_in,
-    check_out: availability?.check_out,
-    guests: String(availability?.guests ?? guests),
-  };
-  const resultDates = {
-    checkIn: resultContext.check_in,
-    checkOut: resultContext.check_out,
-    guests: resultContext.guests,
-  };
-  const preferredCabin = mapCabins.find(
-    (cabin) => cabin.id === Number(initialContext.cabin_id),
-  );
   return (
     <>
-      <section className="bg-cyan-950 py-14 text-white sm:py-16">
+      <section className="bg-cyan-950 py-12 text-white sm:py-16">
         <div className="container mx-auto px-4">
           <Badge className="bg-cyan-400 text-cyan-950 hover:bg-cyan-300">
-            Disponibilidad orientativa
+            Disponibilidad para tu grupo
           </Badge>
           <div className="mt-5 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
             <div>
               <h1 className="text-3xl font-bold tracking-normal sm:text-5xl">
-                Consulta fechas antes de escribirnos
+                Consulta fechas y solicita una cotización
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-cyan-50">
-                Revisa el mapa por fecha. La reserva final siempre se confirma
-                por contacto directo con el administrador. Las cotizaciones
-                pendientes no bloquean disponibilidad.
+                Indica las fechas y cuántas personas viajarán contigo para
+                conocer las cabañas disponibles.
               </p>
             </div>
             <form
               noValidate
               onSubmit={handleSubmit}
-              className="rounded-lg bg-white p-4 text-neutral-950 shadow-xl"
+              className="min-w-0 rounded-lg bg-white p-4 text-neutral-950 shadow-xl"
             >
-              <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-[1fr_1fr_100px_auto] md:items-end">
-                <div className="space-y-2">
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2 2xl:grid-cols-[1fr_1fr_110px_auto]">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="availability-check-in">Llegada</Label>
                   <Input
                     id="availability-check-in"
                     type="date"
-                    min={todayIso()}
-                    value={checkIn}
+                    className="h-11 text-base md:text-base"
+                    min={localDateIso()}
+                    value={context.check_in}
+                    aria-invalid={Boolean(fieldErrors.check_in)}
+                    aria-describedby={
+                      fieldErrors.check_in ? 'arrival-error' : undefined
+                    }
                     onChange={(event) => {
-                      const next = event.target.value;
-                      setCheckIn(next);
-                      if (checkOut <= next) {
-                        setCheckOut(addDaysIso(next, 1));
-                      }
+                      const date = event.target.value;
+                      change({
+                        ...context,
+                        check_in: date,
+                        check_out:
+                          isStayDate(date) && context.check_out <= date
+                            ? addLocalDays(date, 1)
+                            : context.check_out,
+                      });
                     }}
                   />
+                  {fieldErrors.check_in && (
+                    <p
+                      id="arrival-error"
+                      role="alert"
+                      className="text-sm text-destructive"
+                    >
+                      {fieldErrors.check_in}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="availability-check-out">Salida</Label>
                   <Input
                     id="availability-check-out"
                     type="date"
-                    min={addDaysIso(checkIn || todayIso(), 1)}
-                    value={checkOut}
-                    onChange={(event) => setCheckOut(event.target.value)}
+                    className="h-11 text-base md:text-base"
+                    min={
+                      isStayDate(context.check_in)
+                        ? addLocalDays(context.check_in, 1)
+                        : undefined
+                    }
+                    value={context.check_out}
+                    aria-invalid={Boolean(fieldErrors.check_out)}
+                    aria-describedby={
+                      fieldErrors.check_out ? 'departure-error' : undefined
+                    }
+                    onChange={(event) =>
+                      change({ ...context, check_out: event.target.value })
+                    }
                   />
+                  {fieldErrors.check_out && (
+                    <p
+                      id="departure-error"
+                      role="alert"
+                      className="text-sm text-destructive"
+                    >
+                      {fieldErrors.check_out}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="availability-guests">Huespedes</Label>
+                <div className="min-w-0 space-y-2">
+                  <Label htmlFor="availability-guests">Huéspedes</Label>
                   <Input
                     id="availability-guests"
                     type="number"
+                    inputMode="numeric"
+                    className="h-11 text-base md:text-base"
                     min={1}
                     max={50}
-                    value={guests}
-                    onChange={(event) => setGuests(event.target.value)}
+                    step={1}
+                    value={context.guests}
+                    aria-invalid={Boolean(fieldErrors.guests)}
+                    aria-describedby={
+                      fieldErrors.guests ? 'guests-error' : undefined
+                    }
+                    onChange={(event) =>
+                      change({ ...context, guests: event.target.value })
+                    }
                   />
+                  {fieldErrors.guests && (
+                    <p
+                      id="guests-error"
+                      role="alert"
+                      className="text-sm text-destructive"
+                    >
+                      {fieldErrors.guests}
+                    </p>
+                  )}
                 </div>
                 <Button
                   type="submit"
-                  size="lg"
                   disabled={isLoading}
-                  className="bg-cyan-700 text-white hover:bg-cyan-800"
+                  className="min-h-11 self-start bg-cyan-700 text-white hover:bg-cyan-800 sm:mt-6"
                 >
                   {isLoading ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <LoaderCircle className="size-4 animate-spin" />
                   ) : (
-                    <Search className="h-4 w-4" />
-                  )}
+                    <Search className="size-4" />
+                  )}{' '}
                   Buscar
                 </Button>
               </div>
-              {error ? (
-                <p role="alert" className="mt-3 text-sm text-destructive">
-                  {error}
+              {isLoading && (
+                <p role="status" className="mt-4 text-sm text-neutral-600">
+                  Consultando disponibilidad…
                 </p>
-              ) : null}
+              )}
+              {error && (
+                <div role="alert" className="mt-4 space-y-3">
+                  <p className="text-sm text-destructive">{error}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={() => void handleSubmit()}
+                  >
+                    Reintentar consulta
+                  </Button>
+                </div>
+              )}
             </form>
           </div>
         </div>
       </section>
-
-      {tariffs.length > 0 ? (
+      {!availability && !isLoading && !error && (
+        <section className="bg-stone-50 py-8 sm:py-12">
+          <div className="container mx-auto px-4">
+            <div role="status" className="rounded-lg border bg-white p-5 sm:p-6">
+              <CalendarDays className="size-7 text-cyan-700" aria-hidden="true" />
+              <h2 className="mt-3 text-xl font-semibold">
+                Consulta la disponibilidad para tu viaje
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Elige las fechas y el número de huéspedes, y pulsa Buscar para
+                conocer las cabañas disponibles.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+      {availability && (
+        <section
+          className="bg-stone-50 py-8 sm:py-12"
+          aria-label="Resultado de disponibilidad"
+        >
+          <div className="container mx-auto space-y-8 px-4">
+            <div className="min-w-0 rounded-lg border bg-white p-5 sm:p-6">
+              <GroupSummary availability={availability} />
+              <p className="mt-5 text-sm leading-6 text-neutral-700">
+                {QUOTE_NOTICE}
+              </p>
+              <GeneralQuoteActions context={quoteContext} className="mt-5" />
+            </div>
+            {availability && (
+              <>
+                <div>
+                  <h2 className="mb-2 text-2xl font-semibold">
+                    Cabañas en estas fechas
+                  </h2>
+                  <p className="mb-4 text-sm leading-6 text-muted-foreground">
+                    Consulta las cabañas libres para las fechas de tu viaje.
+                  </p>
+                  <CabinMap
+                    cabins={entries.map((entry) => entry.cabin)}
+                    slotStates={slotStates}
+                    linkMarkers
+                    context={quoteContext}
+                  />
+                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                    <LegendItem
+                      color="bg-emerald-500"
+                      label="Libre en estas fechas"
+                    />
+                    <LegendItem color="bg-red-500" label="Reserva confirmada" />
+                    <LegendItem
+                      color="bg-amber-500"
+                      label="Mantenimiento o bloqueo"
+                    />
+                    <LegendItem color="bg-neutral-400" label="No operativa" />
+                  </div>
+                </div>
+                {availability.available_cabins.length > 0 && (
+                  <div className="space-y-5">
+                    <h2 className="text-2xl font-semibold">
+                      Conoce las cabañas libres
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Conoce sus espacios y comodidades.
+                    </p>
+                    {availability.available_cabins.map((entry) => (
+                      <AvailableCabinCard
+                        key={entry.cabin_id}
+                        entry={entry}
+                        context={quoteContext}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      )}
+      {(tariffsQuery.data?.data.length ?? 0) > 0 && (
         <section className="bg-white py-8">
           <div className="container mx-auto px-4">
+            <h2 className="mb-4 text-2xl font-semibold">
+              Tarifas de referencia
+            </h2>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {tariffs.map((tariff) => (
+              {tariffsQuery.data?.data.map((tariff) => (
                 <article
                   key={tariff.id}
                   className="rounded-lg border bg-stone-50 p-4"
@@ -254,260 +371,114 @@ export function AvailabilitySearch({
             </div>
           </div>
         </section>
-      ) : null}
-
-      <section className="bg-stone-50 py-12">
-        <div className="container mx-auto px-4">
-          {isLoading ? (
-            <p className="py-12 text-center" role="status">
-              Consultando disponibilidad…
-            </p>
-          ) : !hasSearched ? (
-            <div className="rounded-lg border border-dashed bg-white p-8 text-center">
-              <CalendarDays className="mx-auto h-9 w-9 text-cyan-700" />
-              <h2 className="mt-4 text-xl font-semibold tracking-normal">
-                Elige tus fechas para ver el mapa
-              </h2>
-              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Verde indica disponible, rojo no disponible por reserva
-                confirmada, y naranja no disponible por mantenimiento o bloqueo
-                manual.
-              </p>
-            </div>
-          ) : availability ? (
-            <div className="space-y-8">
-              <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-                <CabinMap
-                  cabins={mapCabins}
-                  activeSlot={preferredCabin?.map_slot}
-                  slotStates={slotStates}
-                  linkMarkers
-                  context={resultContext}
-                />
-                <aside className="rounded-lg border bg-white p-5">
-                  <MapPinned className="h-6 w-6 text-cyan-700" />
-                  <h2 className="mt-4 text-lg font-semibold tracking-normal">
-                    Estado del mapa
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {availability.message}
-                  </p>
-                  <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                    <Metric
-                      label="Verdes"
-                      value={availability.summary.available_count}
-                    />
-                    <Metric
-                      label="Rojas"
-                      value={availability.summary.reserved_count}
-                    />
-                    <Metric
-                      label="Naranja"
-                      value={availability.summary.blocked_count}
-                    />
-                    <Metric
-                      label="Capacidad libre"
-                      value={availability.summary.available_capacity}
-                    />
-                  </div>
-                  <Legend />
-                  <Button asChild className="mt-6 w-full">
-                    <a
-                      href={buildCabinWhatsAppHref(preferredCabin, resultDates)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      Confirmar por WhatsApp
-                    </a>
-                  </Button>
-                </aside>
-              </div>
-
-              {availableEntries.length > 0 ? (
-                <div className="grid gap-5">
-                  {availableEntries.map((entry) => (
-                    <AvailableCabinCard
-                      key={entry.cabin_id}
-                      entry={entry}
-                      checkIn={availability.check_in}
-                      checkOut={availability.check_out}
-                      guests={String(availability.guests ?? guests)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border bg-white p-8 text-center">
-                  <h2 className="text-xl font-semibold tracking-normal">
-                    No vemos cabañas libres para esas fechas
-                  </h2>
-                  <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                    La disponibilidad es orientativa y la confirmacion final es
-                    directa del administrador. Escribenos para revisar cambios
-                    recientes, ajustes de grupo u otras fechas.
-                  </p>
-                  <Button asChild className="mt-6">
-                    <a
-                      href={buildCabinWhatsAppHref(undefined, {
-                        checkIn,
-                        checkOut,
-                        guests,
-                      })}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      Consultar por WhatsApp
-                    </a>
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-lg border bg-white p-8 text-center">
-              <h2 className="text-xl font-semibold tracking-normal">
-                No pudimos cargar el mapa
-              </h2>
-              <Button className="mt-4" onClick={() => void handleSubmit()}>
-                Reintentar consulta
-              </Button>
-              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Tus fechas se conservan para reintentar.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
+      )}
     </>
   );
 }
 
+function GroupSummary({
+  availability,
+}: {
+  availability: AvailabilityResult<PublicCabin>;
+}) {
+  const { summary, guests } = availability;
+  const title =
+    summary.available_count === 0
+      ? 'No hay cabañas libres en estas fechas'
+      : summary.can_host_guests
+        ? 'Hay espacio para tu grupo'
+        : 'No hay espacio suficiente para todo el grupo';
+  return (
+    <div role="status">
+      <Badge
+        className={
+          summary.can_host_guests
+            ? 'bg-emerald-100 text-emerald-900'
+            : 'bg-amber-100 text-amber-950'
+        }
+      >
+        {summary.can_host_guests
+          ? 'Capacidad suficiente'
+          : 'Consulta alternativas'}
+      </Badge>
+      <h2 className="mt-3 text-2xl font-semibold">{title}</h2>
+      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <span>
+          <strong>Llegada:</strong> {availability.check_in}
+        </span>
+        <span>
+          <strong>Salida:</strong> {availability.check_out}
+        </span>
+        <span>
+          <strong>Huéspedes:</strong> {guests}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:max-w-lg">
+        <div className="rounded-md bg-stone-50 p-3">
+          <p className="text-sm text-neutral-600">Capacidad libre total</p>
+          <p className="mt-1 text-xl font-bold">
+            {summary.available_capacity} personas
+          </p>
+        </div>
+        <div className="rounded-md bg-stone-50 p-3">
+          <p className="text-sm text-neutral-600">Cabañas libres</p>
+          <p className="mt-1 text-xl font-bold">{summary.available_count}</p>
+        </div>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-neutral-700">
+        {summary.can_host_guests
+          ? 'Escríbenos para conocer el valor de tu estadía.'
+          : 'Escríbenos para consultar otras fechas u opciones.'}
+      </p>
+    </div>
+  );
+}
 function AvailableCabinCard({
   entry,
-  checkIn,
-  checkOut,
-  guests,
+  context,
 }: {
   entry: CabinAvailabilityEntry<PublicCabin>;
-  checkIn: string;
-  checkOut: string;
-  guests: string;
+  context: StayContext;
 }) {
   const cabin = entry.cabin;
-
   return (
-    <article className="grid overflow-hidden rounded-lg border bg-white shadow-sm lg:grid-cols-[320px_1fr]">
+    <article className="grid overflow-hidden rounded-lg border bg-white shadow-sm lg:grid-cols-[280px_1fr]">
       <div
-        className="min-h-[220px] bg-cover bg-center"
+        role="img"
+        aria-label={cabin.name}
+        className="min-h-[200px] bg-cover bg-center"
         style={{ backgroundImage: `url(${getCabinCover(cabin)})` }}
       />
       <div className="p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <Badge variant={entry.fits_guests ? 'default' : 'outline'}>
-              {entry.fits_guests ? 'Disponible' : 'Libre, revisar capacidad'}
-            </Badge>
-            <h2 className="mt-3 text-2xl font-semibold tracking-normal text-neutral-950">
-              {cabin.name}
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
-              {cabin.short_description ?? cabin.description}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-900">
-            <Users className="h-3.5 w-3.5" />
-            Hasta {cabin.max_guests}
+        <Badge variant="outline">Libre en estas fechas</Badge>
+        <h3 className="mt-3 text-2xl font-semibold">{cabin.name}</h3>
+        <p className="mt-2 text-sm leading-6 text-neutral-600">
+          {cabin.short_description ?? cabin.description}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-4 text-sm">
+          <span className="inline-flex items-center gap-1">
+            <Users className="size-4" /> Hasta {cabin.max_guests} personas
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1 text-xs text-neutral-700">
-            <BedDouble className="h-3.5 w-3.5" />
-            {cabin.beds_count} camas
+          <span className="inline-flex items-center gap-1">
+            <BedDouble className="size-4" /> {cabin.beds_count} camas
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1 text-xs text-neutral-700">
-            <Bath className="h-3.5 w-3.5" />
-            {cabin.bathrooms_count} banos
+          <span className="inline-flex items-center gap-1">
+            <Bath className="size-4" /> {cabin.bathrooms_count} baños
           </span>
         </div>
-
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <Button asChild>
-            <Link
-              href={stayHref('/contacto', {
-                cabin_id: String(cabin.id),
-                check_in: checkIn,
-                check_out: checkOut,
-                guests,
-              })}
-            >
-              Enviar solicitud
-            </Link>
-          </Button>
-          <Button asChild>
-            <a
-              href={buildCabinWhatsAppHref(cabin, {
-                checkIn,
-                checkOut,
-                guests,
-              })}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <MessageCircle className="h-4 w-4" />
-              Confirmar por WhatsApp
-            </a>
-          </Button>
-          <Button asChild variant="outline">
-            <Link
-              href={stayHref(`/cabanas/${cabin.slug}`, {
-                cabin_id: String(cabin.id),
-                check_in: checkIn,
-                check_out: checkOut,
-                guests,
-              })}
-            >
-              Ver ficha
-            </Link>
-          </Button>
-        </div>
+        <Button asChild variant="outline" className="mt-5 min-h-11">
+          <Link href={stayHref(`/cabanas/${cabin.slug}`, context)}>
+            Ver ficha de {cabin.name}
+          </Link>
+        </Button>
       </div>
     </article>
   );
 }
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md bg-stone-50 p-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-bold text-neutral-950">{value}</p>
-    </div>
-  );
-}
-
-function Legend() {
-  return (
-    <div className="mt-5 grid gap-2 text-xs text-neutral-700">
-      <LegendItem className="bg-emerald-500" label="Disponible" />
-      <LegendItem
-        className="bg-red-500"
-        label="Reserva confirmada (las cotizaciones no bloquean)"
-      />
-      <LegendItem className="bg-amber-500" label="Mantenimiento o bloqueo" />
-    </div>
-  );
-}
-
-function LegendItem({
-  className,
-  label,
-}: {
-  className: string;
-  label: string;
-}) {
+function LegendItem({ color, label }: { color: string; label: string }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <span className={`h-2.5 w-2.5 rounded-full ${className}`} />
+      <span className={`size-2.5 rounded-full ${color}`} />
       {label}
     </span>
   );

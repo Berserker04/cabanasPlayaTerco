@@ -1,37 +1,34 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { LoaderCircle, MessageCircle, Send } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useUpdateContactQuote } from './contact-quote-context';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiError, api } from '@/lib/api';
+import { ApiError, api, fetchCsrfCookie } from '@/lib/api';
 import {
   localDateIso,
   addLocalDays,
   type StayContext,
 } from '@/lib/stay-context';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
-import { SITE_NAME, WHATSAPP_URL } from '@/lib/constants';
+import { buildQuoteWhatsAppHref } from '@/lib/cabin-utils';
+import {
+  DEFAULT_QUOTE_MESSAGE,
+  QUOTE_NOTICE,
+  generalQuotePayload,
+} from '@/lib/general-quote';
 import {
   contactSchema,
   type ContactFormInput,
   type ContactInput,
 } from '@/lib/validations';
-import type { ApiResponse } from '@/types/api';
-import type { PublicCabin as Cabin } from '@/types/cabin';
 
 type ContactResponse = {
   data: {
@@ -53,46 +50,7 @@ const defaultValues: ContactFormInput = {
   check_in: '',
   check_out: '',
   guests_count: '',
-  cabin_id: '',
-  cabin_type_id: '',
 };
-
-function cleanPayload(data: ContactInput) {
-  return Object.fromEntries(
-    Object.entries(data).filter(
-      ([, value]) => value !== undefined && value !== '',
-    ),
-  );
-}
-
-function buildWhatsappHref(
-  values: Partial<ContactFormInput>,
-  cabinName?: string,
-) {
-  const lines = [`Hola, quiero cotizar una estadía en ${SITE_NAME}.`];
-
-  if (values.name) {
-    lines.push(`Mi nombre es ${values.name}.`);
-  }
-
-  if (values.check_in && values.check_out) {
-    lines.push(`Fechas: ${values.check_in} a ${values.check_out}.`);
-  }
-
-  if (values.guests_count) {
-    lines.push(`Huéspedes: ${values.guests_count}.`);
-  }
-
-  if (cabinName) {
-    lines.push(`Cabaña: ${cabinName}.`);
-  }
-
-  if (values.message) {
-    lines.push(`Mensaje: ${values.message}`);
-  }
-
-  return `${WHATSAPP_URL}?text=${encodeURIComponent(lines.join('\n'))}`;
-}
 
 function ErrorMessage({ error }: { error?: { message?: string } }) {
   if (!error?.message) {
@@ -111,6 +69,8 @@ export function ContactForm({
 }: {
   initialContext?: StayContext;
 }) {
+  'use no memo'; // React Hook Form must register fields again after reset.
+
   const [receipt, setReceipt] = useState('');
   const form = useForm<ContactFormInput, unknown, ContactInput>({
     resolver: zodResolver(contactSchema),
@@ -119,35 +79,47 @@ export function ContactForm({
       check_in: initialContext.check_in ?? '',
       check_out: initialContext.check_out ?? '',
       guests_count: initialContext.guests ?? '',
-      cabin_id: initialContext.cabin_id ?? '',
+      message: DEFAULT_QUOTE_MESSAGE,
     },
     mode: 'onBlur',
   });
 
-  const cabinsQuery = useQuery({
-    queryKey: ['contact-cabins'],
-    staleTime: 0,
-    refetchOnMount: 'always',
-    queryFn: () => api.get<ApiResponse<Cabin[]>>('/cabins'),
-    retry: 1,
-  });
-
-  const cabins = useMemo(
-    () => cabinsQuery.data?.data ?? [],
-    [cabinsQuery.data?.data],
-  );
   const watchedValues = useWatch({ control: form.control });
   const values: ContactFormInput = { ...defaultValues, ...watchedValues };
+  const updateContactQuote = useUpdateContactQuote();
+  const quoteGuests = values.guests_count
+    ? String(values.guests_count)
+    : undefined;
+  useEffect(() => {
+    updateContactQuote?.({
+      check_in: values.check_in,
+      check_out: values.check_out,
+      guests: quoteGuests,
+      name: values.name,
+      message: values.message,
+    });
+  }, [
+    updateContactQuote,
+    values.check_in,
+    values.check_out,
+    quoteGuests,
+    values.name,
+    values.message,
+  ]);
 
-  const selectedCabinName = useMemo(() => {
-    return cabins.find((cabin) => cabin.id === Number(values.cabin_id))?.name;
-  }, [cabins, values.cabin_id]);
-
-  const whatsappHref = buildWhatsappHref(values, selectedCabinName);
+  const whatsappHref = buildQuoteWhatsAppHref({
+    check_in: values.check_in,
+    check_out: values.check_out,
+    guests: values.guests_count ? String(values.guests_count) : undefined,
+    name: values.name,
+    message: values.message,
+  });
 
   const contactMutation = useMutation({
-    mutationFn: (data: ContactInput) =>
-      api.post<ContactResponse>('/contact', cleanPayload(data)),
+    mutationFn: async (data: ContactInput) => {
+      await fetchCsrfCookie();
+      return api.post<ContactResponse>('/contact', generalQuotePayload(data));
+    },
     onSuccess: (response) => {
       setReceipt(
         response.message ?? 'Solicitud recibida. Te contactaremos pronto.',
@@ -168,7 +140,6 @@ export function ContactForm({
     onError: (error) => {
       setReceipt('');
       if (error instanceof ApiError) {
-        if (error.errors?.cabin_id) void cabinsQuery.refetch();
         Object.entries(error.errors ?? {}).forEach(([field, messages]) => {
           form.setError(field as keyof ContactInput, {
             type: 'server',
@@ -189,19 +160,8 @@ export function ContactForm({
   });
 
   useUnsavedChanges(form.formState.isDirty && !contactMutation.isPending);
-  const cabinUnavailable = Boolean(
-    values.cabin_id && cabinsQuery.isSuccess && !selectedCabinName,
-  );
   const onSubmit = form.handleSubmit((data) => {
-    if (contactMutation.isPending) return;
-    if (cabinUnavailable) {
-      form.setError('cabin_id', {
-        message:
-          'La cabaña ya no está publicada. Selecciona otra o deja la cabaña por definir.',
-      });
-      return;
-    }
-    contactMutation.mutate(data);
+    if (!contactMutation.isPending) contactMutation.mutate(data);
   });
 
   return (
@@ -210,6 +170,7 @@ export function ContactForm({
       onSubmit={onSubmit}
       className="rounded-lg border bg-white p-5 shadow-sm sm:p-6"
     >
+      <p className="mb-5 text-sm leading-6 text-neutral-700">{QUOTE_NOTICE}</p>
       {receipt && (
         <p
           role="status"
@@ -218,11 +179,18 @@ export function ContactForm({
           {receipt}
         </p>
       )}
+      {contactMutation.isError && (
+        <p role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-red-900">
+          No pudimos enviar la solicitud. Conservamos tus datos para que puedas
+          corregirlos o volver a intentarlo.
+        </p>
+      )}
       <fieldset disabled={contactMutation.isPending} className="min-w-0">
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="contact-name">Nombre completo</Label>
             <Input
+              className="h-11 text-base md:text-base"
               id="contact-name"
               autoComplete="name"
               placeholder="Tu nombre"
@@ -235,6 +203,7 @@ export function ContactForm({
           <div className="space-y-2">
             <Label htmlFor="contact-email">Correo electrónico</Label>
             <Input
+              className="h-11 text-base md:text-base"
               id="contact-email"
               type="email"
               autoComplete="email"
@@ -248,6 +217,7 @@ export function ContactForm({
           <div className="space-y-2">
             <Label htmlFor="contact-phone">Teléfono o WhatsApp</Label>
             <Input
+              className="h-11 text-base md:text-base"
               id="contact-phone"
               type="tel"
               autoComplete="tel"
@@ -261,6 +231,7 @@ export function ContactForm({
           <div className="space-y-2">
             <Label htmlFor="contact-guests">Huéspedes</Label>
             <Input
+              className="h-11 text-base md:text-base"
               id="contact-guests"
               type="number"
               min={1}
@@ -276,6 +247,7 @@ export function ContactForm({
           <div className="space-y-2">
             <Label htmlFor="contact-check-in">Llegada</Label>
             <Input
+              className="h-11 text-base md:text-base"
               id="contact-check-in"
               type="date"
               min={localDateIso()}
@@ -288,6 +260,7 @@ export function ContactForm({
           <div className="space-y-2">
             <Label htmlFor="contact-check-out">Salida</Label>
             <Input
+              className="h-11 text-base md:text-base"
               id="contact-check-out"
               type="date"
               min={
@@ -299,55 +272,6 @@ export function ContactForm({
               {...form.register('check_out')}
             />
             <ErrorMessage error={form.formState.errors.check_out} />
-          </div>
-
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="contact-cabin">Cabaña preferida</Label>
-            <Select
-              value={values.cabin_id ? String(values.cabin_id) : 'any'}
-              onValueChange={(value) => {
-                form.setValue('cabin_id', value === 'any' ? '' : value, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                });
-              }}
-            >
-              <SelectTrigger id="contact-cabin" className="w-full">
-                <SelectValue placeholder="Cabaña por definir" />
-              </SelectTrigger>
-              <SelectContent>
-                {cabinUnavailable && (
-                  <SelectItem value={String(values.cabin_id)} disabled>
-                    Cabaña ya no publicada
-                  </SelectItem>
-                )}
-                <SelectItem value="any">Cabaña por definir</SelectItem>
-                {cabins.map((cabin) => (
-                  <SelectItem key={cabin.id} value={String(cabin.id)}>
-                    {cabin.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {cabinsQuery.isError ? (
-              <p className="text-xs leading-5 text-muted-foreground">
-                No pudimos cargar las cabañas ahora.{' '}
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => void cabinsQuery.refetch()}
-                >
-                  Reintentar
-                </button>
-              </p>
-            ) : null}
-            {cabinUnavailable && (
-              <p role="alert" className="text-sm text-destructive">
-                La cabaña elegida ya no está publicada. Elige otra o selecciona
-                «Cabaña por definir». Tus datos se conservan.
-              </p>
-            )}
-            <ErrorMessage error={form.formState.errors.cabin_id} />
           </div>
 
           <div className="space-y-2 sm:col-span-2">
@@ -374,7 +298,7 @@ export function ContactForm({
             type="submit"
             size="lg"
             disabled={contactMutation.isPending}
-            className="bg-cyan-700 text-white hover:bg-cyan-800"
+            className="min-h-11 h-auto whitespace-normal bg-cyan-700 text-white hover:bg-cyan-800"
           >
             {contactMutation.isPending ? (
               <LoaderCircle
@@ -384,12 +308,18 @@ export function ContactForm({
             ) : (
               <Send className="h-4 w-4" aria-hidden="true" />
             )}
-            Enviar solicitud
+            Solicitar cotización
           </Button>
-          <Button type="button" size="lg" variant="outline" asChild>
+          <Button
+            type="button"
+            size="lg"
+            variant="outline"
+            className="min-h-11 h-auto whitespace-normal"
+            asChild
+          >
             <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
               <MessageCircle className="h-4 w-4" aria-hidden="true" />
-              WhatsApp
+              Cotizar por WhatsApp
             </a>
           </Button>
         </div>

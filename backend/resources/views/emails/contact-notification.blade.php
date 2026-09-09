@@ -2,11 +2,11 @@
 <html lang="es">
 <head>
     <meta charset="utf-8">
-    <title>Nueva solicitud de contacto</title>
+    <title>Nueva solicitud de cotización</title>
 </head>
 <body style="font-family: Arial, sans-serif; color: #1f2933; line-height: 1.5;">
     <h1 style="font-size: 22px; margin-bottom: 12px;">Nueva solicitud desde la web</h1>
-    <p>Un visitante envió una solicitud de cotización/reserva desde el formulario de contacto.</p>
+    <p>Un visitante envió una solicitud de cotización general desde la web. Revisa las posibilidades para su grupo y asigna las cabañas desde Disponibilidad al registrar la cotización. Esta solicitud no bloquea inventario.</p>
 
     <table cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 680px;">
         <tr>
@@ -36,8 +36,8 @@
             <td style="border-bottom: 1px solid #e5e7eb;">{{ $lead->guests_count ?? 'Por definir' }}</td>
         </tr>
         <tr>
-            <td style="font-weight: bold; border-bottom: 1px solid #e5e7eb;">Cabaña</td>
-            <td style="border-bottom: 1px solid #e5e7eb;">{{ $lead->cabin?->name ?? $lead->cabinType?->name ?? 'Por definir' }}</td>
+            <td style="font-weight: bold; border-bottom: 1px solid #e5e7eb;">Alojamiento</td>
+            <td style="border-bottom: 1px solid #e5e7eb;">{{ $lead->cabin?->name ?? $lead->cabinType?->name ?? 'Asignación de cabañas a cargo del administrador' }}</td>
         </tr>
     </table>
 

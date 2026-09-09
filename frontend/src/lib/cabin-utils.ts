@@ -1,4 +1,5 @@
 import { SITE_NAME, WHATSAPP_URL } from '@/lib/constants';
+import { generalQuoteMessage } from '@/lib/general-quote';
 import type { Cabin, PublicCabin } from '@/types/cabin';
 
 export const CABIN_FALLBACK_IMAGES = [
@@ -16,7 +17,9 @@ export function formatCurrencyCOP(value: number) {
   }).format(value);
 }
 
-export function getCabinCover(cabin: Pick<PublicCabin, 'id' | 'cover_image' | 'media'>) {
+export function getCabinCover(
+  cabin: Pick<PublicCabin, 'id' | 'cover_image' | 'media'>,
+) {
   const mediaImage = cabin.media?.find((item) => item.type === 'image')?.url;
 
   return (
@@ -49,4 +52,10 @@ export function buildCabinWhatsAppHref(
   }
 
   return `${WHATSAPP_URL}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
+
+export function buildQuoteWhatsAppHref(
+  values: Parameters<typeof generalQuoteMessage>[0] = {},
+) {
+  return `${WHATSAPP_URL}?text=${encodeURIComponent(generalQuoteMessage(values, SITE_NAME))}`;
 }

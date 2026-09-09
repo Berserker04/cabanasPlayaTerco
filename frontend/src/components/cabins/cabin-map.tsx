@@ -94,12 +94,13 @@ export function CabinMap({
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-white p-2">
         <span className="text-xs text-muted-foreground">
-          Mapa completo · amplía y desplázate para ver los detalles
+          Mapa de las cabañas
         </span>
         <div className="flex items-center gap-1">
           <Button
             type="button"
             size="sm"
+            className="min-h-11 min-w-11"
             variant="outline"
             aria-label="Reducir mapa"
             disabled={zoom <= 1}
@@ -110,6 +111,7 @@ export function CabinMap({
           <Button
             type="button"
             size="sm"
+            className="min-h-11"
             variant="ghost"
             onClick={() => setZoom(1)}
           >
@@ -118,6 +120,7 @@ export function CabinMap({
           <Button
             type="button"
             size="sm"
+            className="min-h-11 min-w-11"
             variant="outline"
             aria-label="Ampliar mapa"
             disabled={zoom >= 4}
@@ -131,10 +134,14 @@ export function CabinMap({
         <div
           ref={canvas}
           className={cn(
-            'relative aspect-[1672/941]',
+            'relative mx-auto aspect-[1672/941]',
             onPlacePoint && 'cursor-crosshair',
           )}
-          style={{ width: `${zoom * 100}%` }}
+          style={{
+            width: `${zoom * 100}%`,
+            // Fit both dimensions at 1x; keep the same proportional zoom basis.
+            maxWidth: `calc((70dvh - 1px) * ${(1672 / 941) * zoom})`,
+          }}
           onClick={(event) => {
             if (event.target === event.currentTarget && onPlacePoint)
               onPlacePoint(...coordinates(event));

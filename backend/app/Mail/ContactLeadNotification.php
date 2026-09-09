@@ -15,9 +15,7 @@ class ContactLeadNotification extends Mailable
     use Queueable;
     use SerializesModels;
 
-    public function __construct(public readonly Lead $lead)
-    {
-    }
+    public function __construct(public readonly Lead $lead) {}
 
     public function envelope(): Envelope
     {
@@ -25,7 +23,7 @@ class ContactLeadNotification extends Mailable
             replyTo: [
                 new Address($this->lead->email, $this->lead->name),
             ],
-            subject: 'Nueva solicitud de contacto - Cabañas Playa Terco',
+            subject: 'Nueva solicitud de cotización - Cabañas Playa Terco',
         );
     }
 

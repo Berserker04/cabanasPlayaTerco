@@ -38,6 +38,38 @@ export function addLocalDays(date: string, days: number) {
   return localDateIso(value);
 }
 
+export function isStayDate(value: string | null | undefined): value is string {
+  return Boolean(
+    value &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      localDateIso(new Date(`${value}T12:00:00`)) === value,
+  );
+}
+
+export function staySearchErrors(context: StayContext, today = localDateIso()) {
+  const errors: Partial<Record<'check_in' | 'check_out' | 'guests', string>> =
+    {};
+  if (!isStayDate(context.check_in))
+    errors.check_in = 'Indica una fecha de llegada válida.';
+  else if (context.check_in < today)
+    errors.check_in = 'La llegada debe ser hoy o posterior.';
+  if (!isStayDate(context.check_out))
+    errors.check_out = 'Indica una fecha de salida válida.';
+  else if (
+    isStayDate(context.check_in) &&
+    context.check_out <= context.check_in
+  )
+    errors.check_out = 'La salida debe ser posterior a la llegada.';
+  if (
+    !context.guests ||
+    !/^\d+$/.test(context.guests) ||
+    Number(context.guests) < 1 ||
+    Number(context.guests) > 50
+  )
+    errors.guests = 'Indica entre 1 y 50 huéspedes.';
+  return errors;
+}
+
 export function readStayContext(
   params: URLSearchParams | { get(name: string): string | null },
 ): StayContext {
@@ -55,15 +87,9 @@ export function readStayContext(
     Number(guests) <= 50
   )
     result.guests = guests;
-  const validDate = (value: string | null): value is string =>
-    Boolean(
-      value &&
-      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-      localDateIso(new Date(`${value}T12:00:00`)) === value,
-    );
-  if (validDate(arrival) && arrival >= localDateIso())
+  if (isStayDate(arrival) && arrival >= localDateIso())
     result.check_in = arrival;
-  if (validDate(departure) && result.check_in && departure > result.check_in)
+  if (isStayDate(departure) && result.check_in && departure > result.check_in)
     result.check_out = departure;
   return result;
 }

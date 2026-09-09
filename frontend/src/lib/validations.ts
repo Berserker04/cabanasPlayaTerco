@@ -1,8 +1,14 @@
+import { isStayDate } from '@/lib/stay-context';
 import { z } from 'zod';
 
 import { localDateIso } from '@/lib/stay-context';
 
-const cabinStatuses = ['available', 'occupied', 'maintenance', 'inactive'] as const;
+const cabinStatuses = [
+  'available',
+  'occupied',
+  'maintenance',
+  'inactive',
+] as const;
 
 const integerString = (label: string, minimum: number, maximum = 50) =>
   z
@@ -10,8 +16,14 @@ const integerString = (label: string, minimum: number, maximum = 50) =>
     .trim()
     .min(1, `${label} es obligatorio`)
     .regex(/^\d+$/, `${label} debe ser un numero entero`)
-    .refine((value) => Number(value) >= minimum, `${label} debe ser mayor o igual a ${minimum}`)
-    .refine((value) => Number(value) <= maximum, `${label} no puede superar ${maximum}`);
+    .refine(
+      (value) => Number(value) >= minimum,
+      `${label} debe ser mayor o igual a ${minimum}`,
+    )
+    .refine(
+      (value) => Number(value) <= maximum,
+      `${label} no puede superar ${maximum}`,
+    );
 
 const todayIso = localDateIso;
 
@@ -36,7 +48,9 @@ export const registerSchema = z
   .object({
     name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
     email: z.string().email('Email inválido'),
-    password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+    password: z
+      .string()
+      .min(8, 'La contraseña debe tener al menos 8 caracteres'),
     password_confirmation: z.string(),
   })
   .refine((data) => data.password === data.password_confirmation, {
@@ -51,9 +65,16 @@ export const contactSchema = z
       .trim()
       .min(2, 'El nombre debe tener al menos 2 caracteres')
       .max(255, 'El nombre no puede superar 255 caracteres'),
-    email: z.string().trim().email('Email inválido').max(255, 'Email demasiado largo'),
+    email: z
+      .string()
+      .trim()
+      .email('Email inválido')
+      .max(255, 'Email demasiado largo'),
     phone: optionalString(
-      z.string().trim().regex(/^[0-9+\s().-]{7,30}$/, 'Teléfono inválido'),
+      z
+        .string()
+        .trim()
+        .regex(/^[0-9+\s().-]{7,30}$/, 'Teléfono inválido'),
     ),
     message: z
       .string()
@@ -69,10 +90,16 @@ export const contactSchema = z
         .min(1, 'Debe haber al menos 1 huésped')
         .max(50, 'El máximo permitido es de 50 huéspedes'),
     ),
-    cabin_id: optionalNumber(z.number().int().positive()),
-    cabin_type_id: optionalNumber(z.number().int().positive()),
   })
   .superRefine((data, ctx) => {
+    for (const field of ['check_in', 'check_out'] as const) {
+      if (data[field] && !isStayDate(data[field]))
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'Indica una fecha válida',
+        });
+    }
     if (data.check_in && !data.check_out) {
       ctx.addIssue({
         code: 'custom',
@@ -107,8 +134,14 @@ export const contactSchema = z
   });
 
 export const reviewSchema = z.object({
-  rating: z.coerce.number().min(1, 'Mínimo 1 estrella').max(5, 'Máximo 5 estrellas'),
-  title: z.string().max(255, 'El título no puede superar 255 caracteres').optional(),
+  rating: z.coerce
+    .number()
+    .min(1, 'Mínimo 1 estrella')
+    .max(5, 'Máximo 5 estrellas'),
+  title: z
+    .string()
+    .max(255, 'El título no puede superar 255 caracteres')
+    .optional(),
   body: z.string().min(20, 'La reseña debe tener al menos 20 caracteres'),
 });
 
@@ -123,7 +156,11 @@ export const cabinFormSchema = z
     floor: z
       .string()
       .trim()
-      .refine((value) => value === '' || (/^\d+$/.test(value) && Number(value) <= 65535), 'El piso debe ser un entero entre 0 y 65535'),
+      .refine(
+        (value) =>
+          value === '' || (/^\d+$/.test(value) && Number(value) <= 65535),
+        'El piso debe ser un entero entre 0 y 65535',
+      ),
     short_description: z
       .string()
       .trim()

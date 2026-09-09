@@ -1,7 +1,4 @@
-import { api } from '@/lib/api';
-import { buildCabinWhatsAppHref } from '@/lib/cabin-utils';
-import type { ApiResponse } from '@/types/api';
-import type { PublicCabin } from '@/types/cabin';
+import { generalQuoteContext } from '@/lib/general-quote';
 import {
   stayFromSearchParams,
   type StaySearchParams,
@@ -31,6 +28,10 @@ import {
   WHATSAPP_URL,
 } from '@/lib/constants';
 import { ContactForm } from './contact-form';
+import {
+  ContactQuoteProvider,
+  ContactMethodLink,
+} from './contact-quote-context';
 
 export const metadata: Metadata = {
   title: 'Contacto',
@@ -96,23 +97,9 @@ export default async function ContactPage({
 }: {
   searchParams: StaySearchParams;
 }) {
-  const context = await stayFromSearchParams(searchParams);
-  const cabins = context.cabin_id
-    ? await api
-        .get<ApiResponse<PublicCabin[]>>('/cabins', { cache: 'no-store' })
-        .then((response) => response.data)
-        .catch(() => [])
-    : [];
-  const preferredCabin = cabins.find(
-    (cabin) => String(cabin.id) === context.cabin_id,
-  );
-  const stayWhatsappHref = buildCabinWhatsAppHref(preferredCabin, {
-    checkIn: context.check_in,
-    checkOut: context.check_out,
-    guests: context.guests,
-  });
+  const context = generalQuoteContext(await stayFromSearchParams(searchParams));
   return (
-    <>
+    <ContactQuoteProvider initialValues={context}>
       <section className="relative isolate overflow-hidden bg-neutral-950 text-white">
         <Image
           src={heroImage}
@@ -130,7 +117,7 @@ export default async function ContactPage({
               Playa Terco, Nuquí
             </p>
             <h1 className="text-4xl font-bold tracking-normal sm:text-5xl lg:text-6xl">
-              Contacto y reservas
+              Contacto y cotizaciones
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-cyan-50 sm:text-lg">
               Escríbenos para consultar fechas, coordinar tu llegada y preparar
@@ -142,14 +129,14 @@ export default async function ContactPage({
                 asChild
                 className="bg-cyan-500 text-cyan-950 hover:bg-cyan-400"
               >
-                <a
-                  href={stayWhatsappHref}
+                <ContactMethodLink
+                  whatsapp
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <MessageCircle className="h-5 w-5" aria-hidden="true" />
-                  WhatsApp directo
-                </a>
+                  Cotizar por WhatsApp
+                </ContactMethodLink>
               </Button>
               <Button
                 size="lg"
@@ -167,7 +154,10 @@ export default async function ContactPage({
         </div>
       </section>
 
-      <section className="bg-stone-50 py-14 sm:py-20">
+      <section
+        id="solicitud"
+        className="scroll-mt-24 bg-stone-50 py-14 sm:py-20"
+      >
         <div className="container mx-auto grid gap-8 px-4 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">
@@ -178,8 +168,8 @@ export default async function ContactPage({
             </h2>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-neutral-600">
               Comparte tus fechas, número de huéspedes y cualquier detalle
-              importante. Si aún no tienes fechas exactas, deja la cabaña por
-              definir y te orientamos por correo o WhatsApp.
+              importante. Te ayudaremos a planear tu estadía. Si aún no tienes
+              fechas exactas, podemos orientarte.
             </p>
             <div className="mt-7">
               <ContactForm initialContext={context} />
@@ -204,9 +194,10 @@ export default async function ContactPage({
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               {contactMethods.map(({ title, value, href, Icon, external }) => (
-                <a
+                <ContactMethodLink
+                  whatsapp={title === 'WhatsApp'}
                   key={title}
-                  href={title === 'WhatsApp' ? stayWhatsappHref : href}
+                  href={href}
                   target={external ? '_blank' : undefined}
                   rel={external ? 'noopener noreferrer' : undefined}
                   className="group flex min-w-0 items-center gap-3 rounded-lg border bg-white p-4 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50"
@@ -222,7 +213,7 @@ export default async function ContactPage({
                       {value}
                     </span>
                   </span>
-                </a>
+                </ContactMethodLink>
               ))}
             </div>
 
@@ -272,14 +263,14 @@ export default async function ContactPage({
                 </a>
               </Button>
               <Button variant="outline" asChild>
-                <a
-                  href={stayWhatsappHref}
+                <ContactMethodLink
+                  whatsapp
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <MessageCircle className="h-4 w-4" aria-hidden="true" />
                   Coordinar llegada
-                </a>
+                </ContactMethodLink>
               </Button>
             </div>
           </div>
@@ -312,6 +303,6 @@ export default async function ContactPage({
           </a>
         </div>
       </section>
-    </>
+    </ContactQuoteProvider>
   );
 }

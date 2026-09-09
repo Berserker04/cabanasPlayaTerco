@@ -41,7 +41,7 @@ class ContactTest extends TestCase
 
         $response
             ->assertCreated()
-            ->assertJsonPath('message', 'Tu mensaje ha sido enviado. Te contactaremos pronto.')
+            ->assertJsonPath('message', 'Recibimos tu solicitud. Pronto te contactaremos con las opciones para tu estadía.')
             ->assertJsonPath('meta.email_sent', true)
             ->assertJsonStructure([
                 'data' => [

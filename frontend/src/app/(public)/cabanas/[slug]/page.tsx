@@ -1,3 +1,5 @@
+import { GeneralQuoteActions } from '@/components/cabins/general-quote-actions';
+import { generalQuoteContext, QUOTE_NOTICE } from '@/lib/general-quote';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import {
@@ -8,13 +10,13 @@ import {
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Bath, BedDouble, MessageCircle, Users } from 'lucide-react';
+import { Bath, BedDouble, Users } from 'lucide-react';
 import { CabinMap } from '@/components/cabins/cabin-map';
 import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { api, ApiError } from '@/lib/api';
-import { buildCabinWhatsAppHref, getCabinCover } from '@/lib/cabin-utils';
+import { getCabinCover } from '@/lib/cabin-utils';
 import type { ApiResponse } from '@/types/api';
 import type { PublicCabin as Cabin, LodgingTariff } from '@/types/cabin';
 
@@ -94,7 +96,9 @@ export default async function CabinDetailPage({ params, searchParams }: Props) {
                 className="object-cover"
               />
             </div>
-            <div className={`grid gap-4 ${images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} lg:grid-cols-1`}>
+            <div
+              className={`grid gap-4 ${images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} lg:grid-cols-1`}
+            >
               {images.slice(0, 2).map((item) => (
                 <div
                   key={item.id}
@@ -241,32 +245,18 @@ export default async function CabinDetailPage({ params, searchParams }: Props) {
               </p>
             )}
             <div className="mt-6 grid gap-3">
-              <Button
-                asChild
-                size="lg"
-                className="bg-cyan-700 text-white hover:bg-cyan-800"
-              >
-                <a
-                  href={buildCabinWhatsAppHref(cabin, {
-                    checkIn: context.check_in,
-                    checkOut: context.check_out,
-                    guests: context.guests,
-                  })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Reservar por WhatsApp
-                </a>
-              </Button>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {QUOTE_NOTICE}
+              </p>
+              <GeneralQuoteActions context={context} />
               <Button asChild size="lg" variant="outline">
-                <Link href={stayHref('/disponibilidad', context)}>
+                <Link
+                  href={stayHref(
+                    '/disponibilidad',
+                    generalQuoteContext(context),
+                  )}
+                >
                   Consultar disponibilidad
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="ghost">
-                <Link href={stayHref('/contacto', context)}>
-                  Enviar solicitud
                 </Link>
               </Button>
             </div>

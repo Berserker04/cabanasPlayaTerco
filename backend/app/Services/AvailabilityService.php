@@ -74,7 +74,7 @@ class AvailabilityService
             'cabins' => $entries,
             'available_cabins' => $available,
             'summary' => $summary,
-            'message' => $this->availabilityMessage($summary),
+            'message' => $this->availabilityMessage($summary, $guests),
         ];
     }
 
@@ -820,7 +820,6 @@ class AvailabilityService
                 'type', 'mapPoint',
                 'media' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
             ])
-            ->whereNotNull('map_slot')
             ->when(! $admin, fn ($query) => $query->visible())
             ->orderBy('sort_order')
             ->orderBy('name')
@@ -1045,12 +1044,20 @@ class AvailabilityService
         return $reservation->leader_name ? "Reservada: {$reservation->leader_name}" : 'Reservada';
     }
 
-    private function availabilityMessage(array $summary): string
+    private function availabilityMessage(array $summary, ?int $guests = null): string
     {
-        if ($summary['available_count'] > 0) {
-            return "Hay {$summary['available_count']} cabanas disponibles para estas fechas. La disponibilidad es orientativa y la confirmacion final la hace el administrador.";
+        $notice = 'La disponibilidad está sujeta a confirmación.';
+
+        if ($summary['available_count'] === 0) {
+            return 'No hay cabañas libres durante toda la estancia consultada. Puedes solicitar una cotización para revisar alternativas. '.$notice;
         }
 
-        return 'No aparecen cabanas disponibles para estas fechas. Escribenos para revisar cambios recientes u otras opciones.';
+        if ($guests && ! $summary['can_host_guests']) {
+            return "La capacidad libre estimada es de {$summary['available_capacity']} personas para un grupo de {$guests}. No alcanza para todo el grupo en estas fechas; puedes solicitar una cotización para revisar alternativas. ".$notice;
+        }
+
+        $group = $guests ? "Hay capacidad libre estimada para tu grupo de {$guests} personas" : "Hay {$summary['available_count']} cabañas libres para estas fechas";
+
+        return $group.". La capacidad total libre es de {$summary['available_capacity']} personas, distribuida entre {$summary['available_count']} cabañas. ".$notice;
     }
 }

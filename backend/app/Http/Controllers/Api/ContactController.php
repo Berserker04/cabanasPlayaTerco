@@ -59,7 +59,7 @@ class ContactController extends Controller
         }
 
         $emailSent = true;
-        $message = 'Tu mensaje ha sido enviado. Te contactaremos pronto.';
+        $message = 'Recibimos tu solicitud. Pronto te contactaremos con las opciones para tu estadía.';
 
         try {
             Mail::to(config('mail.contact.to'))

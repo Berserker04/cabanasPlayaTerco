@@ -2,15 +2,9 @@
 import { stayHref, type StayContext } from '@/lib/stay-context';
 
 import Link from 'next/link';
-import {
-  Bath,
-  BedDouble,
-  Images,
-  MessageCircle,
-  Search,
-  Users,
-  Waves,
-} from 'lucide-react';
+import { GeneralQuoteActions } from '@/components/cabins/general-quote-actions';
+import { generalQuoteContext, QUOTE_NOTICE } from '@/lib/general-quote';
+import { Bath, BedDouble, Images, Search, Users, Waves } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CabinMap } from '@/components/cabins/cabin-map';
 import { LodgingTariffDetails } from '@/components/cabins/lodging-tariff-details';
@@ -24,11 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  CABIN_FALLBACK_IMAGES,
-  buildCabinWhatsAppHref,
-  getCabinCover,
-} from '@/lib/cabin-utils';
+import { CABIN_FALLBACK_IMAGES, getCabinCover } from '@/lib/cabin-utils';
 import { MAP_FEATURE_LABELS } from '@/lib/map-features';
 import type {
   PublicCabin as Cabin,
@@ -39,7 +29,7 @@ import type { GalleryItem } from '@/types/gallery';
 import type { MapFeatureKey } from '@/types/map-feature';
 
 const guestOptions = [
-  { label: 'Cualquier capacidad', value: 'any' },
+  { label: 'Huéspedes por definir', value: 'any' },
   ...Array.from({ length: 50 }, (_, i) => ({
     label: `${i + 1} huéspedes`,
     value: String(i + 1),
@@ -63,11 +53,6 @@ export function CabinCatalog({
     ...initialContext,
     guests: guests === 'any' ? undefined : guests,
   };
-  const whatsappDates = {
-    checkIn: context.check_in,
-    checkOut: context.check_out,
-    guests: context.guests,
-  };
   const [selectedSlot, setSelectedSlot] = useState<MapSlot | null>(
     cabins.find((cabin) => cabin.id === Number(initialContext.cabin_id))
       ?.map_slot ?? null,
@@ -78,7 +63,6 @@ export function CabinCatalog({
 
   const filteredCabins = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    const guestsCount = guests === 'any' ? 0 : Number(guests);
 
     return cabins.filter((cabin) => {
       const matchesSearch =
@@ -88,13 +72,11 @@ export function CabinCatalog({
           .toLowerCase()
           .includes(normalizedSearch) ||
         (cabin.description ?? '').toLowerCase().includes(normalizedSearch);
-      const matchesGuests =
-        guestsCount === 0 || cabin.max_guests >= guestsCount;
       const matchesSlot = !selectedSlot || cabin.map_slot === selectedSlot;
 
-      return matchesSearch && matchesGuests && matchesSlot;
+      return matchesSearch && matchesSlot;
     });
-  }, [cabins, guests, search, selectedSlot]);
+  }, [cabins, search, selectedSlot]);
 
   const heroImage = cabins[0]
     ? getCabinCover(cabins[0])
@@ -130,27 +112,11 @@ export function CabinCatalog({
               Cabañas reales entre la playa, el mar y la zona verde
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-8 text-cyan-50 sm:text-lg">
-              Revisa cada cabaña por nombre, capacidad, ubicacion y galeria. La
-              reserva se confirma por WhatsApp con atencion directa.
+              Revisa las cabañas por nombre, capacidad, ubicación y galería. Tu
+              grupo puede alojarse en varias cabañas. {QUOTE_NOTICE}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button
-                asChild
-                size="lg"
-                className="bg-cyan-500 text-cyan-950 hover:bg-cyan-400"
-              >
-                <a
-                  href={buildCabinWhatsAppHref(
-                    cabins.find((cabin) => cabin.map_slot === selectedSlot),
-                    whatsappDates,
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <MessageCircle className="h-5 w-5" />
-                  WhatsApp
-                </a>
-              </Button>
+              <GeneralQuoteActions context={context} />
               <Button
                 asChild
                 size="lg"
@@ -158,12 +124,10 @@ export function CabinCatalog({
                 className="border-white/70 bg-white/10 text-white hover:bg-white hover:text-neutral-950"
               >
                 <Link
-                  href={stayHref('/disponibilidad', {
-                    ...context,
-                    cabin_id: cabins
-                      .find((cabin) => cabin.map_slot === selectedSlot)
-                      ?.id.toString(),
-                  })}
+                  href={stayHref(
+                    '/disponibilidad',
+                    generalQuoteContext(context),
+                  )}
                 >
                   Consultar disponibilidad
                 </Link>
@@ -227,7 +191,7 @@ export function CabinCatalog({
                   aria-label="Número de huéspedes"
                   className="w-full"
                 >
-                  <SelectValue placeholder="Capacidad" />
+                  <SelectValue placeholder="Huéspedes del grupo" />
                 </SelectTrigger>
                 <SelectContent>
                   {guestOptions.map((option) => (
@@ -360,16 +324,6 @@ export function CabinCatalog({
                       </div>
 
                       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-5">
-                        <Button asChild variant="outline">
-                          <a
-                            href={buildCabinWhatsAppHref(cabin, whatsappDates)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <MessageCircle className="h-4 w-4" />
-                            WhatsApp
-                          </a>
-                        </Button>
                         <Button asChild>
                           <Link
                             href={stayHref(`/cabanas/${cabin.slug}`, {
