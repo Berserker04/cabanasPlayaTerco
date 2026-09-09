@@ -79,8 +79,18 @@ Programar en hPanel un cron cada minuto:
 ```
 
 Las colas usan `sync`, por lo que no requieren un worker permanente. Los archivos
-subidos se guardan en el disco `public` de Hostinger. El transporte de correo es
-`sendmail`; una prueba real de entrega requiere enviar un correo autorizado.
+subidos usan el disco `s3` de DigitalOcean Spaces, bucket `nuquitoursfiles`, región
+`nyc3`, raíz `cabañasPlayaTerco/production`. Local utiliza
+`cabañasPlayaTerco/develop`. La URL base del bucket no incluye la raíz: Laravel
+la incorpora al generar las URLs. Las credenciales se guardan únicamente en
+`shared/.env`; el workflow conserva ese archivo entre despliegues.
+
+El correo usa el buzón `admin@cabanasplayaterco.com` de Hostinger como remitente
+y usuario SMTP: `smtp.hostinger.com`, puerto `465`, `MAIL_SCHEME=smtps`.
+`MAIL_PASSWORD` es la contraseña del buzón, distinta de la cuenta administradora
+de la aplicación. `CONTACT_TO_ADDRESS` determina quién recibe las solicitudes.
+Los registros MX, SPF y DKIM del dominio deben estar configurados para Hostinger.
+La configuración local de Mailtrap no se usa en producción.
 
 En Google Cloud, el cliente web debe permitir:
 
