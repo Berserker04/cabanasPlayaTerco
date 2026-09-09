@@ -118,7 +118,7 @@ class CabinSeeder extends Seeder
                 'beds_count'        => 3,
                 'bathrooms_count'   => 1,
                 'short_description' => 'Primer piso, buena para parejas, amigos o familias pequeñas.',
-                'description'       => 'Alojamiento sencillo y tranquilo entre vegetación, ideal para probar el flujo de reserva de una cabaña individual.',
+                'description'       => 'Alojamiento sencillo y tranquilo entre vegetación, para parejas, amigos o familias pequeñas.',
                 'images'            => [$imagePaths[0], $imagePaths[2]],
             ],
             [
@@ -148,7 +148,7 @@ class CabinSeeder extends Seeder
                 'beds_count'        => 4,
                 'bathrooms_count'   => 1,
                 'short_description' => 'Cabaña hacia el costado verde, cómoda para grupos medianos.',
-                'description'       => 'Buena base para probar disponibilidad, selección múltiple de cabañas y contacto por WhatsApp.',
+                'description'       => 'Cabaña hacia el costado verde, con espacio para descansar en familia o con amigos.',
                 'images'            => [$imagePaths[3], $imagePaths[1]],
             ],
             [
@@ -163,7 +163,7 @@ class CabinSeeder extends Seeder
                 'beds_count'        => 4,
                 'bathrooms_count'   => 1,
                 'short_description' => 'Cabaña tranquila para grupos que quieren estar cerca de la zona verde.',
-                'description'       => 'Un punto cómodo dentro del mapa para ensayar catálogo, ficha pública, disponibilidad y reservas.',
+                'description'       => 'Una cabaña tranquila para descansar en grupo cerca de la zona verde.',
                 'images'            => [$imagePaths[1], $imagePaths[0]],
             ],
         ];
@@ -182,7 +182,7 @@ class CabinSeeder extends Seeder
                     'cover_image'       => $images[0],
                     'cover_image_path'  => null,
                     'is_active'         => true,
-                    'notes'             => 'Ficha demo para probar catálogo, mapa, disponibilidad, contacto y reservas.',
+                    'notes'             => null,
                 ],
             );
 

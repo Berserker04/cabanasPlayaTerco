@@ -52,6 +52,10 @@ automáticamente. Usar migraciones compatibles con la versión previa.
 Las versiones y copias se conservan para recuperación manual. Revisar su espacio
 periódicamente y retirar únicamente copias cuya conservación ya no sea necesaria.
 
+El script crea los enlaces de almacenamiento mediante SSH porque Hostinger
+deshabilita `symlink` y `exec` en PHP. LiteSpeed tiene permisos de recorrido hasta
+`public`; el archivo `.env` y las copias SQL permanecen privados.
+
 ## Inicialización y mantenimiento
 
 `deploy/production.env.example` documenta la configuración del servidor. Usar
