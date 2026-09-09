@@ -10,11 +10,15 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            throw new \RuntimeException('The demo administrator must not be created in production.');
+        }
+
         $admin = User::updateOrCreate(
             ['email' => 'admin@cabanasplayaterco.com'],
             [
-                'name'              => 'Admin',
-                'password'          => bcrypt('password'),
+                'name' => 'Admin',
+                'password' => bcrypt('password'),
                 'email_verified_at' => now(),
             ],
         );

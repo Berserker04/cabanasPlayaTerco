@@ -1,0 +1,95 @@
+name: Verify and deploy production
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, pdo_mysql, gd, zip
+          coverage: none
+      - name: Install backend dependencies
+        working-directory: backend
+        run: composer install --no-interaction --prefer-dist
+      - name: Backend tests
+        working-directory: backend
+        run: php artisan test --compact
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Verify frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://api-v1.cabanasplayaterco.com/api/v1
+          NEXT_PUBLIC_SITE_URL: https://cabanasplayaterco.com
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm lint
+          pnpm build
+
+  deploy-backend:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: hostinger-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, gd, zip
+          coverage: none
+      - name: Build backend release
+        working-directory: backend
+        run: |
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+          tar --exclude='.env' --exclude='.env.*' --exclude='./tests' \
+            --exclude='./node_modules' --exclude='./storage' --exclude='./.git' \
+            -czf "$RUNNER_TEMP/backend.tar.gz" .
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          test -s ~/.ssh/id_ed25519
+          test -s ~/.ssh/known_hosts
+      - name: Upload and deploy
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          remote=u257359746@185.28.21.157
+          base=/home/u257359746/domains/cabanasplayaterco.com/api-app
+          scp -P 65002 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$RUNNER_TEMP/backend.tar.gz" "$remote:$base/incoming/$DEPLOY_SHA.tar.gz"
+          scp -P 65002 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            deploy/hostinger.sh "$remote:$base/deploy.sh"
+          ssh -p 65002 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$remote" "bash '$base/deploy.sh' '$DEPLOY_SHA'"
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519

@@ -5,6 +5,9 @@ Proyecto con dos partes:
 - `backend`: API Laravel 12 para PHP + MySQL.
 - `frontend`: aplicacion Next.js.
 
+La configuración de producción en Hostinger, Vercel y GitHub Actions está en
+[`docs/production.md`](docs/production.md).
+
 ## Despliegue En Hostinger
 
 El backend puede trabajar en Hostinger sin Docker y sin Redis usando MySQL:
