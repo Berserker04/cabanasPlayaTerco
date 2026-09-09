@@ -55,9 +55,10 @@ export default function PrivacyPage() {
           <h2>Cookies y proveedores técnicos</h2>
           <p>
             Usamos cookies de sesión y de seguridad para mantener tu acceso y proteger los
-            formularios. Vercel sirve el sitio web y Hostinger aloja la API, la base de datos y
-            los archivos subidos. Estos servicios procesan las solicitudes necesarias para
-            operar la aplicación, que pueden incluir dirección IP y registros técnicos.
+            formularios. Vercel sirve el sitio web, Hostinger aloja la API, la base de datos y
+            el correo, y DigitalOcean Spaces almacena los archivos subidos. Estos servicios
+            procesan las solicitudes necesarias para operar la aplicación, que pueden incluir
+            dirección IP y registros técnicos.
             Google interviene cuando eliges su inicio de sesión. Los enlaces a WhatsApp y
             redes sociales abren servicios que tienen sus propias políticas de privacidad.
           </p>
