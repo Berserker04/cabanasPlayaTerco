@@ -5,6 +5,7 @@ import type {
   PlannerCabin,
   PlannerSegment,
 } from '@/types/cabin';
+import { MAX_GROUP_GUESTS } from '../../../../lib/guest-limits.js';
 
 export type AvailabilityFilters = {
   checkIn: string;
@@ -109,7 +110,7 @@ export function initialFilters(params: URLSearchParams): AvailabilityFilters {
     checkIn,
     checkOut,
     guests:
-      Number.isInteger(guests) && guests > 0 && guests <= 50
+      Number.isInteger(guests) && guests > 0 && guests <= MAX_GROUP_GUESTS
         ? String(guests)
         : '4',
   };

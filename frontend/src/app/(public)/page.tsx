@@ -136,7 +136,7 @@ export default async function HomePage() {
               alt="Logo de Cabañas Playa Terco"
               width={160}
               height={160}
-              className="mb-8 h-24 w-24 rounded-full object-contain shadow-2xl ring-1 ring-white/70 sm:h-32 sm:w-32"
+              className="mb-8 h-24 w-24 rounded-full object-contain shadow-2xl sm:h-32 sm:w-32"
             />
             <p className="mb-4 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-cyan-100">
               <MapPin className="h-4 w-4" aria-hidden="true" />

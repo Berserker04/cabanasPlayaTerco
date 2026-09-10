@@ -33,14 +33,14 @@ test('quote messages preserve the group context with simple visitor-facing langu
       name: 'Ana',
       check_in: '2030-06-10',
       check_out: '2030-06-12',
-      guests: 50,
+      guests: 100,
       cabin_id: 2,
       message: 'Podemos revisar otras fechas.',
     },
     'Playa Terco',
   );
   assert(text.includes('una cotización para mi grupo'));
-  assert(text.includes('Huéspedes: 50'));
+  assert(text.includes('Huéspedes: 100'));
   assert(text.includes('2030-06-10 a 2030-06-12'));
   assert(text.includes('Quedo pendiente de su respuesta'));
   assert(!text.includes('Cabaña:'));
@@ -53,7 +53,7 @@ test('general web payload only contains contact and group fields, never assignme
     email: 'ana@example.test',
     phone: '',
     message: DEFAULT_QUOTE_MESSAGE,
-    guests_count: 50,
+    guests_count: 100,
     check_in: '2030-06-10',
     check_out: '2030-06-12',
     cabin_id: 1,
@@ -69,7 +69,7 @@ test('general web payload only contains contact and group fields, never assignme
     'check_out',
     'guests_count',
   ]);
-  assert.equal(payload.guests_count, 50);
+  assert.equal(payload.guests_count, 100);
 });
 test('public search rejects impossible dates and invalid groups while preserving valid boundaries', () => {
   const stay = {
@@ -77,9 +77,9 @@ test('public search rejects impossible dates and invalid groups while preserving
     check_out: '2030-06-12',
     guests: '12',
   };
-  for (const guests of ['1', '50'])
+  for (const guests of ['1', '100'])
     assert.deepEqual(staySearchErrors({ ...stay, guests }, '2030-06-10'), {});
-  for (const guests of ['', '0', '51', '2.5', '-1', 'abc'])
+  for (const guests of ['', '0', '101', '2.5', '-1', 'abc'])
     assert(staySearchErrors({ ...stay, guests }, '2030-06-10').guests);
   assert.equal(isStayDate('2030-02-30'), false);
   assert.equal(isStayDate('2032-02-29'), true);

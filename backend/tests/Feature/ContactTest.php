@@ -79,7 +79,7 @@ class ContactTest extends TestCase
     {
         $this->postJson('/api/v1/contact', [])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['name', 'email', 'message']);
+            ->assertJsonValidationErrors(['name', 'email', 'phone', 'message', 'check_in', 'check_out']);
     }
 
     public function test_contact_form_validates_dates_and_guest_count(): void
@@ -90,12 +90,15 @@ class ContactTest extends TestCase
             'email' => 'carlos@example.com',
             'phone' => '314 742 7806',
             'message' => 'Quiero consultar disponibilidad para una estadia.',
+            'check_in' => $today->copy()->addDays(5)->format('Y-m-d'),
+            'check_out' => $today->copy()->addDays(7)->format('Y-m-d'),
         ];
 
         $cases = [
             [['email' => 'correo-invalido'], ['email']],
-            [['check_in' => $today->copy()->addDays(5)->format('Y-m-d')], ['check_out']],
-            [['check_out' => $today->copy()->addDays(7)->format('Y-m-d')], ['check_in']],
+            [['phone' => ''], ['phone']],
+            [['check_out' => null], ['check_out']],
+            [['check_in' => null], ['check_in']],
             [
                 [
                     'check_in' => $today->copy()->addDays(7)->format('Y-m-d'),
@@ -105,7 +108,7 @@ class ContactTest extends TestCase
             ],
             [['check_in' => $today->copy()->subDay()->format('Y-m-d'), 'check_out' => $today->copy()->addDay()->format('Y-m-d')], ['check_in']],
             [['guests_count' => 0], ['guests_count']],
-            [['guests_count' => 51], ['guests_count']],
+            [['guests_count' => 101], ['guests_count']],
             [['cabin_type_id' => 999], ['cabin_type_id']],
         ];
 

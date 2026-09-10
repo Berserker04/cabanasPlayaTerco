@@ -32,6 +32,9 @@ class UserProfile {
     required this.email,
     required this.isAdmin,
     required this.isStaff,
+    this.roles = const [],
+    this.status = 'active',
+    this.panelAccess,
   });
 
   factory UserProfile.fromJson(JsonMap json) => UserProfile(
@@ -40,6 +43,9 @@ class UserProfile {
     email: json['email']?.toString() ?? '',
     isAdmin: json['is_admin'] == true,
     isStaff: json['is_staff'] == true,
+    roles: (json['roles'] as List? ?? []).map((v) => v.toString()).toList(),
+    status: json['status']?.toString() ?? 'active',
+    panelAccess: json['can_access_panel'] as bool?,
   );
 
   final int id;
@@ -47,6 +53,12 @@ class UserProfile {
   final String email;
   final bool isAdmin;
   final bool isStaff;
+  final List<String> roles;
+  final String status;
+  final bool? panelAccess;
+  bool get canAccessPanel =>
+      status == 'active' &&
+      (panelAccess ?? (isStaff || roles.contains('viewer')));
 }
 
 class AuthSession {
@@ -393,6 +405,12 @@ class LeadItem {
     required this.checkIn,
     required this.checkOut,
     required this.guests,
+    this.notes = '',
+    this.cabinName = '',
+    this.createdAt = '',
+    this.respondedAt = '',
+    this.sourceLabel = '',
+    this.assigneeName = '',
   });
 
   factory LeadItem.fromJson(JsonMap json) => LeadItem(
@@ -406,6 +424,15 @@ class LeadItem {
     checkIn: json['check_in']?.toString(),
     checkOut: json['check_out']?.toString(),
     guests: json['guests_count'] == null ? null : asInt(json['guests_count']),
+    notes: json['notes']?.toString() ?? '',
+    cabinName:
+        asMap(json['cabin'])['name']?.toString() ??
+        asMap(json['cabin_type'])['name']?.toString() ??
+        '',
+    createdAt: json['created_at']?.toString() ?? '',
+    respondedAt: json['responded_at']?.toString() ?? '',
+    sourceLabel: json['source_label']?.toString() ?? '',
+    assigneeName: asMap(json['assignee'])['name']?.toString() ?? '',
   );
 
   final int id;
@@ -418,6 +445,12 @@ class LeadItem {
   final String? checkIn;
   final String? checkOut;
   final int? guests;
+  final String notes,
+      cabinName,
+      createdAt,
+      respondedAt,
+      sourceLabel,
+      assigneeName;
 }
 
 class FinanceSummary {

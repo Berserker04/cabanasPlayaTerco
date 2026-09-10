@@ -19,6 +19,7 @@ import {
   addLocalDays,
   localDateIso,
   isStayDate,
+  MAX_GROUP_GUESTS,
   stayHref,
   staySearchErrors,
   type StayContext,
@@ -218,7 +219,7 @@ export function AvailabilitySearch({
                     inputMode="numeric"
                     className="h-11 text-base md:text-base"
                     min={1}
-                    max={50}
+                    max={MAX_GROUP_GUESTS}
                     step={1}
                     value={context.guests}
                     aria-invalid={Boolean(fieldErrors.guests)}

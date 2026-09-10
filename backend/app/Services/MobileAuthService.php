@@ -112,15 +112,18 @@ final class MobileAuthService
     {
         $this->ensureActive($user);
 
-        if (! $user->isStaff()) {
+        if (! $user->canAccessPanel()) {
             throw new HttpException(403, 'Tu acceso al panel está pendiente de aprobación.');
         }
 
-        if (! empty($device['push_token'])) {
+        $accessToken = $user->createToken($device['device_name'] ?? 'mobile', ['mobile']);
+
+        if ($user->isStaff() && ! empty($device['push_token'])) {
             DeviceToken::updateOrCreate(
                 ['token' => $device['push_token']],
                 [
                     'user_id' => $user->id,
+                    'personal_access_token_id' => $accessToken->accessToken->id,
                     'platform' => $device['platform'] ?? null,
                     'device_name' => $device['device_name'] ?? null,
                     'last_used_at' => now(),
@@ -128,12 +131,12 @@ final class MobileAuthService
             );
         }
 
-        return $user->createToken($device['device_name'] ?? 'mobile', ['mobile'])->plainTextToken;
+        return $accessToken->plainTextToken;
     }
 
     public function approvalRequired(User $user): bool
     {
-        return ! $user->isStaff();
+        return ! $user->canAccessPanel();
     }
 
     private function assignDefaultRole(User $user): void

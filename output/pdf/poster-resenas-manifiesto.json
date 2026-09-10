@@ -1,0 +1,29 @@
+{
+  "destination": "https://cabanasplayaterco.com/resenas",
+  "logo_source": "frontend/public/assets/terco_logo_nav.png",
+  "layout": "Composición vectorial original; logo existente sin modificaciones.",
+  "qr": {
+    "error_correction": "H",
+    "quiet_zone_modules": 4,
+    "matrix_modules": 45
+  },
+  "outputs": [
+    {
+      "file": "poster-resenas-playa-terco-carta.pdf",
+      "size_points": [
+        612.0,
+        792.0
+      ],
+      "qr_size_mm": 78.3
+    },
+    {
+      "file": "poster-resenas-playa-terco-a4.pdf",
+      "size_points": [
+        595.2755905511812,
+        841.8897637795277
+      ],
+      "qr_size_mm": 76.2
+    }
+  ],
+  "print": "Imprimir al 100 % / tamaño real en el tamaño de papel correspondiente."
+}

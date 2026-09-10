@@ -13,21 +13,17 @@ import {
   MapPin,
   MessageCircle,
   Navigation,
-  Phone,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  CONTACT_PHONE_DISPLAY,
   EMAIL,
   FACEBOOK_URL,
   GOOGLE_MAPS_URL,
   INSTAGRAM_URL,
   LOCATION_LABEL,
-  PHONE_NUMBER,
-  SITE_NAME,
-  WHATSAPP_URL,
 } from '@/lib/constants';
 import { ContactForm } from './contact-form';
+import { ContactMethods } from './contact-methods';
 import {
   ContactQuoteProvider,
   ContactMethodLink,
@@ -43,41 +39,6 @@ const heroImage =
   '/assets/imagenes/511133396_9990216891027933_4540081246476097597_n.jpg';
 const mapImage =
   '/assets/imagenes/54516895_2086105884772446_8521564931760324608_n.jpg';
-
-const whatsappHref = `${WHATSAPP_URL}?text=${encodeURIComponent(
-  `Hola, quiero consultar disponibilidad para hospedarme en ${SITE_NAME}.`,
-)}`;
-
-const contactMethods = [
-  {
-    title: 'WhatsApp',
-    value: CONTACT_PHONE_DISPLAY,
-    href: whatsappHref,
-    Icon: MessageCircle,
-    external: true,
-  },
-  {
-    title: 'Teléfono',
-    value: CONTACT_PHONE_DISPLAY,
-    href: `tel:${PHONE_NUMBER.replace(/\s/g, '')}`,
-    Icon: Phone,
-    external: false,
-  },
-  {
-    title: 'Correo',
-    value: EMAIL,
-    href: `mailto:${EMAIL}`,
-    Icon: Mail,
-    external: false,
-  },
-  {
-    title: 'Ubicación',
-    value: 'Abrir en Google Maps',
-    href: GOOGLE_MAPS_URL,
-    Icon: MapPin,
-    external: true,
-  },
-] as const;
 
 const socialLinks = [
   {
@@ -168,8 +129,8 @@ export default async function ContactPage({
             </h2>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-neutral-600">
               Comparte tus fechas, número de huéspedes y cualquier detalle
-              importante. Te ayudaremos a planear tu estadía. Si aún no tienes
-              fechas exactas, podemos orientarte.
+              importante. Si aún no tienes fechas exactas, selecciona unas
+              aproximadas y te ayudaremos a revisar alternativas.
             </p>
             <div className="mt-7">
               <ContactForm initialContext={context} />
@@ -192,30 +153,7 @@ export default async function ContactPage({
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              {contactMethods.map(({ title, value, href, Icon, external }) => (
-                <ContactMethodLink
-                  whatsapp={title === 'WhatsApp'}
-                  key={title}
-                  href={href}
-                  target={external ? '_blank' : undefined}
-                  rel={external ? 'noopener noreferrer' : undefined}
-                  className="group flex min-w-0 items-center gap-3 rounded-lg border bg-white p-4 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50"
-                >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-cyan-100 text-cyan-800">
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-neutral-950">
-                      {title}
-                    </span>
-                    <span className="block break-words text-sm text-neutral-600 group-hover:text-cyan-800">
-                      {value}
-                    </span>
-                  </span>
-                </ContactMethodLink>
-              ))}
-            </div>
+            <ContactMethods />
 
             <div className="rounded-lg border bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold tracking-normal text-neutral-950">

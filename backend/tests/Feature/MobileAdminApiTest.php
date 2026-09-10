@@ -9,6 +9,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\ReservationStatus;
 use App\Enums\UserStatus;
+use App\Jobs\SendLeadPush;
 use App\Models\Cabin;
 use App\Models\CabinType;
 use App\Models\DeviceToken;
@@ -16,7 +17,7 @@ use App\Models\Reservation;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Mockery;
@@ -343,14 +344,12 @@ class MobileAdminApiTest extends TestCase
 
     public function test_contact_lead_triggers_push_notification_for_registered_staff_devices(): void
     {
-        config(['services.firebase.server_key' => 'test-fcm-key']);
-        Http::fake([
-            'https://fcm.googleapis.com/fcm/send' => Http::response(['success' => 1], 200),
-        ]);
+        Queue::fake();
 
         $admin = $this->createAdmin();
-        DeviceToken::create([
+        $device = DeviceToken::create([
             'user_id' => $admin->id,
+            'personal_access_token_id' => $admin->createToken('mobile', ['mobile'])->accessToken->id,
             'token' => 'staff-device-token',
             'platform' => 'android',
         ]);
@@ -365,11 +364,7 @@ class MobileAdminApiTest extends TestCase
             'guests_count' => 5,
         ])->assertCreated();
 
-        Http::assertSent(function ($request): bool {
-            return $request->url() === 'https://fcm.googleapis.com/fcm/send'
-                && $request['registration_ids'] === ['staff-device-token']
-                && $request['data']['type'] === 'lead.created';
-        });
+        Queue::assertPushedOn('push', SendLeadPush::class, fn (SendLeadPush $job): bool => $job->deviceId === $device->id && $job->connection === 'database');
     }
 
     private function createAdmin(array $overrides = []): User

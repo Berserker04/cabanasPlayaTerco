@@ -47,6 +47,20 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+.contact-desktop-action {
+  display: none;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .contact-touch-action {
+    display: none;
+  }
+
+  .contact-desktop-action {
+    display: flex;
+  }
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

@@ -34,7 +34,7 @@ class PublicGroupQuoteTest extends TestCase
     {
         $this->cabin(['max_guests' => 4, 'map_slot' => 'cabana_1']);
         $unmapped = $this->cabin(['max_guests' => 6]);
-        foreach ([2 => true, 8 => true, 10 => true, 11 => false, 50 => false] as $guests => $fits) {
+        foreach ([2 => true, 8 => true, 10 => true, 11 => false, 100 => false] as $guests => $fits) {
             $response = $this->getJson($this->url($guests))->assertOk()
                 ->assertJsonPath('data.guests', $guests)
                 ->assertJsonPath('data.summary.available_count', 2)
@@ -115,13 +115,13 @@ class PublicGroupQuoteTest extends TestCase
 
     public function test_public_search_validates_actual_dates_and_guest_limits(): void
     {
-        foreach ([0, 51, '2.5', 'abc'] as $guests) {
+        foreach ([0, 101, '2.5', 'abc'] as $guests) {
             $this->getJson($this->url($guests))->assertUnprocessable()->assertJsonValidationErrors('guests');
         }
         $this->getJson('/api/v1/availability?check_in=2030-02-30&check_out=2030-06-12&guests=2')->assertUnprocessable()->assertJsonValidationErrors('check_in');
         $this->getJson('/api/v1/availability?check_in=2030-06-10&check_out=2030-06-10&guests=2')->assertUnprocessable()->assertJsonValidationErrors('check_out');
         $this->getJson($this->url(1))->assertOk();
-        $this->getJson($this->url(50))->assertOk();
+        $this->getJson($this->url(100))->assertOk();
     }
 
     private function cabin(array $overrides = []): Cabin
@@ -145,6 +145,6 @@ class PublicGroupQuoteTest extends TestCase
 
     private function payload(): array
     {
-        return ['name' => 'Grupo QA', 'email' => 'group@example.test', 'message' => 'Quisiera recibir una cotización general para mi grupo.', 'check_in' => '2030-06-10', 'check_out' => '2030-06-12', 'guests_count' => 12];
+        return ['name' => 'Grupo QA', 'email' => 'group@example.test', 'phone' => '+573001234567', 'message' => 'Quisiera recibir una cotización general para mi grupo.', 'check_in' => '2030-06-10', 'check_out' => '2030-06-12', 'guests_count' => 12];
     }
 }

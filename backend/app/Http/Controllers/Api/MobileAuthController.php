@@ -95,14 +95,48 @@ class MobileAuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()?->currentAccessToken()?->delete();
-
-        if ($request->filled('push_token')) {
-            DeviceToken::where('token', $request->string('push_token')->toString())->delete();
+        $session = $request->user()?->currentAccessToken();
+        if ($session instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            $request->user()->deviceTokens()->where('personal_access_token_id', $session->id)->delete();
+            $session->delete();
         }
 
         return response()->json([
             'message' => 'Sesion movil cerrada.',
         ]);
+    }
+
+    public function registerDeviceToken(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isStaff(), 403);
+        $session = $request->user()->currentAccessToken();
+        abort_unless($session instanceof \Laravel\Sanctum\PersonalAccessToken, 403);
+        $data = $request->validate([
+            'token' => ['required', 'string', 'max:500'],
+            'platform' => ['required', 'in:android,ios'],
+            'device_name' => ['nullable', 'string', 'max:120'],
+        ]);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $session, $data): void {
+            $request->user()->deviceTokens()->where('personal_access_token_id', $session->id)
+                ->where('token', '!=', $data['token'])->delete();
+            DeviceToken::updateOrCreate(['token' => $data['token']], [
+                'user_id' => $request->user()->id,
+                'personal_access_token_id' => $session->id,
+                'platform' => $data['platform'],
+                'device_name' => $data['device_name'] ?? null,
+                'last_used_at' => now(),
+            ]);
+        });
+
+        return response()->json(['message' => 'Notificaciones activadas.']);
+    }
+
+    public function deleteDeviceToken(Request $request): JsonResponse
+    {
+        $session = $request->user()->currentAccessToken();
+        abort_unless($session instanceof \Laravel\Sanctum\PersonalAccessToken, 403);
+        $request->user()->deviceTokens()->where('personal_access_token_id', $session->id)->delete();
+
+        return response()->json(['message' => 'Notificaciones desactivadas.']);
     }
 }

@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Selecciona fotos y videos para la galería de Playa Terco.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Toma fotografías para la galería de Playa Terco.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Graba el sonido de los videos de la galería.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

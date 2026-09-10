@@ -51,7 +51,15 @@ flutter build apk --debug --dart-define-from-file=config/development.local.json
 
 No se deben versionar secretos ni archivos de credenciales privados. Una cuenta
 nueva, incluida una cuenta de Google, queda con rol `user` y no recibe un token
-administrativo hasta que un administrador le asigne `staff` o `admin`.
+administrativo hasta que un administrador le asigne `viewer`, `staff` o `admin`.
+Visualizador puede consultar operaciones sin modificarlas.
+
+## Administración y notificaciones
+
+Los seis flujos, permisos, Firebase HTTP v1, cola de envío, despliegue y pruebas
+reales por ADB están documentados en [Administración móvil](../docs/mobile-administration.md).
+La configuración Android de Firebase se coloca en `android/app/google-services.json`;
+la cuenta de servicio privada se guarda únicamente fuera del repositorio, en el servidor.
 
 ## Validación
 

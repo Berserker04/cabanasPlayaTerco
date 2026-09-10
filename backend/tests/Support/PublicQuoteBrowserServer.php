@@ -21,7 +21,7 @@ if (PHP_SAPI !== 'cli-server' || ! $app->environment('testing') || config('datab
 }
 Http::fake();
 Mail::fake();
-$app->instance(PushNotificationService::class, new class extends PushNotificationService
+$app->instance(PushNotificationService::class, new class($app->make(\App\Services\FirebaseAccessTokenProvider::class)) extends PushNotificationService
 {
     public function notifyStaffOfNewLead(Lead $lead): void {}
 });

@@ -21,7 +21,7 @@ class AvailabilityController extends Controller
         $request->validate([
             'check_in' => ['required', 'date'],
             'check_out' => ['required', 'date', 'after:check_in'],
-            'guests' => ['nullable', 'integer', 'min:1'],
+            'guests' => ['nullable', 'integer', 'min:1', 'max:'.config('booking.max_group_guests')],
         ]);
 
         $availability = $this->availabilityService->checkAvailability(
@@ -87,7 +87,7 @@ class AvailabilityController extends Controller
         $validated = $request->validate([
             'check_in' => ['required', 'date'],
             'check_out' => ['required', 'date', 'after:check_in'],
-            'guests' => ['nullable', 'integer', 'min:1'],
+            'guests' => ['nullable', 'integer', 'min:1', 'max:'.config('booking.max_group_guests')],
             'exclude_reservation_id' => ['nullable', 'integer', 'min:1', 'exists:reservations,id'],
         ]);
 

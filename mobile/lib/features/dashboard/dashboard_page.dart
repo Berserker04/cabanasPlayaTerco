@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/data_events.dart';
+import '../leads/leads_page.dart';
 import '../../shared/formatters.dart';
 import '../../shared/widgets.dart';
 
 final dashboardProvider = FutureProvider.autoDispose((ref) {
+  ref.watch(dataRevisionProvider);
+  ref.watch(authControllerProvider.select((value) => value.value?.user.id));
   return ref.watch(apiRepositoryProvider).dashboardStats();
 });
 
@@ -22,7 +26,7 @@ class DashboardPage extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Operacion de hoy',
+            'Operación de hoy',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 12),
@@ -42,13 +46,16 @@ class DashboardPage extends ConsumerWidget {
               children: [
                 _MetricTile(
                   icon: Icons.mark_email_unread_outlined,
-                  label: 'Leads nuevos',
-                  value: stats.unansweredLeads.toString(),
+                  label: 'Cotizaciones nuevas',
+                  value:
+                      (ref.watch(newLeadsCountProvider).value ??
+                              stats.unansweredLeads)
+                          .toString(),
                   color: const Color(0xFF0F766E),
                 ),
                 _MetricTile(
                   icon: Icons.flight_land,
-                  label: 'Llegadas proximas',
+                  label: 'Llegadas próximas',
                   value: stats.upcomingArrivals.toString(),
                   color: const Color(0xFF2563EB),
                 ),
@@ -60,7 +67,7 @@ class DashboardPage extends ConsumerWidget {
                 ),
                 _MetricTile(
                   icon: Icons.receipt_long_outlined,
-                  label: 'Gastos proximos',
+                  label: 'Gastos próximos',
                   value: money(stats.upcomingExpenses),
                   color: const Color(0xFFD97706),
                 ),

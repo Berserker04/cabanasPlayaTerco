@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendLeadPush;
 use App\Models\DeviceToken;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -9,61 +10,50 @@ use Illuminate\Support\Facades\Log;
 
 class PushNotificationService
 {
+    public function __construct(private readonly FirebaseAccessTokenProvider $accessTokens) {}
+
     public function notifyStaffOfNewLead(Lead $lead): void
     {
-        $tokens = DeviceToken::query()
-            ->whereHas('user.roles', fn ($query) => $query->whereIn('name', ['admin', 'staff']))
-            ->pluck('token')
-            ->filter()
-            ->unique()
-            ->values();
-
-        if ($tokens->isEmpty()) {
-            return;
-        }
-
-        $this->send(
-            tokens: $tokens->all(),
-            title: 'Nuevo contacto recibido',
-            body: $lead->name . ($lead->check_in ? " pregunto por {$lead->check_in->format('Y-m-d')}" : ' escribio desde la web'),
-            data: [
-                'type' => 'lead.created',
-                'lead_id' => (string) $lead->id,
-            ],
-        );
+        DeviceToken::eligibleRecipient()->select('id')->chunkById(100, function ($devices) use ($lead): void {
+            foreach ($devices as $device) {
+                SendLeadPush::dispatch($lead->id, $device->id)->onConnection('database')->onQueue('push')->afterCommit();
+            }
+        });
     }
 
-    public function send(array $tokens, string $title, string $body, array $data = []): void
+    public function sendToDevice(DeviceToken $device, Lead $lead): void
     {
-        $serverKey = config('services.firebase.server_key');
-
-        if (! $serverKey) {
-            Log::info('Push notification skipped because Firebase is not configured.', [
-                'title' => $title,
-                'tokens_count' => count($tokens),
-                'data' => $data,
+        $project = config('services.firebase.project_id');
+        if (! $project) {
+            throw new \RuntimeException('FIREBASE_PROJECT_ID no está configurado.');
+        }
+        $response = Http::withToken($this->accessTokens->token())->acceptJson()
+            ->connectTimeout(5)->timeout(12)
+            ->post('https://fcm.googleapis.com/v1/projects/'.rawurlencode($project).'/messages:send', [
+                'message' => [
+                    'token' => $device->token,
+                    'notification' => [
+                        'title' => 'Nueva solicitud de cotización',
+                        'body' => $lead->name.' escribió desde la web. Toca para ver su solicitud.',
+                    ],
+                    'data' => ['type' => 'lead.created', 'lead_id' => (string) $lead->id],
+                    'android' => [
+                        'priority' => 'high',
+                        'notification' => ['channel_id' => 'quotations', 'tag' => 'lead-'.$lead->id],
+                    ],
+                    'apns' => ['payload' => ['aps' => ['sound' => 'default']]],
+                ],
             ]);
+
+        $codes = collect($response->json('error.details', []))->pluck('errorCode');
+        if ($codes->contains('UNREGISTERED')) {
+            DeviceToken::whereKey($device->id)->where('token', $device->token)->delete();
 
             return;
         }
-
-        $response = Http::withHeaders([
-            'Authorization' => 'key=' . $serverKey,
-            'Content-Type' => 'application/json',
-        ])->post('https://fcm.googleapis.com/fcm/send', [
-            'registration_ids' => array_values($tokens),
-            'notification' => [
-                'title' => $title,
-                'body' => $body,
-            ],
-            'data' => $data,
-        ]);
-
         if ($response->failed()) {
-            Log::warning('Firebase push notification failed.', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
+            Log::warning('FCM delivery failed.', ['lead_id' => $lead->id, 'device_id' => $device->id, 'status' => $response->status()]);
+            throw new \RuntimeException('FCM respondió HTTP '.$response->status());
         }
     }
 }

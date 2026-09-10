@@ -1,7 +1,9 @@
-import { isStayDate } from '@/lib/stay-context';
+import {
+  isStayDate,
+  localDateIso,
+  MAX_GROUP_GUESTS,
+} from '@/lib/stay-context';
 import { z } from 'zod';
-
-import { localDateIso } from '@/lib/stay-context';
 
 const cabinStatuses = [
   'available',
@@ -26,12 +28,6 @@ const integerString = (label: string, minimum: number, maximum = 50) =>
     );
 
 const todayIso = localDateIso;
-
-const optionalString = (schema: z.ZodString) =>
-  z
-    .union([z.literal(''), schema])
-    .optional()
-    .transform((value) => (value === '' ? undefined : value));
 
 const optionalNumber = (schema: z.ZodNumber) =>
   z
@@ -70,25 +66,31 @@ export const contactSchema = z
       .trim()
       .email('Email inválido')
       .max(255, 'Email demasiado largo'),
-    phone: optionalString(
-      z
-        .string()
-        .trim()
-        .regex(/^[0-9+\s().-]{7,30}$/, 'Teléfono inválido'),
-    ),
+    phone: z
+      .string()
+      .trim()
+      .min(1, 'El teléfono o WhatsApp es obligatorio')
+      .max(30, 'El teléfono no puede superar 30 caracteres')
+      .refine(
+        (value) => value === '' || /^[0-9+\s().-]{7,30}$/.test(value),
+        'Teléfono inválido',
+      ),
     message: z
       .string()
       .trim()
       .min(10, 'El mensaje debe tener al menos 10 caracteres')
       .max(2000, 'El mensaje no puede superar 2000 caracteres'),
-    check_in: optionalString(z.string()),
-    check_out: optionalString(z.string()),
+    check_in: z.string().trim().min(1, 'La fecha de llegada es obligatoria'),
+    check_out: z.string().trim().min(1, 'La fecha de salida es obligatoria'),
     guests_count: optionalNumber(
       z
         .number({ error: 'Indica un número de huéspedes válido' })
         .int('El número de huéspedes debe ser entero')
         .min(1, 'Debe haber al menos 1 huésped')
-        .max(50, 'El máximo permitido es de 50 huéspedes'),
+        .max(
+          MAX_GROUP_GUESTS,
+          `El máximo permitido es de ${MAX_GROUP_GUESTS} huéspedes`,
+        ),
     ),
   })
   .superRefine((data, ctx) => {
@@ -100,22 +102,6 @@ export const contactSchema = z
           message: 'Indica una fecha válida',
         });
     }
-    if (data.check_in && !data.check_out) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['check_out'],
-        message: 'Indica también la fecha de salida',
-      });
-    }
-
-    if (!data.check_in && data.check_out) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['check_in'],
-        message: 'Indica también la fecha de llegada',
-      });
-    }
-
     if (data.check_in && data.check_in < todayIso()) {
       ctx.addIssue({
         code: 'custom',
