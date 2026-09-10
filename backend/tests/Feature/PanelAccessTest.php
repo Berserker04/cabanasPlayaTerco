@@ -7,14 +7,16 @@ use App\Models\Cabin;
 use App\Models\CabinType;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\GoogleOAuthState;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Sanctum;
-use Laravel\Socialite\Contracts\Provider;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\GoogleProvider;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -183,11 +185,20 @@ class PanelAccessTest extends TestCase
         $googleUser->shouldReceive('getName')->andReturn($user->name);
         $googleUser->shouldReceive('getEmail')->andReturn($user->email);
         $googleUser->shouldReceive('getAvatar')->andReturn(null);
-        $provider = Mockery::mock(Provider::class);
+        $provider = Mockery::mock(GoogleProvider::class);
+        $provider->shouldReceive('stateless')->once()->andReturnSelf();
         $provider->shouldReceive('user')->once()->andReturn($googleUser);
         Socialite::shouldReceive('driver')->with('google')->once()->andReturn($provider);
 
-        $this->withSession(['auth.google_next' => '/'])->get('/api/v1/auth/google/callback')
+        $browserToken = str_repeat('b', 64);
+        $state = Crypt::encryptString(json_encode([
+            'browser' => hash('sha256', $browserToken),
+            'expires_at' => now()->addMinutes(10)->timestamp,
+            'next' => '/',
+        ], JSON_THROW_ON_ERROR));
+
+        $this->withCookie(GoogleOAuthState::COOKIE_NAME, $browserToken)
+            ->get('/api/v1/auth/google/callback?state='.urlencode($state))
             ->assertRedirect('http://localhost:3000/admin');
         $this->assertAuthenticatedAs($user);
     }

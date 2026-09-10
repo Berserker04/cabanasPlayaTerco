@@ -29,6 +29,7 @@ type LoginFormProps = {
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google: 'No pudimos completar el inicio de sesión con Google.',
+  'google-state': 'La solicitud de Google venció o ya no es válida. Inténtalo de nuevo.',
   'google-email': 'Google no devolvió un correo válido para esta cuenta.',
   suspended: 'Tu cuenta está suspendida. Contacta a un administrador.',
 };
