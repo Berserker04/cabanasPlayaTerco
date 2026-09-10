@@ -84,6 +84,7 @@ class ContactTest extends TestCase
 
     public function test_contact_form_validates_dates_and_guest_count(): void
     {
+        $today = now(config('app.business_timezone'));
         $validPayload = [
             'name' => 'Carlos Ruiz',
             'email' => 'carlos@example.com',
@@ -93,16 +94,16 @@ class ContactTest extends TestCase
 
         $cases = [
             [['email' => 'correo-invalido'], ['email']],
-            [['check_in' => now()->addDays(5)->format('Y-m-d')], ['check_out']],
-            [['check_out' => now()->addDays(7)->format('Y-m-d')], ['check_in']],
+            [['check_in' => $today->copy()->addDays(5)->format('Y-m-d')], ['check_out']],
+            [['check_out' => $today->copy()->addDays(7)->format('Y-m-d')], ['check_in']],
             [
                 [
-                    'check_in' => now()->addDays(7)->format('Y-m-d'),
-                    'check_out' => now()->addDays(6)->format('Y-m-d'),
+                    'check_in' => $today->copy()->addDays(7)->format('Y-m-d'),
+                    'check_out' => $today->copy()->addDays(6)->format('Y-m-d'),
                 ],
                 ['check_out'],
             ],
-            [['check_in' => now()->subDay()->format('Y-m-d'), 'check_out' => now()->addDay()->format('Y-m-d')], ['check_in']],
+            [['check_in' => $today->copy()->subDay()->format('Y-m-d'), 'check_out' => $today->copy()->addDay()->format('Y-m-d')], ['check_in']],
             [['guests_count' => 0], ['guests_count']],
             [['guests_count' => 51], ['guests_count']],
             [['cabin_type_id' => 999], ['cabin_type_id']],

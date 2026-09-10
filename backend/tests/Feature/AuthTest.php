@@ -5,13 +5,15 @@ namespace Tests\Feature;
 use App\Enums\UserStatus;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\GoogleOAuthState;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
-use Laravel\Socialite\Contracts\Provider;
+use Illuminate\Support\Facades\Crypt;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\GoogleProvider;
 use Mockery;
 use Tests\TestCase;
 
@@ -126,7 +128,17 @@ class AuthTest extends TestCase
             'services.google.client_secret' => 'google-secret',
         ]);
 
-        $provider = Mockery::mock(Provider::class);
+        $provider = Mockery::mock(GoogleProvider::class);
+        $state = null;
+        $provider->shouldReceive('stateless')->once()->andReturnSelf();
+        $provider->shouldReceive('with')
+            ->once()
+            ->with(Mockery::on(function (array $parameters) use (&$state): bool {
+                $state = $parameters['state'] ?? null;
+
+                return is_string($state) && $state !== '';
+            }))
+            ->andReturnSelf();
         $provider->shouldReceive('redirect')
             ->once()
             ->andReturn(new RedirectResponse('https://accounts.google.com/o/oauth2/auth?client_id=google-client'));
@@ -136,10 +148,15 @@ class AuthTest extends TestCase
             ->with('google')
             ->andReturn($provider);
 
-        $this->fromFrontend()->getJson('/api/v1/auth/google/redirect?next=https://evil.test/admin')
+        $response = $this->fromFrontend()->getJson('/api/v1/auth/google/redirect?next=https://evil.test/admin');
+
+        $response
             ->assertOk()
             ->assertJsonPath('url', 'https://accounts.google.com/o/oauth2/auth?client_id=google-client')
-            ->assertSessionHas('auth.google_next', '/');
+            ->assertCookie(GoogleOAuthState::COOKIE_NAME);
+
+        $this->assertSame('/', $this->decryptGoogleNext($state));
+        $response->assertSessionMissing('state');
     }
 
     public function test_google_callback_creates_user_and_blocks_admin_next_for_non_admin(): void
@@ -157,7 +174,8 @@ class AuthTest extends TestCase
         $googleUser->shouldReceive('getEmail')->andReturn('google@example.com');
         $googleUser->shouldReceive('getAvatar')->andReturn('https://example.com/avatar.png');
 
-        $provider = Mockery::mock(Provider::class);
+        $provider = Mockery::mock(GoogleProvider::class);
+        $provider->shouldReceive('stateless')->once()->andReturnSelf();
         $provider->shouldReceive('user')->once()->andReturn($googleUser);
 
         Socialite::shouldReceive('driver')
@@ -165,8 +183,10 @@ class AuthTest extends TestCase
             ->with('google')
             ->andReturn($provider);
 
-        $this->withSession(['auth.google_next' => '/admin'])
-            ->get('/api/v1/auth/google/callback')
+        [$state, $browserToken] = $this->googleState('/admin');
+
+        $this->withCookie(GoogleOAuthState::COOKIE_NAME, $browserToken)
+            ->get('/api/v1/auth/google/callback?state='.urlencode($state))
             ->assertRedirect('http://localhost:3000/');
 
         $createdUser = User::where('email', 'google@example.com')->firstOrFail();
@@ -194,7 +214,8 @@ class AuthTest extends TestCase
         $googleUser->shouldReceive('getId')->andReturn('google-suspended');
         $googleUser->shouldReceive('getEmail')->andReturn('suspended-google@example.com');
 
-        $provider = Mockery::mock(Provider::class);
+        $provider = Mockery::mock(GoogleProvider::class);
+        $provider->shouldReceive('stateless')->once()->andReturnSelf();
         $provider->shouldReceive('user')->once()->andReturn($googleUser);
 
         Socialite::shouldReceive('driver')
@@ -202,10 +223,55 @@ class AuthTest extends TestCase
             ->with('google')
             ->andReturn($provider);
 
-        $this->get('/api/v1/auth/google/callback')
+        [$state, $browserToken] = $this->googleState('/');
+
+        $this->withCookie(GoogleOAuthState::COOKIE_NAME, $browserToken)
+            ->get('/api/v1/auth/google/callback?state='.urlencode($state))
             ->assertRedirect('http://localhost:3000/login?error=suspended');
 
         $this->assertGuest();
+    }
+
+    public function test_google_callback_rejects_state_from_another_browser(): void
+    {
+        config(['services.frontend.url' => 'http://localhost:3000']);
+        [$state] = $this->googleState('/admin', str_repeat('a', 64));
+
+        Socialite::shouldReceive('driver')->never();
+
+        $this->withCookie(
+            GoogleOAuthState::COOKIE_NAME,
+            str_repeat('c', 64),
+        )
+            ->get('/api/v1/auth/google/callback?state='.urlencode($state))
+            ->assertRedirect('http://localhost:3000/login?error=google-state');
+
+        $this->assertGuest();
+    }
+
+    /**
+     * @return array{string, string}
+     */
+    private function googleState(string $next, ?string $browserToken = null): array
+    {
+        $browserToken ??= str_repeat('b', 64);
+
+        return [
+            Crypt::encryptString(json_encode([
+                'browser' => hash('sha256', $browserToken),
+                'expires_at' => now()->addMinutes(10)->timestamp,
+                'next' => $next,
+            ], JSON_THROW_ON_ERROR)),
+            $browserToken,
+        ];
+    }
+
+    private function decryptGoogleNext(?string $state): string
+    {
+        $this->assertIsString($state);
+        $payload = json_decode(Crypt::decryptString($state), true, flags: JSON_THROW_ON_ERROR);
+
+        return $payload['next'];
     }
 
     private function fromFrontend(): static

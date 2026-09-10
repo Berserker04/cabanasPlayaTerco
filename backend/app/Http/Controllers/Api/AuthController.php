@@ -13,11 +13,13 @@ use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\GoogleOAuthState;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -26,13 +28,17 @@ use Throwable;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly GoogleOAuthState $googleOAuthState,
+    ) {}
+
     public function register(RegisterRequest $request): JsonResponse
     {
         $user = User::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
+            'name' => $request->name,
+            'email' => $request->email,
             'password' => Hash::make($request->password),
-            'phone'    => $request->phone,
+            'phone' => $request->phone,
         ]);
 
         $this->assignDefaultRole($user);
@@ -41,7 +47,7 @@ class AuthController extends Controller
         $request->session()->regenerate();
 
         return response()->json([
-            'data'    => new UserResource($user->load('roles')),
+            'data' => new UserResource($user->load('roles')),
             'message' => 'Registro exitoso.',
         ], 201);
     }
@@ -68,7 +74,7 @@ class AuthController extends Controller
         $user->load('roles');
 
         return response()->json([
-            'data'    => new UserResource($user),
+            'data' => new UserResource($user),
             'message' => 'Inicio de sesion exitoso.',
         ]);
     }
@@ -98,7 +104,7 @@ class AuthController extends Controller
         $user->update($request->validated());
 
         return response()->json([
-            'data'    => new UserResource($user->fresh()->load('roles')),
+            'data' => new UserResource($user->fresh()->load('roles')),
             'message' => 'Perfil actualizado.',
         ]);
     }
@@ -159,23 +165,43 @@ class AuthController extends Controller
             ], 503);
         }
 
-        $request->session()->put(
-            'auth.google_next',
+        $attempt = $this->googleOAuthState->issue(
+            $request,
             $this->sanitizeFrontendPath($request->query('next')),
         );
 
         $url = Socialite::driver('google')
+            ->stateless()
+            ->with(['state' => $attempt['state']])
             ->redirect()
             ->getTargetUrl();
 
-        return response()->json(['url' => $url]);
+        return response()
+            ->json(['url' => $url])
+            ->withCookie($this->googleOAuthState->browserCookie($attempt['browser_token']));
     }
 
     public function googleCallback(Request $request): RedirectResponse
     {
+        $next = $this->googleOAuthState->retrieveNext($request);
+
+        if ($next === null) {
+            Log::warning('Google OAuth callback rejected an invalid state.', [
+                'has_state' => $request->filled('state'),
+            ]);
+
+            return redirect()->away($this->frontendUrl('/login?error=google-state'));
+        }
+
         try {
-            $googleUser = Socialite::driver('google')->user();
-        } catch (Throwable) {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+        } catch (Throwable $exception) {
+            Log::warning('Google OAuth provider callback failed.', [
+                'exception' => $exception::class,
+                'has_code' => $request->filled('code'),
+                'provider_error' => $request->string('error')->toString() ?: null,
+            ]);
+
             return redirect()->away($this->frontendUrl('/login?error=google'));
         }
 
@@ -193,20 +219,20 @@ class AuthController extends Controller
             }
 
             $user->forceFill([
-                'google_id'         => $googleUser->getId(),
-                'name'              => $googleUser->getName(),
-                'email'             => $googleUser->getEmail(),
-                'avatar'            => $googleUser->getAvatar(),
+                'google_id' => $googleUser->getId(),
+                'name' => $googleUser->getName(),
+                'email' => $googleUser->getEmail(),
+                'avatar' => $googleUser->getAvatar(),
                 'email_verified_at' => $user->email_verified_at ?? now(),
             ])->save();
         } else {
             $user = User::create([
-                'name'              => $googleUser->getName(),
-                'email'             => $googleUser->getEmail(),
-                'google_id'         => $googleUser->getId(),
-                'avatar'            => $googleUser->getAvatar(),
+                'name' => $googleUser->getName(),
+                'email' => $googleUser->getEmail(),
+                'google_id' => $googleUser->getId(),
+                'avatar' => $googleUser->getAvatar(),
                 'email_verified_at' => now(),
-                'password'          => Hash::make(Str::password(32)),
+                'password' => Hash::make(Str::password(32)),
             ]);
         }
 
@@ -215,10 +241,7 @@ class AuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        $next = $this->sanitizeFrontendPath(
-            $request->session()->pull('auth.google_next'),
-            $user->canAccessPanel(),
-        );
+        $next = $this->sanitizeFrontendPath($next, $user->canAccessPanel());
 
         if ($next === '/' && $user->canAccessPanel()) {
             $next = '/admin';

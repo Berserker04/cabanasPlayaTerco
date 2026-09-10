@@ -30,6 +30,7 @@ type RegisterFormProps = {
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google: 'No pudimos completar el registro con Google.',
+  'google-state': 'La solicitud de Google venció o ya no es válida. Inténtalo de nuevo.',
   'google-email': 'Google no devolvió un correo válido para esta cuenta.',
 };
 
