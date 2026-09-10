@@ -25,6 +25,11 @@ class ReservationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:200'],
+            'status' => ['nullable', \Illuminate\Validation\Rule::enum(ReservationStatus::class)],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
         $reservations = Reservation::query()
             ->with(['cabin.type', 'cabins.type', 'user', 'guestGroup', 'assignedStaff'])
             ->withSum([
@@ -33,20 +38,36 @@ class ReservationController extends Controller
                     PaymentStatus::Partial->value,
                 ]),
             ], 'amount')
-            ->when($request->status, fn ($q, $s) => $q->where('status', $s))
+            ->when($request->filled('status'), function ($q) use ($request) {
+                if ($request->status === 'expired') {
+                    $q->where(fn ($q) => $q->where('status', 'expired')
+                        ->orWhere(fn ($q) => $q->where('status', 'pending')->where('expires_at', '<=', now())));
+                } else {
+                    $q->where('status', $request->status);
+                    if ($request->status === 'pending') {
+                        $q->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()));
+                    }
+                }
+            })
+            ->when($request->filled('search'), fn ($q) => $q->where(fn ($q) => $q
+                ->where('leader_name', 'like', '%'.$request->search.'%')
+                ->orWhere('leader_phone', 'like', '%'.$request->search.'%')
+                ->orWhere('leader_whatsapp', 'like', '%'.$request->search.'%')))
             ->when($request->cabin_id, function ($q, $id) {
-                $q->where('cabin_id', $id)
-                    ->orWhereHas('cabins', fn ($cabinQuery) => $cabinQuery->where('cabins.id', $id));
+                $q->where(fn ($q) => $q->where('cabin_id', $id)
+                    ->orWhereHas('cabins', fn ($cabinQuery) => $cabinQuery->where('cabins.id', $id)));
             })
             ->when($request->from, fn ($q, $d) => $q->where('check_in', '>=', $d))
             ->when($request->to, fn ($q, $d) => $q->where('check_out', '<=', $d))
             ->latest('check_in')
-            ->paginate(20);
+            ->orderByDesc('id')
+            ->paginate($request->integer('per_page', 20));
 
         return response()->json([
             'data' => ReservationResource::collection($reservations),
             'meta' => [
                 'current_page' => $reservations->currentPage(),
+                'last_page' => $reservations->lastPage(),
                 'per_page' => $reservations->perPage(),
                 'total' => $reservations->total(),
             ],

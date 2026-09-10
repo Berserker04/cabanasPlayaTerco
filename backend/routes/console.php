@@ -23,3 +23,6 @@ Artisan::command('reservations:expire-pending', function (): int {
 })->purpose('Mark expired pending reservation quotes as expired');
 
 Schedule::command('reservations:expire-pending')->hourly();
+
+Schedule::command('queue:work database --queue=push --stop-when-empty --max-time=45 --timeout=25 --tries=3')
+    ->everyMinute()->withoutOverlapping(3);

@@ -35,11 +35,12 @@ class FinancePage extends ConsumerWidget {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
             ),
-            FilledButton.icon(
-              onPressed: () => _showExpenseDialog(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('Gasto'),
-            ),
+            if (ref.watch(authControllerProvider).value?.user.isStaff == true)
+              FilledButton.icon(
+                onPressed: () => _showExpenseDialog(context, ref),
+                icon: const Icon(Icons.add),
+                label: const Text('Gasto'),
+              ),
           ],
         ),
         const SizedBox(height: 12),

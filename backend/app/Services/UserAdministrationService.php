@@ -77,11 +77,14 @@ class UserAdministrationService
                 $lockedTarget->update(['status' => $nextStatus]);
             }
 
-            if ($currentStatus === UserStatus::Active && $nextStatus === UserStatus::Suspended) {
-                $this->revokeAccess($lockedTarget);
+            $updated = $lockedTarget->fresh()->load('roles');
+            if (! $updated->canAccessPanel()) {
+                $this->revokeAccess($updated);
+            } elseif (! $updated->isStaff()) {
+                $updated->deviceTokens()->delete();
             }
 
-            return $lockedTarget->fresh()->load('roles');
+            return $updated;
         });
     }
 

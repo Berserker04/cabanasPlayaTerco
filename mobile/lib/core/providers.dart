@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,6 +46,22 @@ final dioProvider = Provider<Dio>((ref) {
         }
         handler.next(options);
       },
+      onError: (error, handler) {
+        final code = error.response?.statusCode;
+        if (code == 401 &&
+            error.requestOptions.headers['Authorization'] != null) {
+          unawaited(
+            ref
+                .read(authControllerProvider.notifier)
+                .expire(
+                  error.requestOptions.headers['Authorization']?.toString(),
+                ),
+          );
+        } else if (code == 403 && error.requestOptions.path != '/auth/user') {
+          unawaited(ref.read(authControllerProvider.notifier).refreshUser());
+        }
+        handler.next(error);
+      },
     ),
   );
 
@@ -62,6 +79,7 @@ final authControllerProvider =
     AsyncNotifierProvider<AuthController, AuthSession?>(AuthController.new);
 
 class AuthController extends AsyncNotifier<AuthSession?> {
+  bool _refreshing = false;
   @override
   Future<AuthSession?> build() async {
     final tokenStore = ref.watch(tokenStoreProvider);
@@ -73,10 +91,18 @@ class AuthController extends AsyncNotifier<AuthSession?> {
 
     try {
       final user = await repository.currentUser();
+      if (!user.canAccessPanel) {
+        await tokenStore.clear();
+        return null;
+      }
       return AuthSession(user: user, token: token);
-    } catch (_) {
-      await tokenStore.clear();
-      return null;
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        await tokenStore.clear();
+        return null;
+      }
+      rethrow;
     }
   }
 
@@ -133,6 +159,36 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     } finally {
       await ref.read(tokenStoreProvider).clear();
       state = const AsyncData(null);
+    }
+  }
+
+  Future<void> expire(String? authorization) async {
+    final session = state.value;
+    if (session == null || authorization != 'Bearer ${session.token}') return;
+    state = const AsyncData(null);
+    await ref.read(tokenStoreProvider).clear();
+    await ref.read(pushTokenServiceProvider).stop(deleteToken: true);
+  }
+
+  Future<void> refreshUser() async {
+    final session = state.value;
+    if (session == null || _refreshing) return;
+    _refreshing = true;
+    try {
+      final user = await ref.read(apiRepositoryProvider).currentUser();
+      if (state.value?.token != session.token) return;
+      if (!user.canAccessPanel) {
+        await expire('Bearer ${session.token}');
+        return;
+      }
+      state = AsyncData(AuthSession(user: user, token: session.token));
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        await expire('Bearer ${session.token}');
+      }
+    } finally {
+      _refreshing = false;
     }
   }
 }

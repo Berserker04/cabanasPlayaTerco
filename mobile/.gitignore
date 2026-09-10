@@ -36,6 +36,8 @@ migrate_working_dir/
 # Local build configuration and OAuth credential downloads.
 /config/*.local.json
 client_secret_*.json
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
 
 # Symbolication related
 app.*.symbols

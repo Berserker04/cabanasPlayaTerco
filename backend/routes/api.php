@@ -38,6 +38,8 @@ Route::prefix('auth')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [Api\AuthController::class, 'logout']);
         Route::post('/mobile/logout', [Api\MobileAuthController::class, 'logout']);
+        Route::post('/mobile/device-token', [Api\MobileAuthController::class, 'registerDeviceToken'])->middleware(['active', 'throttle:30,1']);
+        Route::delete('/mobile/device-token', [Api\MobileAuthController::class, 'deleteDeviceToken']);
 
         Route::middleware('active')->group(function () {
             Route::get('/user', [Api\AuthController::class, 'user']);
@@ -203,6 +205,7 @@ Route::prefix('admin')
 
         // ── Leads ────────────────────────────────────────────
         Route::get('/leads', [Admin\LeadController::class, 'index']);
+        Route::get('/leads/{lead}', [Admin\LeadController::class, 'show']);
         Route::put('/leads/{lead}', [Admin\LeadController::class, 'update']);
 
         // ── Users ────────────────────────────────────────────

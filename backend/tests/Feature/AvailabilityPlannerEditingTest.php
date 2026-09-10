@@ -114,6 +114,18 @@ class AvailabilityPlannerEditingTest extends TestCase
         Sanctum::actingAs($user);
     }
 
+    public function test_mobile_records_search_finds_expired_quotes_without_changing_them(): void
+    {
+        $this->signInAdmin();
+        $cabin = $this->cabin();
+        $expired = $this->reservation($cabin, ['leader_name' => 'Ana cotización', 'status' => 'pending', 'expires_at' => now()->subMinute()]);
+        $this->reservation($cabin, ['leader_name' => 'Ana vigente', 'status' => 'pending', 'expires_at' => now()->addDay()]);
+        $this->getJson('/api/v1/admin/reservations?search=Ana&status=expired&per_page=1')
+            ->assertOk()->assertJsonPath('data.0.id', $expired->id)
+            ->assertJsonPath('meta.last_page', 1)->assertJsonPath('meta.total', 1);
+        $this->assertDatabaseHas('reservations', ['id' => $expired->id, 'status' => 'pending']);
+    }
+
     private function cabin(): Cabin
     {
         $type = CabinType::create(['name' => 'Tipo prueba', 'slug' => 'tipo-prueba', 'base_price' => 0, 'max_guests' => 8, 'bedrooms' => 1, 'bathrooms' => 1, 'is_active' => true]);

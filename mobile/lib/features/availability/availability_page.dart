@@ -1,33 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:intl/intl.dart';
+import '../../core/data_events.dart';
 import '../../core/models.dart';
+import '../../core/management_models.dart';
 import '../../core/providers.dart';
 import '../../shared/formatters.dart';
+import '../../shared/management_widgets.dart';
 import '../../shared/widgets.dart';
+import 'editor_fields.dart';
+import 'booking_editor.dart';
+import 'booking_detail.dart';
+import 'block_editor.dart';
 
 class AvailabilityPage extends ConsumerStatefulWidget {
   const AvailabilityPage({super.key});
-
   @override
   ConsumerState<AvailabilityPage> createState() => _AvailabilityPageState();
 }
 
 class _AvailabilityPageState extends ConsumerState<AvailabilityPage> {
-  late DateTime _checkIn;
-  late DateTime _checkOut;
-  late Future<PlannerResult> _future;
-  PlannerResult? _planner;
-  final _guests = TextEditingController(text: '6');
-  final Set<int> _selectedCabins = {};
-
+  late DateTime _day, _month, _arrival, _departure;
+  late Future<AvailabilityMonth> _calendar;
+  late Future<(PlannerResult, AgendaResult)> _daily;
+  Future<PlannerResult>? _stay;
+  final _guests = TextEditingController(text: '4');
+  bool _searchMode = false;
+  String _filter = '';
+  final Set<int> _selected = {};
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _checkIn = DateTime(now.year, now.month, now.day);
-    _checkOut = _checkIn.add(const Duration(days: 14));
-    _future = _load();
+    _day = todayInBogota();
+    _month = DateTime(_day.year, _day.month);
+    _arrival = _day;
+    _departure = _day.add(const Duration(days: 1));
+    _calendar = _loadMonth();
+    _daily = _loadDay();
   }
 
   @override
@@ -36,1661 +46,753 @@ class _AvailabilityPageState extends ConsumerState<AvailabilityPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: RefreshIndicator(
-        onRefresh: () async => _refresh(),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+  Future<AvailabilityMonth> _loadMonth() =>
+      ref.read(apiRepositoryProvider).calendar(monthKey(_month));
+  Future<(PlannerResult, AgendaResult)> _loadDay() async {
+    final api = ref.read(apiRepositoryProvider);
+    final start = isoDate(_day),
+        end = isoDate(_day.add(const Duration(days: 1)));
+    final planner = api.planner(checkIn: start, checkOut: end, guests: 1);
+    final agenda = api.agenda(start, end);
+    final results = await Future.wait<Object>([planner, agenda]);
+    return (results[0] as PlannerResult, results[1] as AgendaResult);
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _selected.clear();
+      _calendar = _loadMonth();
+      _daily = _loadDay();
+      if (_stay != null) _stay = _loadStay();
+    });
+    await Future.wait<Object>([_calendar, _daily, ?_stay]);
+  }
+
+  Future<PlannerResult> _loadStay() => ref
+      .read(apiRepositoryProvider)
+      .planner(
+        checkIn: isoDate(_arrival),
+        checkOut: isoDate(_departure),
+        guests: int.tryParse(_guests.text) ?? 1,
+      );
+  void _consult() {
+    if (_departure.difference(_arrival).inDays < 1 ||
+        _departure.difference(_arrival).inDays > 31) {
+      showMessage(context, 'Selecciona una estadía de 1 a 31 noches.');
+      return;
+    }
+    if ((int.tryParse(_guests.text) ?? 0) < 1) {
+      showMessage(context, 'Indica al menos una persona.');
+      return;
+    }
+    setState(() {
+      _selected.clear();
+      _stay = _loadStay();
+    });
+  }
+
+  void _newBooking({List<int> ids = const []}) {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BookingEditor(
+          arrival: _searchMode ? _arrival : _day,
+          departure: _searchMode
+              ? _departure
+              : _day.add(const Duration(days: 1)),
+          cabinIds: ids,
+          guests: int.tryParse(_guests.text) ?? 1,
+        ),
+      ),
+    );
+  }
+
+  void _block(List<PlannerCabin> cabins, {PlannerBlock? existing}) {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BlockEditor(
+          arrival: _searchMode ? _arrival : _day,
+          departure: _searchMode
+              ? _departure
+              : _day.add(const Duration(days: 1)),
+          cabins: cabins,
+          existing: existing,
+          selected: _selected.toList(),
+        ),
+      ),
+    );
+  }
+
+  void _record(int id) => Navigator.of(
+    context,
+    rootNavigator: true,
+  ).push(MaterialPageRoute<void>(builder: (_) => BookingDetail(id)));
+
+  Widget _cabinCard(PlannerCabin cabin, List<PlannerCabin> cabins, bool write) {
+    final quotes = cabin.segments
+        .expand((s) => s.quotes)
+        .map((q) => q.id)
+        .toSet();
+    final states = cabin.segments.map((s) => s.label).toSet().join(' · ');
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Icon(
+                  cabin.availableForRange
+                      ? Icons.check_circle_outline
+                      : Icons.event_busy,
+                  color: cabin.availableForRange
+                      ? const Color(0xFF047857)
+                      : const Color(0xFFB45309),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Disponibilidad',
-                        style: Theme.of(context).textTheme.headlineSmall,
+                        cabin.name,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Consulta el rango, revisa cada cabana y registra lo acordado por WhatsApp.',
-                      ),
+                      Text('Hasta ${cabin.maxGuests} personas'),
                     ],
                   ),
                 ),
-                IconButton.filledTonal(
-                  tooltip: 'Crear bloqueo',
-                  onPressed: _planner == null ? null : () => _showBlockSheet(),
-                  icon: const Icon(Icons.lock_outline),
-                ),
+                if (_searchMode && write)
+                  Checkbox(
+                    value: _selected.contains(cabin.id),
+                    onChanged: !cabin.availableForRange
+                        ? null
+                        : (v) => setState(() {
+                            if (v == true) {
+                              _selected.add(cabin.id);
+                            } else {
+                              _selected.remove(cabin.id);
+                            }
+                          }),
+                  ),
               ],
             ),
-            const SizedBox(height: 14),
-            _DateSearchCard(
-              checkIn: _checkIn,
-              checkOut: _checkOut,
-              guestsController: _guests,
-              onPickCheckIn: () => _pickDate(isCheckIn: true),
-              onPickCheckOut: () => _pickDate(isCheckIn: false),
-              onSearch: _consult,
+            const SizedBox(height: 8),
+            Text(
+              cabin.availableForRange
+                  ? 'Libre durante toda la estadía'
+                  : states,
             ),
-            const SizedBox(height: 12),
-            FutureBuilder<PlannerResult>(
-              future: _future,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(36),
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return EmptyState(
-                    icon: Icons.cloud_off,
-                    title: 'No se pudo consultar',
-                    message: errorMessage(snapshot.error!),
-                  );
-                }
-                final planner = snapshot.requireData;
-                if (planner.cabins.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.cabin_outlined,
-                    title: 'Sin cabanas',
-                    message: 'No hay cabanas configuradas para mostrar.',
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _SummaryRow(summary: planner.summary),
-                    const SizedBox(height: 12),
-                    if (planner.suggestions.isNotEmpty) ...[
-                      _SuggestionsCard(
-                        suggestions: planner.suggestions,
-                        onUse: _useSuggestion,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    _AvailabilityMatrix(
-                      planner: planner,
-                      selectedCabins: _selectedCabins,
-                      onToggleCabin: _toggleCabin,
-                      onCellTap: _showDetails,
-                    ),
-                  ],
-                );
-              },
+            if (quotes.isNotEmpty)
+              Text(
+                '${quotes.length} cotizaciones · no bloquean las fechas',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => _cabinDetails(cabin, cabins, write),
+                  child: const Text('Ver detalle'),
+                ),
+                if (!_searchMode && write && cabin.availableForRange)
+                  TextButton(
+                    onPressed: () => _newBooking(ids: [cabin.id]),
+                    child: const Text('Registrar'),
+                  ),
+              ],
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _selectedCabins.isEmpty
+    );
+  }
+
+  Future<void> _cabinDetails(
+    PlannerCabin cabin,
+    List<PlannerCabin> cabins,
+    bool write,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheet) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .6,
+        minChildSize: .3,
+        maxChildSize: .9,
+        builder: (context, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          children: [
+            Text(cabin.name, style: Theme.of(context).textTheme.titleLarge),
+            ...cabin.segments.map(
+              (segment) => Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${segment.checkIn} → ${segment.checkOut}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    Text(segment.label),
+                    if (segment.reservation != null)
+                      ListTile(
+                        title: Text(
+                          segment.reservation!.leaderName ?? 'Ocupación',
+                        ),
+                        subtitle: Text(segment.reservation!.statusLabel),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.pop(sheet);
+                          _record(segment.reservation!.id);
+                        },
+                      ),
+                    ...segment.quotes.map(
+                      (quote) => ListTile(
+                        title: Text(quote.leaderName ?? 'Cotización'),
+                        subtitle: const Text('Cotización vigente'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.pop(sheet);
+                          _record(quote.id);
+                        },
+                      ),
+                    ),
+                    if (segment.block != null)
+                      ListTile(
+                        title: Text(segment.block!.reason),
+                        subtitle: Text(
+                          segment.block!.notes ?? 'Bloqueo de disponibilidad',
+                        ),
+                        trailing: write
+                            ? const Icon(Icons.edit_outlined)
+                            : null,
+                        onTap: !write
+                            ? null
+                            : () {
+                                Navigator.pop(sheet);
+                                _block(cabins, existing: segment.block);
+                              },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _monthCalendar(AvailabilityMonth calendar) {
+    final offset = DateTime(_month.year, _month.month).weekday - 1;
+    return SectionCard(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Mes anterior',
+                onPressed: () => _moveMonth(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  DateFormat('MMMM yyyy', 'es_CO').format(_month),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Mes siguiente',
+                onPressed: () => _moveMonth(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              'L',
+              'M',
+              'X',
+              'J',
+              'V',
+              'S',
+              'D',
+            ].map((d) => Expanded(child: Center(child: Text(d)))).toList(),
+          ),
+          const SizedBox(height: 6),
+          LayoutBuilder(
+            builder: (context, constraints) => GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: offset + calendar.days.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                mainAxisExtent:
+                    (8 +
+                            1.2 *
+                                (MediaQuery.textScalerOf(context).scale(14) +
+                                    MediaQuery.textScalerOf(context).scale(10)))
+                        .clamp(52, 240)
+                        .toDouble(),
+              ),
+              itemBuilder: (context, index) {
+                if (index < offset) return const SizedBox.shrink();
+                final day = calendar.days[index - offset];
+                final selected = DateUtils.isSameDay(day.date, _day);
+                final color = day.available == 0
+                    ? const Color(0xFFB91C1C)
+                    : day.available <= 2
+                    ? const Color(0xFFB45309)
+                    : const Color(0xFF047857);
+                return Semantics(
+                  button: true,
+                  selected: selected,
+                  label:
+                      '${isoDate(day.date)}, ${day.available} de ${day.total} cabañas libres',
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _day = day.date;
+                      _daily = _loadDay();
+                    }),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      margin: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: selected
+                            ? Theme.of(context).colorScheme.primary
+                            : color.withValues(alpha: .06),
+                      ),
+                      child: ExcludeSemantics(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                '${day.date.day}',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w600,
+                                  color: selected ? Colors.white : null,
+                                ),
+                              ),
+                            ),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                '${day.available}',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  height: 1.2,
+                                  color: selected ? Colors.white : color,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'El número pequeño indica las cabañas libres.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _moveMonth(int delta) => setState(() {
+    _month = DateTime(_month.year, _month.month + delta);
+    _day = _month;
+    _calendar = _loadMonth();
+    _daily = _loadDay();
+  });
+  String _eventLabel(BookingRecord record) {
+    final day = isoDate(_day);
+    if (record.status == 'pending') return 'Cotización';
+    if (record.checkIn == day) return 'Llegada';
+    if (record.checkOut == day) return 'Salida';
+    return 'Estadía';
+  }
+
+  Widget _dailyContent(PlannerResult planner, AgendaResult agenda, bool write) {
+    final day = isoDate(_day);
+    final records = agenda.reservations
+        .where(
+          (r) =>
+              r.checkIn.compareTo(day) <= 0 &&
+              r.checkOut.compareTo(day) >= 0 &&
+              (r.status != 'pending' || r.checkOut != day),
+        )
+        .where(
+          (r) => switch (_filter) {
+            'arrivals' => r.status != 'pending' && r.checkIn == day,
+            'departures' => r.status != 'pending' && r.checkOut == day,
+            'quotes' => r.status == 'pending',
+            'blocks' || 'free' => false,
+            _ => true,
+          },
+        )
+        .toList();
+    final blocks = agenda.blocks.where(
+      (b) => b.checkIn.compareTo(day) <= 0 && b.checkOut.compareTo(day) > 0,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children:
+              {
+                    '': 'Todo',
+                    'free': 'Libres',
+                    'arrivals': 'Llegadas',
+                    'departures': 'Salidas',
+                    'quotes': 'Cotizaciones',
+                    'blocks': 'Bloqueos',
+                  }.entries
+                  .map(
+                    (e) => ChoiceChip(
+                      label: Text(e.value),
+                      selected: _filter == e.key,
+                      onSelected: (_) => setState(() => _filter = e.key),
+                    ),
+                  )
+                  .toList(),
+        ),
+        const SizedBox(height: 12),
+        if (_filter == '' || _filter == 'free') ...[
+          Text(
+            'Cabañas · ${planner.summary['available_count'] ?? 0} libres',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          ...planner.cabins
+              .where((c) => _filter != 'free' || c.availableForRange)
+              .map((c) => _cabinCard(c, planner.cabins, write)),
+          const SizedBox(height: 16),
+        ],
+        if (_filter != 'free') ...[
+          Text(
+            'Agenda del día',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          ...records.map(
+            (r) => Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                leading: Icon(
+                  r.status == 'pending'
+                      ? Icons.chat_bubble_outline
+                      : r.checkOut == day
+                      ? Icons.logout
+                      : Icons.cabin_outlined,
+                ),
+                title: Text(r.name),
+                subtitle: Text(
+                  '${_eventLabel(r)} · ${r.guests} personas\n${r.cabinNames.join(', ')}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _record(r.id),
+              ),
+            ),
+          ),
+          if (_filter == '' || _filter == 'blocks')
+            ...blocks.map(
+              (b) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: Text(b.reason),
+                  subtitle: Text(
+                    b.appliesToAll
+                        ? 'Todas las cabañas'
+                        : b.cabinNames.join(', '),
+                  ),
+                  trailing: write ? const Icon(Icons.edit_outlined) : null,
+                  onTap: !write
+                      ? null
+                      : () => _block(planner.cabins, existing: b),
+                ),
+              ),
+            ),
+          if (records.isEmpty &&
+              !((_filter == '' || _filter == 'blocks') && blocks.isNotEmpty))
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Text('No hay movimientos para este filtro.'),
+            ),
+        ],
+        if (write)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: _newBooking,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nuevo registro'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _block(planner.cabins),
+                  icon: const Icon(Icons.lock_outline),
+                  label: const Text('Bloquear fechas'),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(dataRevisionProvider, (_, next) {
+      _refresh().catchError((Object _) {});
+    });
+    final write =
+        ref.watch(authControllerProvider).value?.user.isStaff ?? false;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          try {
+            await _refresh();
+          } catch (_) {}
+        },
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Disponibilidad',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Buscar registros',
+                  icon: const Icon(Icons.manage_search),
+                  onPressed: () => context.push('/availability/records'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text('Las fechas y movimientos, a un toque.'),
+            const SizedBox(height: 14),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.calendar_month),
+                  label: Text('Agenda'),
+                ),
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.search),
+                  label: Text('Consultar'),
+                ),
+              ],
+              selected: {_searchMode},
+              onSelectionChanged: (v) => setState(() => _searchMode = v.first),
+            ),
+            const SizedBox(height: 14),
+            if (!_searchMode) ...[
+              FutureBuilder<AvailabilityMonth>(
+                future: _calendar,
+                builder: (context, s) {
+                  if (s.connectionState != ConnectionState.done) {
+                    return const LinearProgressIndicator();
+                  }
+                  if (s.hasError) {
+                    return LoadingError(
+                      s.error!,
+                      () => setState(() {
+                        _calendar = _loadMonth();
+                      }),
+                    );
+                  }
+                  return _monthCalendar(s.requireData);
+                },
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      DateFormat('EEEE d MMM', 'es_CO').format(_day),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _day = todayInBogota();
+                      _month = DateTime(_day.year, _day.month);
+                      _calendar = _loadMonth();
+                      _daily = _loadDay();
+                    }),
+                    child: const Text('Hoy'),
+                  ),
+                ],
+              ),
+              FutureBuilder<(PlannerResult, AgendaResult)>(
+                future: _daily,
+                builder: (context, s) {
+                  if (s.connectionState != ConnectionState.done) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+                  if (s.hasError) {
+                    return LoadingError(
+                      s.error!,
+                      () => setState(() {
+                        _daily = _loadDay();
+                      }),
+                    );
+                  }
+                  return _dailyContent(
+                    s.requireData.$1,
+                    s.requireData.$2,
+                    write,
+                  );
+                },
+              ),
+            ] else ...[
+              SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    StayDates(
+                      arrival: _arrival,
+                      departure: _departure,
+                      onChanged: (a, d) => setState(() {
+                        _arrival = a;
+                        _departure = d;
+                        _stay = null;
+                        _selected.clear();
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _guests,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Personas'),
+                      onChanged: (_) => setState(() {
+                        _stay = null;
+                        _selected.clear();
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: _consult,
+                      icon: const Icon(Icons.search),
+                      label: const Text('Consultar estadía'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_stay == null)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'Elige llegada, salida y personas para ver las opciones.',
+                  ),
+                )
+              else
+                FutureBuilder<PlannerResult>(
+                  future: _stay,
+                  builder: (context, s) {
+                    if (s.connectionState != ConnectionState.done) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (s.hasError) return LoadingError(s.error!, _consult);
+                    final planner = s.requireData;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '${planner.summary['available_count'] ?? 0} cabañas libres · ${planner.summary['available_capacity'] ?? 0} personas',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        if (planner.suggestions.isNotEmpty)
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            title: const Text('Opciones para tu grupo'),
+                            children: planner.suggestions
+                                .map(
+                                  (s) => ListTile(
+                                    title: Text(s.names.join(' + ')),
+                                    subtitle: Text(
+                                      'Capacidad: ${s.capacity} personas',
+                                    ),
+                                    trailing: write
+                                        ? const Icon(Icons.add_task)
+                                        : null,
+                                    onTap: !write
+                                        ? null
+                                        : () => setState(() {
+                                            _selected
+                                              ..clear()
+                                              ..addAll(s.cabinIds);
+                                          }),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ...planner.cabins.map(
+                          (c) => _cabinCard(c, planner.cabins, write),
+                        ),
+                        if (write)
+                          OutlinedButton.icon(
+                            onPressed: () => _block(planner.cabins),
+                            icon: const Icon(Icons.lock_outline),
+                            label: const Text('Bloquear fechas'),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+            ],
+          ],
+        ),
+      ),
+      bottomNavigationBar: !write || !_searchMode || _selected.isEmpty
           ? null
           : SafeArea(
               minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: FilledButton.icon(
-                onPressed: _showRecordSheet,
+                onPressed: () => _newBooking(ids: _selected.toList()),
                 icon: const Icon(Icons.add_task),
-                label: Text(
-                  'Registrar · ${_selectedCabins.length} ${_selectedCabins.length == 1 ? 'cabana' : 'cabanas'}',
-                ),
+                label: Text('Registrar · ${_selected.length} cabañas'),
               ),
             ),
     );
-  }
-
-  Future<PlannerResult> _load() async {
-    final result = await ref
-        .read(apiRepositoryProvider)
-        .planner(
-          checkIn: isoDate(_checkIn),
-          checkOut: isoDate(_checkOut),
-          guests: int.tryParse(_guests.text) ?? 1,
-        );
-    if (mounted) {
-      setState(() => _planner = result);
-    } else {
-      _planner = result;
-    }
-    return result;
-  }
-
-  void _consult() {
-    final nights = _checkOut.difference(_checkIn).inDays;
-    if (nights < 1) {
-      _showMessage('La salida debe ser posterior a la llegada.');
-      return;
-    }
-    if (nights > 31) {
-      _showMessage('El rango maximo es de 31 dias.');
-      return;
-    }
-    if ((int.tryParse(_guests.text) ?? 0) < 1) {
-      _showMessage('Indica al menos una persona.');
-      return;
-    }
-    _refresh();
-  }
-
-  void _refresh({String? announcement}) {
-    if (!mounted) return;
-    setState(() {
-      _selectedCabins.clear();
-      _planner = null;
-      _future = _load();
-    });
-    if (announcement != null) _showMessage(announcement);
-  }
-
-  Future<void> _pickDate({required bool isCheckIn}) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isCheckIn ? _checkIn : _checkOut,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime(DateTime.now().year + 5),
-      helpText: isCheckIn ? 'Seleccionar llegada' : 'Seleccionar salida',
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isCheckIn) {
-        _checkIn = picked;
-        if (!_checkOut.isAfter(_checkIn)) {
-          _checkOut = _checkIn.add(const Duration(days: 1));
-        }
-      } else {
-        _checkOut = picked.isAfter(_checkIn)
-            ? picked
-            : _checkIn.add(const Duration(days: 1));
-      }
-    });
-  }
-
-  void _toggleCabin(PlannerCabin cabin) {
-    if (!cabin.availableForRange) {
-      _showMessage('${cabin.name} no esta libre durante todo el rango.');
-      return;
-    }
-    final hasQuotes = cabin.segments.any(
-      (segment) => segment.quotes.isNotEmpty,
-    );
-    setState(() {
-      if (_selectedCabins.contains(cabin.id)) {
-        _selectedCabins.remove(cabin.id);
-      } else {
-        _selectedCabins.add(cabin.id);
-      }
-    });
-    if (hasQuotes && _selectedCabins.contains(cabin.id)) {
-      _showMessage(
-        '${cabin.name} tiene cotizaciones, pero continua disponible.',
-      );
-    }
-  }
-
-  void _useSuggestion(PlannerSuggestion suggestion) {
-    setState(() {
-      _selectedCabins
-        ..clear()
-        ..addAll(suggestion.cabinIds);
-    });
-  }
-
-  Future<void> _showDetails(PlannerCabin cabin, PlannerSegment segment) async {
-    if (segment.isAvailable && segment.quotes.isEmpty) {
-      _toggleCabin(cabin);
-      return;
-    }
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => _DetailsSheet(
-        cabin: cabin,
-        segment: segment,
-        onEditReservation: (reservation) async {
-          Navigator.pop(sheetContext);
-          await _showRecordSheet(existing: reservation);
-        },
-        onConfirmQuote: (reservation) => _updateFromDetails(
-          sheetContext,
-          reservation,
-          {'status': 'confirmed'},
-          'Ocupacion confirmada.',
-        ),
-        onRenewQuote: (reservation) =>
-            _updateFromDetails(sheetContext, reservation, {
-              'status': 'pending',
-              'expires_at': DateTime.now()
-                  .add(const Duration(hours: 48))
-                  .toUtc()
-                  .toIso8601String(),
-            }, 'Cotizacion renovada por 48 horas.'),
-        onCancelReservation: (reservation) async {
-          final confirmed = await _confirm(
-            title: 'Cancelar registro',
-            message:
-                'La cabana volvera a quedar disponible si era una ocupacion activa.',
-          );
-          if (!confirmed) return;
-          if (!sheetContext.mounted) return;
-          await _updateFromDetails(sheetContext, reservation, {
-            'status': 'cancelled',
-          }, 'Registro cancelado.');
-        },
-        onEditBlock: (block) async {
-          Navigator.pop(sheetContext);
-          await _showBlockSheet(existing: block);
-        },
-        onDeleteBlock: (block) async {
-          final confirmed = await _confirm(
-            title: 'Eliminar bloqueo',
-            message: 'Las fechas quedaran disponibles de inmediato.',
-          );
-          if (!confirmed) return;
-          try {
-            await ref.read(apiRepositoryProvider).deleteBlock(block.id);
-            _refresh(announcement: 'Bloqueo eliminado.');
-            if (sheetContext.mounted) Navigator.pop(sheetContext);
-          } catch (error) {
-            _showMessage(errorMessage(error));
-          }
-        },
-      ),
-    );
-  }
-
-  Future<void> _updateFromDetails(
-    BuildContext sheetContext,
-    PlannerReservation reservation,
-    JsonMap payload,
-    String successMessage,
-  ) async {
-    final error = await _saveReservation(
-      reservation,
-      payload,
-      successMessage: successMessage,
-    );
-    if (error == null && sheetContext.mounted) Navigator.pop(sheetContext);
-    if (error != null) _showMessage(error);
-  }
-
-  Future<void> _showRecordSheet({PlannerReservation? existing}) async {
-    final planner = _planner;
-    if (planner == null) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => _RecordSheet(
-        cabins: planner.cabins,
-        initialCabinIds: existing?.cabinIds.isNotEmpty == true
-            ? existing!.cabinIds.toSet()
-            : _selectedCabins,
-        initialCheckIn: existing?.checkIn.isNotEmpty == true
-            ? DateTime.parse(existing!.checkIn)
-            : _checkIn,
-        initialCheckOut: existing?.checkOut.isNotEmpty == true
-            ? DateTime.parse(existing!.checkOut)
-            : _checkOut,
-        initialGuests:
-            existing?.guestsCount ?? (int.tryParse(_guests.text) ?? 1),
-        existing: existing,
-        onSave: (payload) => _saveReservation(
-          existing,
-          payload,
-          successMessage: existing == null
-              ? 'Registro guardado.'
-              : 'Registro actualizado.',
-        ),
-      ),
-    );
-  }
-
-  Future<String?> _saveReservation(
-    PlannerReservation? existing,
-    JsonMap payload, {
-    required String successMessage,
-  }) async {
-    try {
-      final repository = ref.read(apiRepositoryProvider);
-      if (existing == null) {
-        await repository.createReservation(payload);
-      } else {
-        await repository.updateReservation(existing.id, payload);
-      }
-      _refresh(announcement: successMessage);
-      return null;
-    } catch (error) {
-      return errorMessage(error);
-    }
-  }
-
-  Future<void> _showBlockSheet({PlannerBlock? existing}) async {
-    final planner = _planner;
-    if (planner == null) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => _BlockSheet(
-        cabins: planner.cabins,
-        initialCabinIds: existing?.cabinIds.isNotEmpty == true
-            ? existing!.cabinIds.toSet()
-            : _selectedCabins,
-        initialCheckIn: existing?.checkIn.isNotEmpty == true
-            ? DateTime.parse(existing!.checkIn)
-            : _checkIn,
-        initialCheckOut: existing?.checkOut.isNotEmpty == true
-            ? DateTime.parse(existing!.checkOut)
-            : _checkOut,
-        existing: existing,
-        onSave: (payload) async {
-          try {
-            final repository = ref.read(apiRepositoryProvider);
-            if (existing == null) {
-              await repository.createBlock(payload);
-            } else {
-              await repository.updateBlock(existing.id, payload);
-            }
-            _refresh(
-              announcement: existing == null
-                  ? 'Bloqueo creado.'
-                  : 'Bloqueo actualizado.',
-            );
-            return null;
-          } catch (error) {
-            return errorMessage(error);
-          }
-        },
-      ),
-    );
-  }
-
-  Future<bool> _confirm({
-    required String title,
-    required String message,
-  }) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Volver'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Continuar'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-
-class _DateSearchCard extends StatelessWidget {
-  const _DateSearchCard({
-    required this.checkIn,
-    required this.checkOut,
-    required this.guestsController,
-    required this.onPickCheckIn,
-    required this.onPickCheckOut,
-    required this.onSearch,
-  });
-
-  final DateTime checkIn;
-  final DateTime checkOut;
-  final TextEditingController guestsController;
-  final VoidCallback onPickCheckIn;
-  final VoidCallback onPickCheckOut;
-  final VoidCallback onSearch;
-
-  @override
-  Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Consultar rango',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _DateButton(
-                  label: 'Llegada',
-                  value: isoDate(checkIn),
-                  onTap: onPickCheckIn,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DateButton(
-                  label: 'Salida',
-                  value: isoDate(checkOut),
-                  onTap: onPickCheckOut,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: guestsController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Personas'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: onSearch,
-                icon: const Icon(Icons.search),
-                label: const Text('Consultar'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${checkOut.difference(checkIn).inDays} noches · maximo 31 dias',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DateButton extends StatelessWidget {
-  const _DateButton({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          children: [
-            Text(label, style: Theme.of(context).textTheme.labelSmall),
-            Text(value),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.summary});
-
-  final JsonMap summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (
-        'Libres',
-        asInt(summary['available_count']),
-        const Color(0xFF047857),
-        Icons.check_circle_outline,
-      ),
-      (
-        'Cotizadas',
-        asInt(summary['quoted_count']),
-        const Color(0xFF7C3AED),
-        Icons.chat_bubble_outline,
-      ),
-      (
-        'Ocupadas',
-        asInt(summary['reserved_count']),
-        const Color(0xFFB91C1C),
-        Icons.bed_outlined,
-      ),
-      (
-        'Bloq.',
-        asInt(summary['blocked_count']) + asInt(summary['maintenance_count']),
-        const Color(0xFFC2410C),
-        Icons.lock_outline,
-      ),
-      (
-        'Cap.',
-        asInt(summary['available_capacity']),
-        const Color(0xFF1D4ED8),
-        Icons.groups_outlined,
-      ),
-    ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: items
-          .map(
-            (item) => Chip(
-              avatar: Icon(item.$4, size: 18, color: item.$3),
-              label: Text('${item.$1} ${item.$2}'),
-              side: BorderSide(color: item.$3.withValues(alpha: 0.25)),
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _SuggestionsCard extends StatelessWidget {
-  const _SuggestionsCard({required this.suggestions, required this.onUse});
-
-  final List<PlannerSuggestion> suggestions;
-  final ValueChanged<PlannerSuggestion> onUse;
-
-  @override
-  Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Combinaciones sugeridas',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: suggestions
-                .take(3)
-                .map(
-                  (suggestion) => ActionChip(
-                    avatar: const Icon(Icons.auto_awesome, size: 18),
-                    label: Text(
-                      '${suggestion.names.join(', ')} · ${suggestion.capacity} cupos',
-                    ),
-                    onPressed: () => onUse(suggestion),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AvailabilityMatrix extends StatelessWidget {
-  const _AvailabilityMatrix({
-    required this.planner,
-    required this.selectedCabins,
-    required this.onToggleCabin,
-    required this.onCellTap,
-  });
-
-  final PlannerResult planner;
-  final Set<int> selectedCabins;
-  final ValueChanged<PlannerCabin> onToggleCabin;
-  final void Function(PlannerCabin cabin, PlannerSegment segment) onCellTap;
-
-  static const _labelWidth = 126.0;
-  static const _dayWidth = 78.0;
-  static const _rowHeight = 68.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final start = DateTime.parse(planner.checkIn);
-    final end = DateTime.parse(planner.checkOut);
-    final days = List.generate(
-      end.difference(start).inDays,
-      (index) => start.add(Duration(days: index)),
-    );
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Matriz por dias',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 3),
-                const Text(
-                  'Desliza los dias; la columna de cabanas permanece fija.',
-                ),
-                const SizedBox(height: 10),
-                const Wrap(
-                  spacing: 12,
-                  runSpacing: 6,
-                  children: [
-                    _Legend(
-                      color: Color(0xFF059669),
-                      icon: Icons.check,
-                      label: 'Libre',
-                    ),
-                    _Legend(
-                      color: Color(0xFF7C3AED),
-                      icon: Icons.chat_bubble_outline,
-                      label: 'Cotizada',
-                    ),
-                    _Legend(
-                      color: Color(0xFFDC2626),
-                      icon: Icons.bed_outlined,
-                      label: 'Ocupada',
-                    ),
-                    _Legend(
-                      color: Color(0xFFD97706),
-                      icon: Icons.lock_outline,
-                      label: 'Bloqueo',
-                    ),
-                    _Legend(
-                      color: Color(0xFF6B7280),
-                      icon: Icons.remove_circle_outline,
-                      label: 'Inactiva',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: _labelWidth,
-                child: Column(
-                  children: [
-                    const _MatrixCorner(height: _rowHeight),
-                    ...planner.cabins.map(
-                      (cabin) => _CabinLabel(
-                        cabin: cabin,
-                        height: _rowHeight,
-                        selected: selectedCabins.contains(cabin.id),
-                        onTap: () => onToggleCabin(cabin),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: days.length * _dayWidth,
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: _rowHeight,
-                          child: Row(
-                            children: days
-                                .map(
-                                  (day) =>
-                                      _DayHeader(day: day, width: _dayWidth),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                        ...planner.cabins.map(
-                          (cabin) => SizedBox(
-                            height: _rowHeight,
-                            child: Row(
-                              children: days.map((day) {
-                                final segment = _segmentForDay(
-                                  cabin.segments,
-                                  day,
-                                );
-                                return _DayCell(
-                                  width: _dayWidth,
-                                  cabin: cabin,
-                                  day: day,
-                                  segment: segment,
-                                  onTap: segment == null
-                                      ? null
-                                      : () => onCellTap(cabin, segment),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  PlannerSegment? _segmentForDay(List<PlannerSegment> segments, DateTime day) {
-    for (final segment in segments) {
-      final start = DateTime.parse(segment.checkIn);
-      final end = DateTime.parse(segment.checkOut);
-      if (!day.isBefore(start) && day.isBefore(end)) return segment;
-    }
-    return null;
-  }
-}
-
-class _Legend extends StatelessWidget {
-  const _Legend({required this.color, required this.icon, required this.label});
-
-  final Color color;
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 3),
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
-      ],
-    );
-  }
-}
-
-class _MatrixCorner extends StatelessWidget {
-  const _MatrixCorner({required this.height});
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        border: Border(
-          bottom: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-      ),
-      child: const Text(
-        'Cabana',
-        style: TextStyle(fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-class _CabinLabel extends StatelessWidget {
-  const _CabinLabel({
-    required this.cabin,
-    required this.height,
-    required this.selected,
-    required this.onTap,
-  });
-  final PlannerCabin cabin;
-  final double height;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      enabled: cabin.availableForRange,
-      label:
-          '${cabin.name}, ${cabin.availableForRange ? 'libre en todo el rango' : 'no disponible en todo el rango'}',
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          height: height,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: selected
-                ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surface,
-            border: Border(
-              bottom: BorderSide(color: Theme.of(context).dividerColor),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                selected
-                    ? Icons.check_box
-                    : cabin.availableForRange
-                    ? Icons.check_box_outline_blank
-                    : Icons.indeterminate_check_box_outlined,
-                size: 20,
-                color: cabin.availableForRange
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      cabin.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'Max. ${cabin.maxGuests}',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DayHeader extends StatelessWidget {
-  const _DayHeader({required this.day, required this.width});
-  final DateTime day;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    const weekdays = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
-    return Container(
-      width: width,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        border: Border(
-          left: BorderSide(color: Theme.of(context).dividerColor),
-          bottom: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            weekdays[day.weekday - 1],
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-          Text(
-            '${day.day}/${day.month}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DayCell extends StatelessWidget {
-  const _DayCell({
-    required this.width,
-    required this.cabin,
-    required this.day,
-    required this.segment,
-    required this.onTap,
-  });
-  final double width;
-  final PlannerCabin cabin;
-  final DateTime day;
-  final PlannerSegment? segment;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = segment?.state ?? 'inactive';
-    final quotes = segment?.quotes.length ?? 0;
-    final color = toneColor(segment?.tone ?? 'gray');
-    final (icon, shortLabel) = switch (state) {
-      'reserved' => (Icons.bed_outlined, 'Ocup.'),
-      'blocked' => (Icons.lock_outline, 'Bloq.'),
-      'maintenance' => (Icons.build_outlined, 'Mant.'),
-      'inactive' => (Icons.remove_circle_outline, 'Inact.'),
-      _ => (Icons.check, 'Libre'),
-    };
-    return Semantics(
-      button: true,
-      label:
-          '${cabin.name}, ${isoDate(day)}, ${segment?.label ?? 'Sin datos'}${quotes > 0 ? ', $quotes cotizaciones' : ''}',
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          width: width,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            border: Border(
-              left: BorderSide(color: Theme.of(context).dividerColor),
-              bottom: BorderSide(color: Theme.of(context).dividerColor),
-            ),
-          ),
-          child: Stack(
-            children: [
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 18, color: color),
-                    Text(
-                      shortLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: color,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (quotes > 0)
-                Positioned(
-                  right: 4,
-                  top: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C3AED),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '$quotes',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailsSheet extends StatelessWidget {
-  const _DetailsSheet({
-    required this.cabin,
-    required this.segment,
-    required this.onEditReservation,
-    required this.onConfirmQuote,
-    required this.onRenewQuote,
-    required this.onCancelReservation,
-    required this.onEditBlock,
-    required this.onDeleteBlock,
-  });
-
-  final PlannerCabin cabin;
-  final PlannerSegment segment;
-  final Future<void> Function(PlannerReservation) onEditReservation;
-  final Future<void> Function(PlannerReservation) onConfirmQuote;
-  final Future<void> Function(PlannerReservation) onRenewQuote;
-  final Future<void> Function(PlannerReservation) onCancelReservation;
-  final Future<void> Function(PlannerBlock) onEditBlock;
-  final Future<void> Function(PlannerBlock) onDeleteBlock;
-
-  @override
-  Widget build(BuildContext context) {
-    final reservation = segment.reservation;
-    final block = segment.block;
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.72,
-      maxChildSize: 0.94,
-      builder: (context, controller) => ListView(
-        controller: controller,
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-        children: [
-          Text(cabin.name, style: Theme.of(context).textTheme.headlineSmall),
-          Text('${segment.checkIn} a ${segment.checkOut} · ${segment.label}'),
-          if (reservation != null) ...[
-            const SizedBox(height: 16),
-            _DetailCard(
-              icon: Icons.bed_outlined,
-              title: reservation.leaderName ?? 'Ocupacion confirmada',
-              subtitle:
-                  '${reservation.guestsCount} personas · ${reservation.statusLabel}',
-              notes: reservation.notes,
-              actions: [
-                TextButton.icon(
-                  onPressed: () => onEditReservation(reservation),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Editar'),
-                ),
-                TextButton.icon(
-                  onPressed: () => onCancelReservation(reservation),
-                  icon: const Icon(Icons.cancel_outlined),
-                  label: const Text('Cancelar'),
-                ),
-              ],
-            ),
-          ],
-          if (segment.quotes.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Cotizaciones vigentes (${segment.quotes.length})',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ...segment.quotes.map(
-              (quote) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _DetailCard(
-                  icon: Icons.chat_bubble_outline,
-                  title: quote.leaderName ?? 'Cotizacion sin nombre',
-                  subtitle:
-                      '${quote.guestsCount} personas${quote.expiresAt == null ? '' : ' · vigente por 48 h'}',
-                  notes: quote.notes,
-                  actions: [
-                    TextButton(
-                      onPressed: () => onEditReservation(quote),
-                      child: const Text('Editar'),
-                    ),
-                    TextButton(
-                      onPressed: () => onRenewQuote(quote),
-                      child: const Text('Renovar'),
-                    ),
-                    TextButton(
-                      onPressed: () => onCancelReservation(quote),
-                      child: const Text('Cancelar'),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: () => onConfirmQuote(quote),
-                      child: const Text('Confirmar'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          if (block != null) ...[
-            const SizedBox(height: 16),
-            _DetailCard(
-              icon: Icons.lock_outline,
-              title: block.reason,
-              subtitle: block.appliesToAll
-                  ? 'Todas las cabanas'
-                  : block.cabinNames.join(', '),
-              notes: block.notes,
-              actions: [
-                TextButton.icon(
-                  onPressed: () => onEditBlock(block),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Editar'),
-                ),
-                TextButton.icon(
-                  onPressed: () => onDeleteBlock(block),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Eliminar'),
-                ),
-              ],
-            ),
-          ],
-          if (reservation == null &&
-              segment.quotes.isEmpty &&
-              block == null) ...[
-            const SizedBox(height: 24),
-            EmptyState(
-              icon: Icons.info_outline,
-              title: segment.label,
-              message: 'No hay acciones disponibles para este estado.',
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailCard extends StatelessWidget {
-  const _DetailCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.notes,
-    required this.actions,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String? notes;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 5),
-          Text(subtitle),
-          if (notes?.isNotEmpty == true) ...[
-            const SizedBox(height: 5),
-            Text(notes!, style: Theme.of(context).textTheme.bodySmall),
-          ],
-          const SizedBox(height: 8),
-          Wrap(spacing: 4, runSpacing: 4, children: actions),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordSheet extends StatefulWidget {
-  const _RecordSheet({
-    required this.cabins,
-    required this.initialCabinIds,
-    required this.initialCheckIn,
-    required this.initialCheckOut,
-    required this.initialGuests,
-    required this.existing,
-    required this.onSave,
-  });
-  final List<PlannerCabin> cabins;
-  final Set<int> initialCabinIds;
-  final DateTime initialCheckIn;
-  final DateTime initialCheckOut;
-  final int initialGuests;
-  final PlannerReservation? existing;
-  final Future<String?> Function(JsonMap) onSave;
-
-  @override
-  State<_RecordSheet> createState() => _RecordSheetState();
-}
-
-class _RecordSheetState extends State<_RecordSheet> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _leader;
-  late final TextEditingController _guests;
-  late final TextEditingController _notes;
-  late Set<int> _cabinIds;
-  late DateTime _checkIn;
-  late DateTime _checkOut;
-  late String _status;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _leader = TextEditingController(text: widget.existing?.leaderName ?? '');
-    _guests = TextEditingController(text: widget.initialGuests.toString());
-    _notes = TextEditingController(text: widget.existing?.notes ?? '');
-    _cabinIds = {...widget.initialCabinIds};
-    _checkIn = widget.initialCheckIn;
-    _checkOut = widget.initialCheckOut;
-    _status =
-        widget.existing?.status == 'confirmed' ||
-            widget.existing?.status == 'checked_in'
-        ? 'confirmed'
-        : 'pending';
-  }
-
-  @override
-  void dispose() {
-    _leader.dispose();
-    _guests.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.existing == null
-                    ? 'Registrar en disponibilidad'
-                    : 'Editar registro',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Guarda aqui lo acordado con el turista por WhatsApp.',
-              ),
-              const SizedBox(height: 16),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'pending',
-                    icon: Icon(Icons.chat_bubble_outline),
-                    label: Text('Cotizacion'),
-                  ),
-                  ButtonSegment(
-                    value: 'confirmed',
-                    icon: Icon(Icons.bed_outlined),
-                    label: Text('Ocupacion'),
-                  ),
-                ],
-                selected: {_status},
-                onSelectionChanged: (value) =>
-                    setState(() => _status = value.first),
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _leader,
-                decoration: const InputDecoration(
-                  labelText: 'Turista o grupo *',
-                ),
-                textInputAction: TextInputAction.next,
-                validator: (value) =>
-                    value?.trim().isEmpty == true ? 'Escribe un nombre.' : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _guests,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Numero de personas *',
-                ),
-                validator: (value) => (int.tryParse(value ?? '') ?? 0) < 1
-                    ? 'Indica al menos una persona.'
-                    : null,
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _DateButton(
-                      label: 'Llegada',
-                      value: isoDate(_checkIn),
-                      onTap: () => _pickDate(true),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _DateButton(
-                      label: 'Salida',
-                      value: isoDate(_checkOut),
-                      onTap: () => _pickDate(false),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text('Cabanas *', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 6),
-              ...widget.cabins.map(
-                (cabin) => CheckboxListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  value: _cabinIds.contains(cabin.id),
-                  title: Text(cabin.name),
-                  subtitle: Text(
-                    cabin.availableForRange
-                        ? 'Libre en el rango consultado'
-                        : 'No libre en todo el rango',
-                  ),
-                  onChanged:
-                      cabin.availableForRange || _cabinIds.contains(cabin.id)
-                      ? (checked) => setState(() {
-                          if (checked == true) {
-                            _cabinIds.add(cabin.id);
-                          } else {
-                            _cabinIds.remove(cabin.id);
-                          }
-                        })
-                      : null,
-                ),
-              ),
-              if (_status == 'pending')
-                const ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.schedule),
-                  title: Text('Vigencia: 48 horas'),
-                  subtitle: Text(
-                    'No bloquea la cabana y se ocultara al vencer.',
-                  ),
-                ),
-              TextFormField(
-                controller: _notes,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Notas opcionales',
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _saving ? null : _submit,
-                icon: _saving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: Text(_saving ? 'Guardando...' : 'Guardar registro'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickDate(bool isCheckIn) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isCheckIn ? _checkIn : _checkOut,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime(DateTime.now().year + 5),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isCheckIn) {
-        _checkIn = picked;
-        if (!_checkOut.isAfter(picked)) {
-          _checkOut = picked.add(const Duration(days: 1));
-        }
-      } else {
-        _checkOut = picked.isAfter(_checkIn)
-            ? picked
-            : _checkIn.add(const Duration(days: 1));
-      }
-    });
-  }
-
-  Future<void> _submit() async {
-    setState(() => _error = null);
-    if (!_formKey.currentState!.validate()) return;
-    if (_cabinIds.isEmpty) {
-      setState(() => _error = 'Selecciona al menos una cabana.');
-      return;
-    }
-    if (!_checkOut.isAfter(_checkIn)) {
-      setState(() => _error = 'La salida debe ser posterior a la llegada.');
-      return;
-    }
-    setState(() => _saving = true);
-    final error = await widget.onSave({
-      'cabin_ids': _cabinIds.toList(),
-      'check_in': isoDate(_checkIn),
-      'check_out': isoDate(_checkOut),
-      'guests_count': int.parse(_guests.text),
-      'leader_name': _leader.text.trim(),
-      'status': _status,
-      'source': 'whatsapp',
-      'expires_at': _status == 'pending'
-          ? DateTime.now()
-                .add(const Duration(hours: 48))
-                .toUtc()
-                .toIso8601String()
-          : null,
-      if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
-    });
-    if (!mounted) return;
-    setState(() {
-      _saving = false;
-      _error = error;
-    });
-    if (error == null) Navigator.pop(context);
-  }
-}
-
-class _BlockSheet extends StatefulWidget {
-  const _BlockSheet({
-    required this.cabins,
-    required this.initialCabinIds,
-    required this.initialCheckIn,
-    required this.initialCheckOut,
-    required this.existing,
-    required this.onSave,
-  });
-  final List<PlannerCabin> cabins;
-  final Set<int> initialCabinIds;
-  final DateTime initialCheckIn;
-  final DateTime initialCheckOut;
-  final PlannerBlock? existing;
-  final Future<String?> Function(JsonMap) onSave;
-
-  @override
-  State<_BlockSheet> createState() => _BlockSheetState();
-}
-
-class _BlockSheetState extends State<_BlockSheet> {
-  late final TextEditingController _reason;
-  late final TextEditingController _notes;
-  late Set<int> _cabinIds;
-  late DateTime _checkIn;
-  late DateTime _checkOut;
-  late bool _all;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _reason = TextEditingController(text: widget.existing?.reason ?? '');
-    _notes = TextEditingController(text: widget.existing?.notes ?? '');
-    _cabinIds = {...widget.initialCabinIds};
-    _checkIn = widget.initialCheckIn;
-    _checkOut = widget.initialCheckOut;
-    _all = widget.existing?.appliesToAll ?? false;
-  }
-
-  @override
-  void dispose() {
-    _reason.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.existing == null ? 'Crear bloqueo' : 'Editar bloqueo',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Para mantenimiento, eventos privados o cierres generales.',
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _reason,
-              decoration: const InputDecoration(labelText: 'Motivo *'),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _DateButton(
-                    label: 'Desde',
-                    value: isoDate(_checkIn),
-                    onTap: () => _pickDate(true),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _DateButton(
-                    label: 'Hasta',
-                    value: isoDate(_checkOut),
-                    onTap: () => _pickDate(false),
-                  ),
-                ),
-              ],
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _all,
-              onChanged: (value) => setState(() => _all = value),
-              title: const Text('Aplicar a todas las cabanas'),
-            ),
-            if (!_all) ...[
-              Text('Cabanas', style: Theme.of(context).textTheme.titleSmall),
-              ...widget.cabins.map(
-                (cabin) => CheckboxListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  value: _cabinIds.contains(cabin.id),
-                  title: Text(cabin.name),
-                  onChanged: (checked) => setState(() {
-                    if (checked == true) {
-                      _cabinIds.add(cabin.id);
-                    } else {
-                      _cabinIds.remove(cabin.id);
-                    }
-                  }),
-                ),
-              ),
-            ],
-            TextField(
-              controller: _notes,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Notas opcionales'),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _saving ? null : _submit,
-              icon: _saving
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.lock_outline),
-              label: Text(_saving ? 'Guardando...' : 'Guardar bloqueo'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickDate(bool isCheckIn) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isCheckIn ? _checkIn : _checkOut,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime(DateTime.now().year + 5),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isCheckIn) {
-        _checkIn = picked;
-        if (!_checkOut.isAfter(picked)) {
-          _checkOut = picked.add(const Duration(days: 1));
-        }
-      } else {
-        _checkOut = picked.isAfter(_checkIn)
-            ? picked
-            : _checkIn.add(const Duration(days: 1));
-      }
-    });
-  }
-
-  Future<void> _submit() async {
-    setState(() => _error = null);
-    if (_reason.text.trim().isEmpty) {
-      setState(() => _error = 'Indica el motivo del bloqueo.');
-      return;
-    }
-    if (!_all && _cabinIds.isEmpty) {
-      setState(
-        () => _error = 'Selecciona cabanas o activa el bloqueo general.',
-      );
-      return;
-    }
-    setState(() => _saving = true);
-    final error = await widget.onSave({
-      'check_in': isoDate(_checkIn),
-      'check_out': isoDate(_checkOut),
-      'reason': _reason.text.trim(),
-      'applies_to_all': _all,
-      'cabin_ids': _all ? <int>[] : _cabinIds.toList(),
-      if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
-    });
-    if (!mounted) return;
-    setState(() {
-      _saving = false;
-      _error = error;
-    });
-    if (error == null) Navigator.pop(context);
   }
 }

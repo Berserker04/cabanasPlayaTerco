@@ -1,0 +1,24 @@
+[
+  {
+    "archivo": "poster-resenas-playa-terco-carta.pdf",
+    "paginas": 1,
+    "destino_qr_verificado": "https://cabanasplayaterco.com/resenas",
+    "pruebas_qr": [
+      "normal",
+      "reducido_600px",
+      "escala_grises"
+    ],
+    "bytes": 212886
+  },
+  {
+    "archivo": "poster-resenas-playa-terco-a4.pdf",
+    "paginas": 1,
+    "destino_qr_verificado": "https://cabanasplayaterco.com/resenas",
+    "pruebas_qr": [
+      "normal",
+      "reducido_600px",
+      "escala_grises"
+    ],
+    "bytes": 212911
+  }
+]
