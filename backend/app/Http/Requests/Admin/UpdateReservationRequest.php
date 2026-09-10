@@ -31,7 +31,7 @@ class UpdateReservationRequest extends FormRequest
             'cabin_ids.*' => ['integer', 'distinct', 'exists:cabins,id'],
             'check_in' => ['sometimes', 'date'],
             'check_out' => ['sometimes', 'date'],
-            'guests_count' => ['sometimes', 'integer', 'min:1'],
+            'guests_count' => ['sometimes', 'integer', 'min:1', 'max:'.config('booking.max_group_guests')],
             'leader_name' => ['nullable', 'string', 'max:255'],
             'leader_phone' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
             'leader_whatsapp' => ['nullable', 'string', 'max:40', 'regex:/^\+?(?:[ ()-]*\d){7,15}[ ()-]*$/'],
@@ -51,6 +51,7 @@ class UpdateReservationRequest extends FormRequest
             'leader_phone.regex' => 'El celular debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
             'leader_whatsapp.regex' => 'El WhatsApp debe contener entre 7 y 15 dígitos; puedes incluir el indicativo del país.',
             'check_out.after' => 'La fecha de salida debe ser posterior a la llegada.',
+            'guests_count.max' => 'El máximo permitido es de '.config('booking.max_group_guests').' huéspedes.',
             'display_color.regex' => 'El color debe estar en formato hexadecimal, por ejemplo #0ea5e9.',
         ];
     }

@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError } from '@/lib/api';
+import { MAX_GROUP_GUESTS } from '@/lib/stay-context';
 import { cn } from '@/lib/utils';
 import type { ApiResponse } from '@/types/api';
 import type {
@@ -218,9 +219,9 @@ export function AvailabilityRecordForm({
     if (
       !Number.isInteger(Number(guests)) ||
       Number(guests) < 1 ||
-      Number(guests) > 50
+      Number(guests) > MAX_GROUP_GUESTS
     ) {
-      setError('Ingresa entre 1 y 50 personas.');
+      setError(`Ingresa entre 1 y ${MAX_GROUP_GUESTS} personas.`);
       return;
     }
     if (conflicts.length && !unchangedQuote) {
@@ -465,7 +466,7 @@ export function AvailabilityRecordForm({
                 type="number"
                 inputMode="numeric"
                 min={1}
-                max={50}
+                max={MAX_GROUP_GUESTS}
                 step={1}
                 required
                 value={guests}

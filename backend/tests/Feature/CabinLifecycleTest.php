@@ -252,15 +252,15 @@ class CabinLifecycleTest extends TestCase
         $this->getJson('/api/v1/amenities')->assertJsonCount(0, 'data');
     }
 
-    public function test_contact_accepts_fifty_guests_keeps_context_and_survives_notification_failures(): void
+    public function test_contact_accepts_one_hundred_guests_keeps_context_and_survives_notification_failures(): void
     {
         $cabin = $this->cabin(['notes' => 'Internal contact secret']);
         $this->mock(PushNotificationService::class)->shouldReceive('notifyStaffOfNewLead')->once()->andThrow(new \RuntimeException('Simulated push failure'));
         Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('Simulated mail failure'));
-        $payload = ['name' => 'Consulta QA', 'email' => 'qa@example.test', 'message' => 'Consultar fechas para el grupo de prueba.', 'cabin_id' => $cabin->id, 'guests_count' => 50, 'check_in' => now()->addDays(10)->toDateString(), 'check_out' => now()->addDays(12)->toDateString()];
+        $payload = ['name' => 'Consulta QA', 'email' => 'qa@example.test', 'phone' => '+573001234567', 'message' => 'Consultar fechas para el grupo de prueba.', 'cabin_id' => $cabin->id, 'guests_count' => 100, 'check_in' => now()->addDays(10)->toDateString(), 'check_out' => now()->addDays(12)->toDateString()];
         $response = $this->postJson('/api/v1/contact', $payload)->assertCreated()->assertJsonPath('meta.email_sent', false)->assertJsonPath('data.cabin_id', $cabin->id);
         $this->assertPublicKeys($response->json());
-        $this->assertDatabaseHas('leads', ['cabin_id' => $cabin->id, 'guests_count' => 50, 'check_in' => $payload['check_in'].' 00:00:00']);
+        $this->assertDatabaseHas('leads', ['cabin_id' => $cabin->id, 'guests_count' => 100, 'check_in' => $payload['check_in'].' 00:00:00']);
         $cabin->update(['is_active' => false]);
         $this->postJson('/api/v1/contact', $payload)->assertUnprocessable()->assertJsonValidationErrors('cabin_id');
         $this->assertSame(1, Lead::count());
@@ -299,14 +299,14 @@ class CabinLifecycleTest extends TestCase
         $this->putJson('/api/v1/admin/availability-blocks/'.$otherBlock, ['cabin_ids' => [$secondCabin->id, $cabin->id]])->assertUnprocessable()->assertJsonValidationErrors('cabin_ids');
     }
 
-    public function test_public_dates_follow_the_property_day_and_guests_are_limited_to_fifty(): void
+    public function test_public_dates_follow_the_property_day_and_guests_are_limited_to_one_hundred(): void
     {
         $this->travelTo(\Carbon\Carbon::parse('2026-09-09 02:00:00', 'UTC'));
         $dates = ['check_in' => '2026-09-08', 'check_out' => '2026-09-10'];
-        $this->getJson('/api/v1/availability?'.http_build_query([...$dates, 'guests' => 50]))->assertOk();
-        $this->getJson('/api/v1/availability?'.http_build_query([...$dates, 'guests' => 51]))->assertUnprocessable()->assertJsonValidationErrors('guests');
+        $this->getJson('/api/v1/availability?'.http_build_query([...$dates, 'guests' => 100]))->assertOk();
+        $this->getJson('/api/v1/availability?'.http_build_query([...$dates, 'guests' => 101]))->assertUnprocessable()->assertJsonValidationErrors('guests');
         $this->getJson('/api/v1/availability?check_in=2026-09-07&check_out=2026-09-10')->assertUnprocessable()->assertJsonValidationErrors('check_in');
-        $this->postJson('/api/v1/contact', [...$dates, 'name' => 'Fecha local QA', 'email' => 'local@example.test', 'message' => 'Llegada el día local de la cabaña.', 'guests_count' => 50])->assertCreated();
+        $this->postJson('/api/v1/contact', [...$dates, 'name' => 'Fecha local QA', 'email' => 'local@example.test', 'phone' => '+573001234567', 'message' => 'Llegada el día local de la cabaña.', 'guests_count' => 100])->assertCreated();
         $this->travelBack();
     }
 

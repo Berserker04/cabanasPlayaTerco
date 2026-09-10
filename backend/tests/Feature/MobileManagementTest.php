@@ -194,6 +194,8 @@ class MobileManagementTest extends TestCase
         $this->postJson('/api/v1/contact', [
             'name' => 'Prueba cola', 'email' => 'qa@example.com', 'phone' => '+573001234567',
             'message' => 'Deseo una cotización para mi familia.',
+            'check_in' => now()->addDays(5)->toDateString(),
+            'check_out' => now()->addDays(7)->toDateString(),
         ])->assertCreated();
         $this->assertDatabaseHas('leads', ['email' => 'qa@example.com', 'status' => 'new']);
     }

@@ -27,6 +27,7 @@ import {
 import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
 import { panelPermissions } from '@/lib/panel-access';
+import { MAX_GROUP_GUESTS } from '@/lib/stay-context';
 import { cn } from '@/lib/utils';
 import type { ApiResponse } from '@/types/api';
 import type {
@@ -863,8 +864,12 @@ function SearchFilters({
       return;
     }
     const guests = Number(draft.guests);
-    if (!Number.isInteger(guests) || guests < 1 || guests > 50) {
-      setError('Ingresa entre 1 y 50 personas.');
+    if (
+      !Number.isInteger(guests) ||
+      guests < 1 ||
+      guests > MAX_GROUP_GUESTS
+    ) {
+      setError(`Ingresa entre 1 y ${MAX_GROUP_GUESTS} personas.`);
       return;
     }
     setError('');
@@ -920,7 +925,7 @@ function SearchFilters({
             required
             inputMode="numeric"
             min={1}
-            max={50}
+            max={MAX_GROUP_GUESTS}
             step={1}
             value={draft.guests}
             onChange={(event) =>

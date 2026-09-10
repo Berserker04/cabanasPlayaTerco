@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { LoaderCircle, MessageCircle, Send } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useUpdateContactQuote } from './contact-quote-context';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import { ApiError, api, fetchCsrfCookie } from '@/lib/api';
 import {
   localDateIso,
   addLocalDays,
+  MAX_GROUP_GUESTS,
   type StayContext,
 } from '@/lib/stay-context';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
@@ -61,6 +62,24 @@ function ErrorMessage({ error }: { error?: { message?: string } }) {
     <p role="alert" className="text-xs leading-5 text-destructive">
       {error.message}
     </p>
+  );
+}
+
+function RequiredLabel({
+  htmlFor,
+  children,
+}: {
+  htmlFor: string;
+  children: ReactNode;
+}) {
+  return (
+    <Label htmlFor={htmlFor}>
+      {children}
+      <span className="ml-1 text-destructive" aria-hidden="true">
+        *
+      </span>
+      <span className="sr-only"> (obligatorio)</span>
+    </Label>
   );
 }
 
@@ -170,7 +189,18 @@ export function ContactForm({
       onSubmit={onSubmit}
       className="rounded-lg border bg-white p-5 shadow-sm sm:p-6"
     >
-      <p className="mb-5 text-sm leading-6 text-neutral-700">{QUOTE_NOTICE}</p>
+      <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <p className="text-sm leading-6 text-neutral-700">{QUOTE_NOTICE}</p>
+        <p
+          id="contact-required-note"
+          className="shrink-0 text-xs text-neutral-600"
+        >
+          <span className="font-semibold text-destructive" aria-hidden="true">
+            *
+          </span>{' '}
+          Campos obligatorios
+        </p>
+      </div>
       {receipt && (
         <p
           role="status"
@@ -185,14 +215,19 @@ export function ContactForm({
           corregirlos o volver a intentarlo.
         </p>
       )}
-      <fieldset disabled={contactMutation.isPending} className="min-w-0">
+      <fieldset
+        disabled={contactMutation.isPending}
+        aria-describedby="contact-required-note"
+        className="min-w-0"
+      >
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="contact-name">Nombre completo</Label>
+            <RequiredLabel htmlFor="contact-name">Nombre completo</RequiredLabel>
             <Input
               className="h-11 text-base md:text-base"
               id="contact-name"
               autoComplete="name"
+              required
               placeholder="Tu nombre"
               aria-invalid={Boolean(form.formState.errors.name)}
               {...form.register('name')}
@@ -201,12 +236,15 @@ export function ContactForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="contact-email">Correo electrónico</Label>
+            <RequiredLabel htmlFor="contact-email">
+              Correo electrónico
+            </RequiredLabel>
             <Input
               className="h-11 text-base md:text-base"
               id="contact-email"
               type="email"
               autoComplete="email"
+              required
               placeholder="tu@email.com"
               aria-invalid={Boolean(form.formState.errors.email)}
               {...form.register('email')}
@@ -215,12 +253,15 @@ export function ContactForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="contact-phone">Teléfono o WhatsApp</Label>
+            <RequiredLabel htmlFor="contact-phone">
+              Teléfono o WhatsApp
+            </RequiredLabel>
             <Input
               className="h-11 text-base md:text-base"
               id="contact-phone"
               type="tel"
               autoComplete="tel"
+              required
               placeholder="314 742 7806"
               aria-invalid={Boolean(form.formState.errors.phone)}
               {...form.register('phone')}
@@ -229,13 +270,16 @@ export function ContactForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="contact-guests">Huéspedes</Label>
+            <Label htmlFor="contact-guests">
+              Huéspedes{' '}
+              <span className="font-normal text-neutral-500">(opcional)</span>
+            </Label>
             <Input
               className="h-11 text-base md:text-base"
               id="contact-guests"
               type="number"
               min={1}
-              max={50}
+              max={MAX_GROUP_GUESTS}
               inputMode="numeric"
               placeholder="2"
               aria-invalid={Boolean(form.formState.errors.guests_count)}
@@ -245,11 +289,12 @@ export function ContactForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="contact-check-in">Llegada</Label>
+            <RequiredLabel htmlFor="contact-check-in">Llegada</RequiredLabel>
             <Input
               className="h-11 text-base md:text-base"
               id="contact-check-in"
               type="date"
+              required
               min={localDateIso()}
               aria-invalid={Boolean(form.formState.errors.check_in)}
               {...form.register('check_in')}
@@ -258,11 +303,12 @@ export function ContactForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="contact-check-out">Salida</Label>
+            <RequiredLabel htmlFor="contact-check-out">Salida</RequiredLabel>
             <Input
               className="h-11 text-base md:text-base"
               id="contact-check-out"
               type="date"
+              required
               min={
                 values.check_in
                   ? addLocalDays(values.check_in, 1)
@@ -275,11 +321,12 @@ export function ContactForm({
           </div>
 
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="contact-message">Mensaje</Label>
+            <RequiredLabel htmlFor="contact-message">Mensaje</RequiredLabel>
             <Textarea
               id="contact-message"
               rows={6}
               maxLength={2000}
+              required
               placeholder="Cuéntanos fechas aproximadas, tipo de viaje o dudas para preparar una mejor respuesta."
               aria-invalid={Boolean(form.formState.errors.message)}
               {...form.register('message')}

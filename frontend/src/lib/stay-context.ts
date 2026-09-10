@@ -1,3 +1,7 @@
+import { MAX_GROUP_GUESTS } from './guest-limits.js';
+
+export { MAX_GROUP_GUESTS };
+
 export type StayContext = {
   cabin_id?: string;
   check_in?: string;
@@ -64,9 +68,9 @@ export function staySearchErrors(context: StayContext, today = localDateIso()) {
     !context.guests ||
     !/^\d+$/.test(context.guests) ||
     Number(context.guests) < 1 ||
-    Number(context.guests) > 50
+    Number(context.guests) > MAX_GROUP_GUESTS
   )
-    errors.guests = 'Indica entre 1 y 50 huéspedes.';
+    errors.guests = `Indica entre 1 y ${MAX_GROUP_GUESTS} huéspedes.`;
   return errors;
 }
 
@@ -84,7 +88,7 @@ export function readStayContext(
     guests &&
     /^\d+$/.test(guests) &&
     Number(guests) >= 1 &&
-    Number(guests) <= 50
+    Number(guests) <= MAX_GROUP_GUESTS
   )
     result.guests = guests;
   if (isStayDate(arrival) && arrival >= localDateIso())

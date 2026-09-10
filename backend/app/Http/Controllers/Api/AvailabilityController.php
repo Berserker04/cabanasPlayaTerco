@@ -19,7 +19,7 @@ class AvailabilityController extends Controller
         $request->validate([
             'check_in' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.now(config('app.business_timezone'))->toDateString()],
             'check_out' => ['required', 'date_format:Y-m-d', 'after:check_in'],
-            'guests' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'guests' => ['nullable', 'integer', 'min:1', 'max:'.config('booking.max_group_guests')],
         ]);
 
         $availability = $this->availabilityService->checkAvailability(
